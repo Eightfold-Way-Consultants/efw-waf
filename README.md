@@ -24,11 +24,34 @@ The current defense (NACL IP-based blocking at Layer 3) is a blunt tool. **WAF +
 ## Architecture
 
 ```
-Internet → CloudFront (WAF inspection) → IIS Origin (52.8.7.0 public / 52.8.85.37 edit)
+Internet → CloudFront (edge, caches static) → WAF Web ACL → IIS Origin (52.8.7.0 public / 52.8.85.37 edit)
+                                                   │
+        estimators / dynamic paths always reach origin (no-cache) → WAF is the only lever there
 ```
+
+### Defense layers at a glance
+
+The Web ACL is a **priority pipeline**; each rule targets a specific concern. The center of
+gravity is **bot-load on the estimators**, not the classic scanner probes.
+
+| Concern | Rules (priority) | Notes |
+|---|---|---|
+| **Estimator bot-walking** *(primary)* | **Challenge (6)** · RateLimit-Estimator (7) | `/planning/*`, published tiers. Silent browser proof-of-work — real browsers pass invisibly, headless/distributed bots fail. The thing that actually protects origin CPU. |
+| **General website probes** | IP-Blocklist (2) · IpReputation (3) · CommonRuleSet (4) · KnownBadInputs (5) | Standing, mostly auto. Managed rules handle the attack patterns; most file-fishing just 404s. |
+| **General flood** | RateLimit (8) | Per-IP, all paths. |
+| Browser-emulating bots | BotControl (9) | Optional, paid, off by default. |
+| ~~Verified-bot allowlist~~ | *(removed)* | robots.txt already bars `/planning/`; Challenge is `/planning`-scoped → allowlist was pure bypass risk. |
+
+**Why Challenge is the centerpiece:** real traffic analysis (2026-06-08 logs) showed the busy
+`/planning/` IPs are *humans* behind shared gov/agency NATs (e.g. State of Missouri) — so per-IP
+rate-limiting would punish real users, while a per-browser Challenge doesn't. And the one threat
+a per-IP view can't see — a distributed headless fleet — is exactly what Challenge catches and
+rate-limits miss. AWS managed rules cover *probes* but never fire on a well-formed scraper `GET`;
+that bot **load** is the actual pain, so Challenge carries it. See `waf-cloudfront-migration.md`.
 
 **Key design decisions:**
 - Edit-site first (lower blast radius, single origin, no live estimator traffic)
+- **SiteType-driven caching** (cms vs published), 3 CloudFront distributions; `Host` in the static cache key (IIS routes by Host)
 - Start all WAF rules in **Count mode** for 72h–1 week before switching to Block
 - Cache bypasses for all dynamic paths: `/planning/*`, `/api/*`, `*.aspx`, `*.ashx`, `*.asmx`, `*_AppService.axd`, `ScriptResource.axd`, `/tw/*`, `/vault/*`, etc.
 - WebDeploy continues via VPN (port 8172, not proxied through CloudFront)
@@ -94,6 +117,7 @@ See [`waf-cloudfront-migration.md`](waf-cloudfront-migration.md) for the full ph
 - **Estimators not the target** — all scanners looking for credential/config file paths
 - **NACLs are redundant** once WAF is active (WAF is a Layer 7 superset of NACL)
 - **Cache hit rate concern unfounded** — `/planning/` and all dynamic paths are explicitly bypassed
+- **Real zone scope = 5 live zones** (WHOIS-verified 2026-06-08): `db101.org`, `hb101.org`, `eightfoldway.com`, `vets101.org`, `housingbenefits101.org`. Review 04's larger count was inflated by orphan Route53 zones — 7 of the "extra" domains are unregistered, 1 (`njdb101.org`) is parked at NameFind. One ACM cert (10 SANs) covers all 5; only 3 apex ALIAS conversions needed. **Renew `hb101.org` before cutover (expires 2026-06-23).**
 
 ---
 

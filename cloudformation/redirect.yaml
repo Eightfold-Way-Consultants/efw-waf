@@ -1,0 +1,92 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  efw-waf-redirect — collapses an entire domain to a 301 redirect via a CloudFront Function
+  (viewer-request). Used for housingbenefits101.org -> hb101.org. No WAF, no real origin
+  (the function returns 301 at the edge before cache/origin). Deploy in us-east-1.
+  See waf-cloudfront-migration.md Decisions ("housingbenefits101.org -> redirect").
+
+Parameters:
+  TargetHost:
+    Type: String
+    Default: hb101.org
+    Description: Host to 301-redirect to (path + query preserved). e.g. hb101.org.
+  AcmCertificateArn:
+    Type: String
+    Default: arn:aws:acm:us-east-1:874922373146:certificate/d25dc33a-a3fa-4273-a14c-2b8b04ed7507
+    Description: us-east-1 ACM cert covering the AlternateDomainNames (the issued cert already has housingbenefits101.org + *.housingbenefits101.org).
+  AlternateDomainNames:
+    Type: CommaDelimitedList
+    Default: "housingbenefits101.org,*.housingbenefits101.org"
+    Description: Source hostnames to redirect (apex + wildcard covers www/mn/preview-mn/preview2-mn).
+  Comment:
+    Type: String
+    Default: housingbenefits101.org -> hb101.org 301 redirect
+
+Resources:
+
+  RedirectFunction:
+    Type: AWS::CloudFront::Function
+    Properties:
+      Name: !Sub 'efw-redirect-${AWS::StackName}'   # Function names can't contain dots (no TargetHost)
+      AutoPublish: true
+      FunctionConfig:
+        Comment: !Ref Comment
+        Runtime: cloudfront-js-2.0
+      FunctionCode: !Sub |
+        function handler(event) {
+          var request = event.request;
+          var qs = request.querystring;
+          var query = '';
+          var first = true;
+          for (var key in qs) {
+            var v = qs[key];
+            var pair = (v.value !== '' && v.value !== undefined) ? (key + '=' + v.value) : key;
+            query += (first ? '?' : '&') + pair;
+            first = false;
+          }
+          var location = 'https://${TargetHost}' + request.uri + query;
+          return {
+            statusCode: 301,
+            statusDescription: 'Moved Permanently',
+            headers: { 'location': { value: location } }
+          };
+        }
+
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: !Ref Comment
+        HttpVersion: http2and3
+        IPV6Enabled: true
+        Aliases: !Ref AlternateDomainNames
+        PriceClass: PriceClass_100
+        ViewerCertificate:
+          AcmCertificateArn: !Ref AcmCertificateArn
+          SslSupportMethod: sni-only
+          MinimumProtocolVersion: TLSv1.2_2021
+        # A dummy origin is required by CloudFront but is NEVER contacted — the viewer-request
+        # function returns the 301 before the cache/origin phase. Point it at the target as a
+        # harmless, valid placeholder.
+        Origins:
+          - Id: unused-origin
+            DomainName: !Ref TargetHost
+            CustomOriginConfig:
+              OriginProtocolPolicy: https-only
+              OriginSSLProtocols: [TLSv1.2]
+        DefaultCacheBehavior:
+          TargetOriginId: unused-origin
+          ViewerProtocolPolicy: allow-all      # function returns an https Location in one hop for http+https
+          AllowedMethods: [GET, HEAD, OPTIONS]
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad   # Managed-CachingDisabled
+          FunctionAssociations:
+            - EventType: viewer-request
+              FunctionARN: !GetAtt RedirectFunction.FunctionMetadata.FunctionARN
+
+Outputs:
+  DistributionId:
+    Value: !Ref Distribution
+  DistributionDomainName:
+    Description: Route53 target — apex housingbenefits101.org ALIAS + *.housingbenefits101.org records point here.
+    Value: !GetAtt Distribution.DomainName

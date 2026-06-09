@@ -5,6 +5,8 @@
 **Scope:** AWS infrastructure verification vs plan claims
 **Verdict:** ✅ **Plan's stated IPs are correct; 3 significant gaps found (WAF ACLs, ACM wildcard certs, zone count)**
 
+> **⚠️ CORRECTION (2026-06-08, registry WHOIS):** The "18 hosted zones / 9 additional zones" finding below counts Route53 hosted zones, not live domains. WHOIS proves real scope = **5 live zones** (`db101.org`, `hb101.org`, `eightfoldway.com`, `vets101.org`, `housingbenefits101.org`); the rest are unregistered or parked (orphan zones). See `04-route53.md` correction banner and `waf-cloudfront-migration.md` Decisions.
+
 ---
 
 ## 1. Verified Facts

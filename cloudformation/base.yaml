@@ -1,0 +1,92 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  efw-waf-base — shared building blocks for the WAF + CloudFront migration.
+  Deploy ONCE in us-east-1 (required for CLOUDFRONT-scope WAF). Reused by both
+  efw-waf-edge stacks (edit-site + public-site).
+  DRAFT — run `aws cloudformation validate-template` and a deploy --no-execute-changeset
+  review before applying. See waf-cloudfront-migration.md "Infrastructure as Code".
+
+Parameters:
+  LogRetentionDays:
+    Type: Number
+    Default: 90
+    Description: Days to retain WAF + CloudFront access logs in S3.
+
+Resources:
+
+  # --- WAF IP sets (CLOUDFRONT scope must be us-east-1) ---
+  # Surgical manual blocklist for currently-active abusive IPs/CIDRs. Seed left EMPTY on
+  # purpose: the original 2026-04-20 /32 list was 0/27 still-active by 2026-06-08 (cloud
+  # scanner IPs rotate within weeks) — a static seed is false comfort, and IP reputation is
+  # the continuous layer. Populate operationally (OpenClaw nightly job; CIDR/ASN blocks for
+  # never-legit hosting nets). Empty = rule is a no-op.
+  # NOTE: WAFv2 IPSet Description has a restricted charset (no em-dash/parens, <=256 chars).
+  ScannerIpSet:
+    Type: AWS::WAFv2::IPSet
+    Properties:
+      Name: efw-scanner-ips
+      Description: Manual surgical blocklist for currently-active abusive IPs or CIDRs. Seeded empty on purpose. Populate operationally via the OpenClaw nightly job. IP reputation managed rule is the continuous layer.
+      Scope: CLOUDFRONT
+      IPAddressVersion: IPV4
+      Addresses: []
+
+  # NOTE: no Googlebot/Bingbot IP sets. The verified-bot allowlist was removed (see edge.yaml /
+  # README): robots.txt bars /planning/ and the Challenge is /planning-scoped, so real crawlers
+  # are never challenged — an allowlist would only be a terminating WAF bypass / spoof hole.
+
+  # --- Log bucket. Name MUST start with "aws-waf-logs-" for WAF S3 logging. ---
+  WafLogBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub aws-waf-logs-efw-${AWS::AccountId}
+      OwnershipControls:
+        Rules:
+          # CloudFront standard logging requires ACLs; BucketOwnerPreferred enables them.
+          - ObjectOwnership: BucketOwnerPreferred
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-logs
+            Status: Enabled
+            ExpirationInDays: !Ref LogRetentionDays
+
+  # --- Shared secret added as X-Origin-Verify header CF -> origin ---
+  OriginVerifySecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: efw-waf/origin-verify
+      Description: Shared secret CloudFront injects as X-Origin-Verify; IIS can require it.
+      GenerateSecretString:
+        PasswordLength: 32
+        ExcludePunctuation: true
+
+  AlarmTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: efw-waf-alarms
+      DisplayName: efw-waf alarms
+
+Outputs:
+  ScannerIpSetArn:
+    Value: !GetAtt ScannerIpSet.Arn
+    Export: { Name: !Sub '${AWS::StackName}-ScannerIpSetArn' }
+  WafLogBucketArn:
+    Value: !GetAtt WafLogBucket.Arn
+    Export: { Name: !Sub '${AWS::StackName}-WafLogBucketArn' }
+  WafLogBucketDomain:
+    Value: !GetAtt WafLogBucket.RegionalDomainName
+    Export: { Name: !Sub '${AWS::StackName}-WafLogBucketDomain' }
+  OriginVerifySecretArn:
+    Value: !Ref OriginVerifySecret
+    Export: { Name: !Sub '${AWS::StackName}-OriginVerifySecretArn' }
+  AlarmTopicArn:
+    Value: !Ref AlarmTopic
+    Export: { Name: !Sub '${AWS::StackName}-AlarmTopicArn' }

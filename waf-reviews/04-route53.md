@@ -7,6 +7,12 @@
 
 ---
 
+> **⚠️ CORRECTION (2026-06-08, registry WHOIS):** This report counts Route53 *hosted zones*, but a hosted zone is inert unless the domain's registrar NS delegation points back at AWS. WHOIS on every zone proves the real migration scope is **5 live zones**: `db101.org`, `hb101.org`, `eightfoldway.com`, `vets101.org`, `housingbenefits101.org`. Of the "missed" zones flagged below: **7 are unregistered** at the registry (`njdisabilitybenefits.org`, `njdisabilitybenefits.net`, `njdb101.net`, `njdb101.com`, `vb101.org`, `workbenefitsyouth.org`, `disabilitiesbenefits101.org`), **1 is parked at NameFind** (`njdb101.org`), and `disabilitybenefits101.org`/`maybeckstudio.org` are live but out of scope. Consequently: **only 3 apex ALIAS conversions** are needed (not 9), **one ACM cert** (10 SANs) covers all 5 zones (the 2-cert / 30-SAN concern is moot), and the §2 record counts / §15 plan edits below that reference the dead zones should be disregarded. Renew `hb101.org` (expires 2026-06-23) before cutover.
+
+---
+
+---
+
 ## 1. Hosted zones in scope
 
 **AWS command:** `aws route53 list-hosted-zones`

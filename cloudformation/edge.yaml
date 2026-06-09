@@ -1,0 +1,430 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  efw-waf-edge — one WAF Web ACL + one CloudFront distribution for a single origin.
+  Deploy TWICE in us-east-1: efw-waf-edge-edit (origin 52.8.85.37) and
+  efw-waf-edge-public (origin 52.8.7.0). Imports shared resources from efw-waf-base.
+  DRAFT — validate-template + change-set review before applying. See
+  waf-cloudfront-migration.md "Infrastructure as Code".
+
+  Cache model: default behavior = CachingDisabled (fail-closed: every dynamic/bypass
+  path passes to origin). Only explicit static-asset globs are cached. This makes the
+  bypass list "everything not listed as static", which is safer than enumerating
+  dynamic paths and risking a miss.
+
+Parameters:
+  BaseStackName:
+    Type: String
+    Default: efw-waf-base
+    Description: Name of the deployed efw-waf-base stack to import shared resources from.
+  EnvName:
+    Type: String
+    AllowedValues: [edit-cms, preview2, public]
+    Description: >
+      Deployment label (drives resource naming). edit-cms = live CMS edit-sites on
+      web-04 (dynamic); preview2 = published preview sites on web-04 (static); public
+      = published public sites on web-06 (static). edit-cms + preview2 share origin
+      52.8.85.37 but need separate distributions (cache differs, can't vary by Host).
+  SiteType:
+    Type: String
+    AllowedValues: [cms, published]
+    Description: >
+      cms = live-from-CMS, dynamic (only universal static cached). published = content
+      published from CMS, so the published static set (incl *.htm) is cacheable.
+      preview2 and public are both 'published'; edit-cms is 'cms'.
+  OriginDomainName:
+    Type: String
+    Description: Origin host (e.g. 52.8.85.37 for edit, 52.8.7.0 for public). IIS must serve TLS here.
+  AcmCertificateArn:
+    Type: String
+    Description: ACM cert ARN in us-east-1 covering the AlternateDomainNames.
+    Default: arn:aws:acm:us-east-1:874922373146:certificate/d25dc33a-a3fa-4273-a14c-2b8b04ed7507
+  AlternateDomainNames:
+    Type: CommaDelimitedList
+    Description: CNAMEs/aliases this distribution answers for (must be covered by the cert).
+  RateLimit:
+    Type: Number
+    Default: 100
+    Description: Site-wide requests per 5-min window per IP before the rate rule fires (edit=50, public=100).
+  PlanningRateLimit:
+    Type: Number
+    Default: 300
+    Description: >
+      Per-IP request cap (5-min) scoped to /planning/* on published tiers — estimator backstop
+      behind the Challenge. Generous (Challenge does the heavy lifting); tune in Count.
+  WafRuleAction:
+    Type: String
+    AllowedValues: [Count, Block]
+    Default: Count
+    Description: Count for the monitoring window, flip to Block after a clean period.
+  MinimumOriginSslProtocol:
+    Type: String
+    Default: TLSv1.2
+    AllowedValues: [TLSv1.1, TLSv1.2]
+  EnableBotControl:
+    Type: String
+    AllowedValues: ['true', 'false']
+    Default: 'false'
+    Description: AWS Managed Bot Control is a PAID rule group (~$10/mo/ACL). Off by default.
+
+Conditions:
+  IsBlock: !Equals [!Ref WafRuleAction, Block]
+  UseBotControl: !Equals [!Ref EnableBotControl, 'true']
+  IsPublished: !Equals [!Ref SiteType, published]
+  IsCms: !Equals [!Ref SiteType, cms]
+
+# Managed policy IDs (AWS-owned, stable):
+#   CachingDisabled              4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+#   Managed-AllViewer (orig req) 216adef6-36c0-4d1b-8e2e-a6adde2e2325
+Resources:
+
+  WebAcl:
+    Type: AWS::WAFv2::WebACL
+    Properties:
+      Name: !Sub 'efw-${EnvName}-web-acl'
+      Scope: CLOUDFRONT
+      DefaultAction:
+        Allow: {}
+      VisibilityConfig:
+        SampledRequestsEnabled: true
+        CloudWatchMetricsEnabled: true
+        MetricName: !Sub 'efw-${EnvName}-web-acl'
+      Rules:
+        # NOTE: no verified-bot allowlist. robots.txt already bars /planning/, and the Challenge
+        # is /planning-scoped, so real search bots are never challenged (they crawl allowed
+        # content, which has no Challenge). A UA+IP allowlist here would only be a terminating
+        # bypass of every rule below — a spoof hole — for zero benefit. See README.
+        # 2 — manual scanner blocklist (empty seed; surgical/OpenClaw-fed)
+        - Name: IP-Blocklist-Scanners
+          Priority: 2
+          Action: !If [IsBlock, { Block: {} }, { Count: {} }]
+          VisibilityConfig: { SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: IP-Blocklist-Scanners }
+          Statement:
+            IPSetReferenceStatement:
+              Arn: !ImportValue
+                'Fn::Sub': '${BaseStackName}-ScannerIpSetArn'
+        # 3 — Amazon IP reputation (free managed group; auto-blocks known bad-actor/scanner IPs — directly targets the April-20 threat)
+        - Name: AWS-IpReputation
+          Priority: 3
+          OverrideAction: !If [IsBlock, { None: {} }, { Count: {} }]
+          VisibilityConfig: { SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: AWS-IpReputation }
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesAmazonIpReputationList
+        # 4 — OWASP Core.
+        # MEASURED 2026-06-09:
+        #   PUBLISHED estimator (b2w2_mn): start __VIEWSTATE 68B / body ~648B; household-data
+        #     screen __VIEWSTATE 1812B / body ~3061B. Well under 8KB → no override needed.
+        #   CMS admin (db101-mn.eightfoldway.com/admin/): __VIEWSTATE = 45,528 BYTES (~44KB).
+        #     Admin postbacks send that in the body → SizeRestrictions_BODY (8KB) would BLOCK
+        #     CMS editing. So on the CMS tier ONLY, override SizeRestrictions_BODY -> Count.
+        # Published tiers keep the rule fully active (their bodies are small). Watch SQLi_BODY /
+        # CrossSiteScripting_BODY in Count on the CMS tier too — the 45KB base64 ViewState may
+        # trip them (WAF inspects the first 8KB of body by default).
+        - Name: AWS-CommonRuleSet
+          Priority: 4
+          OverrideAction: !If [IsBlock, { None: {} }, { Count: {} }]
+          VisibilityConfig: { SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: AWS-CommonRuleSet }
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesCommonRuleSet
+              RuleActionOverrides: !If
+                - IsCms
+                - - Name: SizeRestrictions_BODY
+                    ActionToUse: { Count: {} }
+                - !Ref AWS::NoValue
+        # 5 — Known bad inputs
+        - Name: AWS-KnownBadInputs
+          Priority: 5
+          OverrideAction: !If [IsBlock, { None: {} }, { Count: {} }]
+          VisibilityConfig: { SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: AWS-KnownBadInputs }
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesKnownBadInputsRuleSet
+        # 6 — Estimator bot gate (the primary concern): Challenge non-verified traffic on
+        # /planning/* (published tiers only). Estimators are dynamic, no-cache, server-side
+        # compute; bots "walking" them burn origin CPU and caching can't help. Challenge =
+        # silent browser proof-of-work: real browsers pass with a token cookie (one-time per
+        # immunity window), headless/distributed bots fail. Verified search engines already
+        # terminated at rules 0/1, so they skip this. Count -> Challenge via the IsBlock toggle
+        # (observe in Count, enforce on activation). NOT applied to edit-cms (NTLM-authed, low
+        # volume). Scope can later expand to /api/*, /ajax/* if bots hit those compute paths.
+        - !If
+          - IsPublished
+          - Name: Challenge-Estimator
+            Priority: 6
+            Action: !If [IsBlock, { Challenge: {} }, { Count: {} }]
+            VisibilityConfig: { SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: Challenge-Estimator }
+            Statement:
+              ByteMatchStatement:
+                FieldToMatch: { UriPath: {} }
+                PositionalConstraint: STARTS_WITH
+                SearchString: /planning/
+                TextTransformations: [{ Priority: 0, Type: LOWERCASE }]
+          - !Ref AWS::NoValue
+        # 7 — Estimator rate-limit backstop: per-IP cap scoped to /planning/* (published tiers),
+        # for bots that solve the challenge or flood from a few IPs.
+        - !If
+          - IsPublished
+          - Name: RateLimit-Estimator
+            Priority: 7
+            Action: !If [IsBlock, { Block: {} }, { Count: {} }]
+            VisibilityConfig: { SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: RateLimit-Estimator }
+            Statement:
+              RateBasedStatement:
+                Limit: !Ref PlanningRateLimit
+                AggregateKeyType: IP
+                ScopeDownStatement:
+                  ByteMatchStatement:
+                    FieldToMatch: { UriPath: {} }
+                    PositionalConstraint: STARTS_WITH
+                    SearchString: /planning/
+                    TextTransformations: [{ Priority: 0, Type: LOWERCASE }]
+          - !Ref AWS::NoValue
+        # 8 — site-wide per-IP rate limit (general probe / flood backstop, all paths)
+        - Name: RateLimit
+          Priority: 8
+          Action: !If [IsBlock, { Block: {} }, { Count: {} }]
+          VisibilityConfig: { SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: RateLimit }
+          Statement:
+            RateBasedStatement:
+              Limit: !Ref RateLimit
+              AggregateKeyType: IP
+        # 9 — Bot Control (optional, paid). Complements the Challenge for browser-emulating bots.
+        - !If
+          - UseBotControl
+          - Name: AWS-BotControl
+            Priority: 9
+            OverrideAction: !If [IsBlock, { None: {} }, { Count: {} }]
+            VisibilityConfig: { SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: AWS-BotControl }
+            Statement:
+              ManagedRuleGroupStatement:
+                VendorName: AWS
+                Name: AWSManagedRulesBotControlRuleSet
+          - !Ref AWS::NoValue
+
+  WebAclLogging:
+    Type: AWS::WAFv2::LoggingConfiguration
+    Properties:
+      ResourceArn: !GetAtt WebAcl.Arn
+      LogDestinationConfigs:
+        - !ImportValue
+            'Fn::Sub': '${BaseStackName}-WafLogBucketArn'
+
+  CachePolicyStatic:
+    Type: AWS::CloudFront::CachePolicy
+    Properties:
+      CachePolicyConfig:
+        Name: !Sub 'efw-${EnvName}-static'
+        DefaultTTL: 86400
+        MinTTL: 0
+        MaxTTL: 31536000
+        ParametersInCacheKeyAndForwardedToOrigin:
+          EnableAcceptEncodingGzip: true
+          EnableAcceptEncodingBrotli: true
+          CookiesConfig: { CookieBehavior: none }
+          # Host MUST be in the cache key: IIS routes by Host, so nv.db101.org/x.htm and
+          # mn.db101.org/x.htm are different content at the same path. Without Host they
+          # collide across states, and staging (preview-nv) could leak onto public (nv).
+          # Including Host here also forwards it to the (custom) origin for IIS routing.
+          HeadersConfig: { HeaderBehavior: whitelist, Headers: [Host] }
+          # Query string in key too, so ?v= cache-busting on static assets works.
+          QueryStringsConfig: { QueryStringBehavior: all }
+
+  OriginRequestPolicyDynamic:
+    Type: AWS::CloudFront::OriginRequestPolicy
+    Properties:
+      OriginRequestPolicyConfig:
+        Name: !Sub 'efw-${EnvName}-dynamic-allviewer'
+        CookiesConfig: { CookieBehavior: all }
+        HeadersConfig: { HeaderBehavior: allViewer }
+        QueryStringsConfig: { QueryStringBehavior: all }
+
+  ResponseHeadersPolicy:
+    Type: AWS::CloudFront::ResponseHeadersPolicy
+    Properties:
+      ResponseHeadersPolicyConfig:
+        Name: !Sub 'efw-${EnvName}-sec-headers'
+        SecurityHeadersConfig:
+          StrictTransportSecurity:
+            AccessControlMaxAgeSec: 31536000
+            IncludeSubdomains: true
+            Override: false
+            Preload: false
+          ContentTypeOptions: { Override: false }
+          FrameOptions: { FrameOption: SAMEORIGIN, Override: false }
+
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: !Sub 'efw-${EnvName} WAF/CloudFront'
+        HttpVersion: http2and3
+        IPV6Enabled: true
+        Aliases: !Ref AlternateDomainNames
+        WebACLId: !GetAtt WebAcl.Arn
+        PriceClass: PriceClass_100
+        ViewerCertificate:
+          AcmCertificateArn: !Ref AcmCertificateArn
+          SslSupportMethod: sni-only
+          MinimumProtocolVersion: TLSv1.2_2021
+        Logging:
+          Bucket: !ImportValue
+            'Fn::Sub': '${BaseStackName}-WafLogBucketDomain'
+          Prefix: !Sub 'cf-${EnvName}/'
+          IncludeCookies: false
+        Origins:
+          - Id: iis-origin
+            DomainName: !Ref OriginDomainName
+            CustomOriginConfig:
+              OriginProtocolPolicy: https-only
+              OriginSSLProtocols: [!Ref MinimumOriginSslProtocol]
+            OriginCustomHeaders:
+              - HeaderName: X-Origin-Verify
+                HeaderValue: !Sub
+                  - '{{resolve:secretsmanager:${SecretArn}}}'
+                  - SecretArn: !ImportValue
+                      'Fn::Sub': '${BaseStackName}-OriginVerifySecretArn'
+        # Default = no caching: every path not matched below passes to origin.
+        DefaultCacheBehavior:
+          TargetOriginId: iis-origin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad   # Managed-CachingDisabled
+          OriginRequestPolicyId: !Ref OriginRequestPolicyDynamic
+          ResponseHeadersPolicyId: !Ref ResponseHeadersPolicy
+          Compress: true
+        # Static assets — the ONLY cached paths. Everything else falls through to default (no cache).
+        CacheBehaviors:
+          - PathPattern: '*.css'
+            TargetOriginId: iis-origin
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods: [GET, HEAD]
+            CachePolicyId: !Ref CachePolicyStatic
+            Compress: true
+          - PathPattern: '*.js'
+            TargetOriginId: iis-origin
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods: [GET, HEAD]
+            CachePolicyId: !Ref CachePolicyStatic
+            Compress: true
+          - PathPattern: '/dist/*'
+            TargetOriginId: iis-origin
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods: [GET, HEAD]
+            CachePolicyId: !Ref CachePolicyStatic
+            Compress: true
+          # Published-only static paths (preview2 + public, NOT live CMS edit-sites).
+          # On edit-cms these are dynamic/being-authored, so the behaviors are omitted
+          # and fall through to the no-cache default (always fresh for editors).
+          - !If
+            - IsPublished
+            - PathPattern: '*.htm'
+              TargetOriginId: iis-origin
+              ViewerProtocolPolicy: redirect-to-https
+              AllowedMethods: [GET, HEAD]
+              CachePolicyId: !Ref CachePolicyStatic
+              Compress: true
+            - !Ref AWS::NoValue
+          - !If
+            - IsPublished
+            - PathPattern: '/master_images/*'
+              TargetOriginId: iis-origin
+              ViewerProtocolPolicy: redirect-to-https
+              AllowedMethods: [GET, HEAD]
+              CachePolicyId: !Ref CachePolicyStatic
+              Compress: true
+            - !Ref AWS::NoValue
+          - !If
+            - IsPublished
+            - PathPattern: '/master_documents/*'
+              TargetOriginId: iis-origin
+              ViewerProtocolPolicy: redirect-to-https
+              AllowedMethods: [GET, HEAD]
+              CachePolicyId: !Ref CachePolicyStatic
+              Compress: true
+            - !Ref AWS::NoValue
+          - !If
+            - IsPublished
+            - PathPattern: '/documents/*'
+              TargetOriginId: iis-origin
+              ViewerProtocolPolicy: redirect-to-https
+              AllowedMethods: [GET, HEAD]
+              CachePolicyId: !Ref CachePolicyStatic
+              Compress: true
+            - !Ref AWS::NoValue
+          - !If
+            - IsPublished
+            - PathPattern: '/images/*'
+              TargetOriginId: iis-origin
+              ViewerProtocolPolicy: redirect-to-https
+              AllowedMethods: [GET, HEAD]
+              CachePolicyId: !Ref CachePolicyStatic
+              Compress: true
+            - !Ref AWS::NoValue
+        # NOTE: ScriptResource.axd / *_AppService.axd are dynamic — they correctly
+        # fall through to the no-cache default. Do NOT add *.axd to static behaviors.
+
+  # Per-tier distribution id, owned by this stack. The app servers' existing
+  # efw.policy.secrets.read covers reading it — no new IAM. InvalidateCdn looks up
+  # efw-waf/dist/{tier}. (Not created for cms — that tier is a no-op invalidation.)
+  DistIdSecret:
+    Type: AWS::SecretsManager::Secret
+    Condition: IsPublished
+    Properties:
+      Name: !Sub 'efw-waf/dist/${EnvName}'
+      Description: !Sub 'CloudFront distribution id for the ${EnvName} tier (read by InvalidateCdn).'
+      SecretString: !Ref Distribution
+
+  Alarm5xx:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'efw-${EnvName}-cf-5xx'
+      AlarmDescription: CloudFront origin 5xx error rate elevated.
+      Namespace: AWS/CloudFront
+      MetricName: 5xxErrorRate
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      Dimensions:
+        - { Name: DistributionId, Value: !Ref Distribution }
+        - { Name: Region, Value: Global }
+      AlarmActions:
+        - !ImportValue
+            'Fn::Sub': '${BaseStackName}-AlarmTopicArn'
+
+  AlarmWafBlocked:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'efw-${EnvName}-waf-blocked'
+      AlarmDescription: WAF blocked/counted request spike — investigate false positives or attack.
+      Namespace: AWS/WAFV2
+      MetricName: BlockedRequests
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1000
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      Dimensions:
+        - { Name: WebACL, Value: !Sub 'efw-${EnvName}-web-acl' }
+        - { Name: Rule, Value: ALL }
+        - { Name: Region, Value: Global }
+      AlarmActions:
+        - !ImportValue
+            'Fn::Sub': '${BaseStackName}-AlarmTopicArn'
+
+Outputs:
+  DistributionId:
+    Value: !Ref Distribution
+  DistributionDomainName:
+    Description: Use this as the Route53 cutover target (CNAME for subs, ALIAS for apex).
+    Value: !GetAtt Distribution.DomainName
+  WebAclArn:
+    Value: !GetAtt WebAcl.Arn

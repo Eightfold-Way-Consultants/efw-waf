@@ -1,0 +1,18 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "VisualEditor0",
+      "Effect": "Allow",
+      "Action": [
+        "cloudfront:CreateInvalidation",
+        "cloudfront:GetInvalidation",
+        "cloudfront:ListInvalidations"
+      ],
+      "Resource": [
+        "arn:aws:cloudfront::874922373146:distribution/PREVIEW2_DIST_ID",
+        "arn:aws:cloudfront::874922373146:distribution/PUBLIC_DIST_ID"
+      ]
+    }
+  ]
+}
