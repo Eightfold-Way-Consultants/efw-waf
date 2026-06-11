@@ -1,0 +1,31 @@
+{
+    "Changes":  [
+                    {
+                        "ResourceRecordSet":  {
+                                                  "Name":  "develop.pdfshot.db101.org.",
+                                                  "Type":  "CNAME",
+                                                  "TTL":  300,
+                                                  "ResourceRecords":  [
+                                                                          {
+                                                                              "Value":  "pdfsh-LoadB-DY93VSVGX0SM-561566444.us-west-1.elb.amazonaws.com"
+                                                                          }
+                                                                      ]
+                                              },
+                        "Action":  "DELETE"
+                    },
+                    {
+                        "ResourceRecordSet":  {
+                                                  "Name":  "preview-favorites-temp.db101.org.",
+                                                  "Type":  "CNAME",
+                                                  "TTL":  300,
+                                                  "ResourceRecords":  [
+                                                                          {
+                                                                              "Value":  "ec2-13-56-22-76.us-west-1.compute.amazonaws.com"
+                                                                          }
+                                                                      ]
+                                              },
+                        "Action":  "DELETE"
+                    }
+                ],
+    "Comment":  "WAF project: remove dangling records 2026-06-10"
+}

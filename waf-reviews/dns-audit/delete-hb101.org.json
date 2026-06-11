@@ -1,0 +1,29 @@
+{
+    "Changes":  [
+                    {
+                        "ResourceRecordSet":  {
+                                                  "Name":  "staging.content.hb101.org.",
+                                                  "Type":  "A",
+                                                  "AliasTarget":  {
+                                                                      "HostedZoneId":  "Z2FDTNDATAQYW2",
+                                                                      "DNSName":  "d3kj2y5lkzzpcd.cloudfront.net.",
+                                                                      "EvaluateTargetHealth":  false
+                                                                  }
+                                              },
+                        "Action":  "DELETE"
+                    },
+                    {
+                        "ResourceRecordSet":  {
+                                                  "Name":  "development.image.hb101.org.",
+                                                  "Type":  "A",
+                                                  "AliasTarget":  {
+                                                                      "HostedZoneId":  "Z2FDTNDATAQYW2",
+                                                                      "DNSName":  "dt0s0fyva5xn0.cloudfront.net.",
+                                                                      "EvaluateTargetHealth":  false
+                                                                  }
+                                              },
+                        "Action":  "DELETE"
+                    }
+                ],
+    "Comment":  "WAF project: remove dangling records 2026-06-10"
+}

@@ -1,0 +1,103 @@
+﻿{
+    "ResourceRecordSets": [
+        {
+            "Name": "housingbenefits101.org.",
+            "Type": "NS",
+            "TTL": 172800,
+            "ResourceRecords": [
+                {
+                    "Value": "ns-711.awsdns-24.net."
+                },
+                {
+                    "Value": "ns-73.awsdns-09.com."
+                },
+                {
+                    "Value": "ns-1518.awsdns-61.org."
+                },
+                {
+                    "Value": "ns-1889.awsdns-44.co.uk."
+                }
+            ]
+        },
+        {
+            "Name": "housingbenefits101.org.",
+            "Type": "SOA",
+            "TTL": 900,
+            "ResourceRecords": [
+                {
+                    "Value": "ns-711.awsdns-24.net. awsdns-hostmaster.amazon.com. 1 7200 900 1209600 86400"
+                }
+            ]
+        },
+        {
+            "Name": "_06c1a9def5078f02ba2648b27bea4b98.housingbenefits101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "_0f46c586ae0a35a75760daca69d3ebcb.jkddzztszm.acm-validations.aws."
+                }
+            ]
+        },
+        {
+            "Name": "mn.housingbenefits101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "public-site.housingbenefits101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview-mn.housingbenefits101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "preview-site.housingbenefits101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview-site.housingbenefits101.org.",
+            "Type": "A",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "52.8.7.0"
+                }
+            ]
+        },
+        {
+            "Name": "preview2-mn.housingbenefits101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "preview2-site.housingbenefits101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview2-site.housingbenefits101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "preview2-site.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "public-site.housingbenefits101.org.",
+            "Type": "A",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "52.8.7.0"
+                }
+            ]
+        }
+    ]
+}

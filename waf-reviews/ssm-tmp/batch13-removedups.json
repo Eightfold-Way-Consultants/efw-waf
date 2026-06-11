@@ -1,0 +1,13 @@
+{"commands": [
+"'--- config backup ---'",
+"& $env:windir\\System32\\inetsrv\\appcmd.exe add backup waf-dup-planning-20260610",
+"'--- remove 7 duplicate apps ---'",
+"$dups = @('preview2-az.db101.org/az/planning','preview2-az-es.db101.org/az/planning','preview2-ca.db101.org/ca/planning','preview2-ca-es.db101.org/ca/planning','preview2-ky.db101.org/ky/planning','preview2-nj.db101.org/nj/planning','preview2-nj-es.db101.org/nj/planning')",
+"foreach ($d in $dups) { & $env:windir\\System32\\inetsrv\\appcmd.exe delete app $d }",
+"'--- verify: remaining planning-path apps with state prefix ---'",
+"Import-Module WebAdministration",
+"$left = Get-WebApplication | Where-Object { $_.Path -match '^/[a-z]{2}(-es)?/planning' }",
+"if ($left) { $left | ForEach-Object { \"STILL PRESENT: $($_.GetParentElement().Attributes['name'].Value)|$($_.Path)\" } } else { 'CLEAN: no /{state}/planning apps remain' }",
+"'--- sanity: /planning apps still intact (count) ---'",
+"(Get-WebApplication | Where-Object { $_.Path -eq '/planning' }).Count"
+]}

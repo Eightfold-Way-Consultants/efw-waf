@@ -1,0 +1,77 @@
+﻿[
+    {
+        "Zone":  "Z26W7416MQ6FIP",
+        "Record":  {
+                       "Name":  "staging.content.hb101.org.",
+                       "Type":  "A",
+                       "AliasTarget":  {
+                                           "HostedZoneId":  "Z2FDTNDATAQYW2",
+                                           "DNSName":  "d3kj2y5lkzzpcd.cloudfront.net.",
+                                           "EvaluateTargetHealth":  false
+                                       }
+                   }
+    },
+    {
+        "Zone":  "Z26W7416MQ6FIP",
+        "Record":  {
+                       "Name":  "development.image.hb101.org.",
+                       "Type":  "A",
+                       "AliasTarget":  {
+                                           "HostedZoneId":  "Z2FDTNDATAQYW2",
+                                           "DNSName":  "dt0s0fyva5xn0.cloudfront.net.",
+                                           "EvaluateTargetHealth":  false
+                                       }
+                   }
+    },
+    {
+        "Zone":  "Z1KW10MTO4TFYM",
+        "Record":  {
+                       "Name":  "acmetest.eightfoldway.com.",
+                       "Type":  "A",
+                       "AliasTarget":  {
+                                           "HostedZoneId":  "Z368ELLRRE2KJ0",
+                                           "DNSName":  "dualstack.nodeappalb-261929749.us-west-1.elb.amazonaws.com.",
+                                           "EvaluateTargetHealth":  false
+                                       }
+                   }
+    },
+    {
+        "Zone":  "Z1KW10MTO4TFYM",
+        "Record":  {
+                       "Name":  "logon00.eightfoldway.com.",
+                       "Type":  "A",
+                       "TTL":  300,
+                       "ResourceRecords":  [
+                                               {
+                                                   "Value":  "54.85.48.121"
+                                               }
+                                           ]
+                   }
+    },
+    {
+        "Zone":  "Z3T3K8XH9ZMBIW",
+        "Record":  {
+                       "Name":  "develop.pdfshot.db101.org.",
+                       "Type":  "CNAME",
+                       "TTL":  300,
+                       "ResourceRecords":  [
+                                               {
+                                                   "Value":  "pdfsh-LoadB-DY93VSVGX0SM-561566444.us-west-1.elb.amazonaws.com"
+                                               }
+                                           ]
+                   }
+    },
+    {
+        "Zone":  "Z3T3K8XH9ZMBIW",
+        "Record":  {
+                       "Name":  "preview-favorites-temp.db101.org.",
+                       "Type":  "CNAME",
+                       "TTL":  300,
+                       "ResourceRecords":  [
+                                               {
+                                                   "Value":  "ec2-13-56-22-76.us-west-1.compute.amazonaws.com"
+                                               }
+                                           ]
+                   }
+    }
+]

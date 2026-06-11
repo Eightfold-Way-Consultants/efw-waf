@@ -1,0 +1,9 @@
+{"commands": [
+"Import-Module WebAdministration",
+"Get-Website | ForEach-Object {",
+"  $cf = ($_.logFile.customFields.Collection | ForEach-Object { $_.logFieldName }) -join '+'",
+"  \"$($_.Name)|$($_.logFile.logExtFileFlags)|custom=$cf\"",
+"} | Select-Object -First 6",
+"'--- distinct field configs across all sites ---'",
+"(Get-Website | ForEach-Object { \"$($_.logFile.logExtFileFlags)|custom=$(($_.logFile.customFields.Collection | ForEach-Object { $_.logFieldName }) -join '+')\" } | Group-Object | ForEach-Object { \"$($_.Count)x $($_.Name)\" })"
+]}

@@ -1,0 +1,638 @@
+﻿{
+    "ResourceRecordSets": [
+        {
+            "Name": "hb101.org.",
+            "Type": "A",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "52.8.7.0"
+                }
+            ]
+        },
+        {
+            "Name": "hb101.org.",
+            "Type": "MX",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "1 ASPMX.L.GOOGLE.COM."
+                },
+                {
+                    "Value": "5 ALT1.ASPMX.L.GOOGLE.COM."
+                },
+                {
+                    "Value": "5 ALT2.ASPMX.L.GOOGLE.COM."
+                },
+                {
+                    "Value": "10 LT3.ASPMX.L.GOOGLEMAIL.COM."
+                },
+                {
+                    "Value": "10 LT4.ASPMX.L.GOOGLEMAIL.COM."
+                }
+            ]
+        },
+        {
+            "Name": "hb101.org.",
+            "Type": "NS",
+            "TTL": 172800,
+            "ResourceRecords": [
+                {
+                    "Value": "ns-1202.awsdns-22.org."
+                },
+                {
+                    "Value": "ns-1022.awsdns-63.net."
+                },
+                {
+                    "Value": "ns-84.awsdns-10.com."
+                },
+                {
+                    "Value": "ns-1812.awsdns-34.co.uk."
+                }
+            ]
+        },
+        {
+            "Name": "hb101.org.",
+            "Type": "SOA",
+            "TTL": 900,
+            "ResourceRecords": [
+                {
+                    "Value": "ns-1202.awsdns-22.org. awsdns-hostmaster.amazon.com. 1 7200 900 1209600 86400"
+                }
+            ]
+        },
+        {
+            "Name": "hb101.org.",
+            "Type": "TXT",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "\"google-site-verification=umFw9CMA08dQPk44TbM6k9ZdsJv4gFs12e97DC_9PZk\""
+                }
+            ]
+        },
+        {
+            "Name": "_0affefa5d60ed19535a688710c0efc8d.hb101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "_c7fbf25abded0237ad7c2159ad7a16bf.jkddzztszm.acm-validations.aws."
+                }
+            ]
+        },
+        {
+            "Name": "_amazonses.hb101.org.",
+            "Type": "TXT",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "\"Yq/J35+pOHfKpEQJXHMuTQxWYRkQcYUyP499bcH1Zjc=\""
+                },
+                {
+                    "Value": "\"hCb9+TcDb7nUDlFzZpdLjg7EOVUiNkG8U7XR6uh2Qh0=\""
+                }
+            ]
+        },
+        {
+            "Name": "_dmarc.hb101.org.",
+            "Type": "TXT",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "\"v=DMARC1; p=quarantine; adkim=r\""
+                }
+            ]
+        },
+        {
+            "Name": "2gsihivg6c6bsao7o2344swhhejvp3mz._domainkey.hb101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "2gsihivg6c6bsao7o2344swhhejvp3mz.dkim.amazonses.com"
+                }
+            ]
+        },
+        {
+            "Name": "2ulvu5awun6wsguk7w4hyvx6v5wdkzsh._domainkey.hb101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "2ulvu5awun6wsguk7w4hyvx6v5wdkzsh.dkim.amazonses.com"
+                }
+            ]
+        },
+        {
+            "Name": "43s2eh5o7xpdp6e4yfga4tu2gk6p35sh._domainkey.hb101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "43s2eh5o7xpdp6e4yfga4tu2gk6p35sh.dkim.amazonses.com"
+                }
+            ]
+        },
+        {
+            "Name": "54xry243ovdoi757talnzk2bmr5n3wzk._domainkey.hb101.org.",
+            "Type": "CNAME",
+            "TTL": 1800,
+            "ResourceRecords": [
+                {
+                    "Value": "54xry243ovdoi757talnzk2bmr5n3wzk.dkim.amazonses.com"
+                }
+            ]
+        },
+        {
+            "Name": "c5xgbq5w5dvksjn4d4rxgknm2ukdoejg._domainkey.hb101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "c5xgbq5w5dvksjn4d4rxgknm2ukdoejg.dkim.amazonses.com"
+                }
+            ]
+        },
+        {
+            "Name": "cgd56mmy6twfab6yxj72jkwyaxenyyqp._domainkey.hb101.org.",
+            "Type": "CNAME",
+            "TTL": 1800,
+            "ResourceRecords": [
+                {
+                    "Value": "cgd56mmy6twfab6yxj72jkwyaxenyyqp.dkim.amazonses.com"
+                }
+            ]
+        },
+        {
+            "Name": "hnfgfmxg6deqsiku3ntt2nu3qjndjcke._domainkey.hb101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "hnfgfmxg6deqsiku3ntt2nu3qjndjcke.dkim.amazonses.com"
+                }
+            ]
+        },
+        {
+            "Name": "juwphaxpvx7q2rbfypco5l4gnddbm6iv._domainkey.hb101.org.",
+            "Type": "CNAME",
+            "TTL": 1800,
+            "ResourceRecords": [
+                {
+                    "Value": "juwphaxpvx7q2rbfypco5l4gnddbm6iv.dkim.amazonses.com"
+                }
+            ]
+        },
+        {
+            "Name": "yk77sr7ftiyg6fpka27c6bdjsibvnm3a._domainkey.hb101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "yk77sr7ftiyg6fpka27c6bdjsibvnm3a.dkim.amazonses.com"
+                }
+            ]
+        },
+        {
+            "Name": "staging.content.hb101.org.",
+            "Type": "A",
+            "AliasTarget": {
+                "HostedZoneId": "Z2FDTNDATAQYW2",
+                "DNSName": "d3kj2y5lkzzpcd.cloudfront.net.",
+                "EvaluateTargetHealth": false
+            }
+        },
+        {
+            "Name": "_96b5734f2c3a74be83b6f2dfd21c5690.staging.content.hb101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "_3b4cb066300784e732e88bacbddc6410.ltfvzjuylp.acm-validations.aws."
+                }
+            ]
+        },
+        {
+            "Name": "demo.hb101.org.",
+            "Type": "A",
+            "AliasTarget": {
+                "HostedZoneId": "Z2FDTNDATAQYW2",
+                "DNSName": "d3s4bf783ofzq0.cloudfront.net.",
+                "EvaluateTargetHealth": false
+            }
+        },
+        {
+            "Name": "_a162f9696e1cc7c89fbf974b59746671.demo.hb101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "_af8b9bc4b9d5c56c3dde4c9598cd73d6.jkddzztszm.acm-validations.aws."
+                }
+            ]
+        },
+        {
+            "Name": "dev-vault.hb101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "dev-vault.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "_9b5ef8d086b9d484833b4398e6254059.dev-vault.hb101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "_50d084dd1ceaf4d390e6b7490bd0bdcd.jkddzztszm.acm-validations.aws."
+                }
+            ]
+        },
+        {
+            "Name": "efw-content.hb101.org.",
+            "Type": "A",
+            "AliasTarget": {
+                "HostedZoneId": "Z2FDTNDATAQYW2",
+                "DNSName": "d26hdpj7qusrbc.cloudfront.net.",
+                "EvaluateTargetHealth": false
+            }
+        },
+        {
+            "Name": "_aa352cd1d7f52b8fd1939464bdf1cdd9.efw-content.hb101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "_e2396790109d04ab5fd09eda9f2f5666.ltfvzjuylp.acm-validations.aws."
+                }
+            ]
+        },
+        {
+            "Name": "_b8acd23dadb1966016a4ad13551d7d54.efw-content.hb101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "_1d4b005350d27f12e17b761a65b139ae.bbfvkzsszw.acm-validations.aws."
+                }
+            ]
+        },
+        {
+            "Name": "favorites.hb101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s3b.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "_0e99e5bf4a279b29ee722e9b9dac75f4.image.hb101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "_f5ee377cc16a721d3cc7f5b05821ff8b.auiqqraehs.acm-validations.aws."
+                }
+            ]
+        },
+        {
+            "Name": "_5c4700a60fe3bdf4bbc1c95995afc42c.image.hb101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "_1b9666c1db2bfb4244a1c92751eb48ce.ltfvzjuylp.acm-validations.aws."
+                }
+            ]
+        },
+        {
+            "Name": "_fecde990eb33745c62f9c5b3010f469c.image.hb101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "_8be75df2d29fdececefe7b5be99e005f.ltfvzjuylp.acm-validations.aws."
+                }
+            ]
+        },
+        {
+            "Name": "development.image.hb101.org.",
+            "Type": "A",
+            "AliasTarget": {
+                "HostedZoneId": "Z2FDTNDATAQYW2",
+                "DNSName": "dt0s0fyva5xn0.cloudfront.net.",
+                "EvaluateTargetHealth": false
+            }
+        },
+        {
+            "Name": "production.image.hb101.org.",
+            "Type": "A",
+            "AliasTarget": {
+                "HostedZoneId": "Z2FDTNDATAQYW2",
+                "DNSName": "d11czvdbxze06q.cloudfront.net.",
+                "EvaluateTargetHealth": false
+            }
+        },
+        {
+            "Name": "staging.image.hb101.org.",
+            "Type": "A",
+            "AliasTarget": {
+                "HostedZoneId": "Z2FDTNDATAQYW2",
+                "DNSName": "d346abueuhhgl8.cloudfront.net.",
+                "EvaluateTargetHealth": false
+            }
+        },
+        {
+            "Name": "logon.hb101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s3b.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "mn.hb101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "public-site.hb101.org"
+                }
+            ]
+        },
+        {
+            "Name": "6b0b999798b2a4f99dcc726fad7fa6bc.mn.hb101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "verify.bing.com"
+                }
+            ]
+        },
+        {
+            "Name": "www.mn.hb101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "mn.hb101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview-favorites.hb101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s3b.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "preview-logon.hb101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s3b.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "preview-mn.hb101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "preview-site.hb101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview-site.hb101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6c.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "preview2-mn.hb101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "preview2-site.hb101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview2-site.hb101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s4.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "public-site.hb101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6c.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "_bbf43f5bcce6851916199878fd40d81a.rts-client.hb101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "_b486d47be92773f0b1e6f18bc4bbf39b.kirrbxfjtw.acm-validations.aws."
+                }
+            ]
+        },
+        {
+            "Name": "_d84464a308c63103b531174b931477aa.rts-client.hb101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "_22dce948f745ce4e31e009f3d3714fc9.kirrbxfjtw.acm-validations.aws."
+                }
+            ]
+        },
+        {
+            "Name": "_e02b1bf849566ff8d2e404b5cf64cb16.rts-client.hb101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "_518eaa5eab6edfa7344294191a62b882.kirrbxfjtw.acm-validations.aws."
+                }
+            ]
+        },
+        {
+            "Name": "production.rts-client.hb101.org.",
+            "Type": "A",
+            "AliasTarget": {
+                "HostedZoneId": "Z2FDTNDATAQYW2",
+                "DNSName": "d2jdfyxxwhv5a5.cloudfront.net.",
+                "EvaluateTargetHealth": false
+            }
+        },
+        {
+            "Name": "_8af19dd405ca211b6599757ac544716a.production.rts-client.hb101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "_1283e4a13e3187b71c101664d25b666f.kirrbxfjtw.acm-validations.aws."
+                }
+            ]
+        },
+        {
+            "Name": "staging.rts-client.hb101.org.",
+            "Type": "A",
+            "AliasTarget": {
+                "HostedZoneId": "Z2FDTNDATAQYW2",
+                "DNSName": "deyu90y9v98jz.cloudfront.net.",
+                "EvaluateTargetHealth": false
+            }
+        },
+        {
+            "Name": "_5202c66ec12ae128dc0d901b78eeb8b7.staging.rts-client.hb101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "_4692bc64c2d0c071289c4115aef38f92.kirrbxfjtw.acm-validations.aws."
+                }
+            ]
+        },
+        {
+            "Name": "rts.hb101.org.",
+            "Type": "A",
+            "AliasTarget": {
+                "HostedZoneId": "Z368ELLRRE2KJ0",
+                "DNSName": "dualstack.hbrts-loadb-cbqfq581an5o-1538874785.us-west-1.elb.amazonaws.com.",
+                "EvaluateTargetHealth": false
+            }
+        },
+        {
+            "Name": "_31c70d48cb3ef3efa68a51bb462a2c6b.rts.hb101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "_6a0afd35b6d9425f8c8263db386aaa55.hkvuiqjoua.acm-validations.aws."
+                }
+            ]
+        },
+        {
+            "Name": "_f00df7551c3c44d21456fcbc88a8ae84.content.rts.hb101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "_00cd210c3f70fd6de5c14add124e9a66.ltfvzjuylp.acm-validations.aws."
+                }
+            ]
+        },
+        {
+            "Name": "staging.rts.hb101.org.",
+            "Type": "A",
+            "AliasTarget": {
+                "HostedZoneId": "Z368ELLRRE2KJ0",
+                "DNSName": "hbrts--loadb-f4zlvghimubx-407061807.us-west-1.elb.amazonaws.com.",
+                "EvaluateTargetHealth": false
+            }
+        },
+        {
+            "Name": "_7e0214486d68fb8f3cc900e806d82412.staging.rts.hb101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "_abeb712facb4ebb1d1cb61ba04ce286f.hkvuiqjoua.acm-validations.aws."
+                }
+            ]
+        },
+        {
+            "Name": "staging-vault.hb101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "staging-vault.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "_874397ec8a93dc4fc005d14887d88d49.staging-vault.hb101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "_35c68088827ec337a37f92f9d1e73e34.jkddzztszm.acm-validations.aws."
+                }
+            ]
+        },
+        {
+            "Name": "vault-alb.hb101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "vault-alb.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "vault.hb101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "vault.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "_fde820d411e43e5280bbbff678f3be55.vault.hb101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "_55a4f7607ecf8fc51efbc7955f0053bf.jkddzztszm.acm-validations.aws."
+                }
+            ]
+        },
+        {
+            "Name": "www.hb101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "mn.hb101.org"
+                }
+            ]
+        }
+    ]
+}

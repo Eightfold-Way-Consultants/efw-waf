@@ -1,0 +1,22 @@
+{"commands": [
+"Import-Module WebAdministration",
+"'--- hiddenSegments ---'",
+"((Get-WebConfiguration -Filter 'system.webServer/security/requestFiltering/hiddenSegments' -PSPath 'MACHINE/WEBROOT/APPHOST').Collection | ForEach-Object { $_.segment }) -join ','",
+"'--- requestLimits ---'",
+"$rl = Get-WebConfiguration -Filter 'system.webServer/security/requestFiltering/requestLimits' -PSPath 'MACHINE/WEBROOT/APPHOST'",
+"\"maxAllowedContentLength=$($rl.maxAllowedContentLength) maxUrl=$($rl.maxUrl) maxQueryString=$($rl.maxQueryString)\"",
+"'--- ipSecurity ---'",
+"$ip = Get-WebConfiguration -Filter 'system.webServer/security/ipSecurity' -PSPath 'MACHINE/WEBROOT/APPHOST'",
+"\"allowUnlisted=$($ip.allowUnlisted) entries=$($ip.Collection.Count)\"",
+"'--- distinct app paths (all sites) ---'",
+"(& $env:windir\\System32\\inetsrv\\appcmd.exe list app /text:path) | Sort-Object -Unique",
+"'--- web.config spot checks ---'",
+"foreach ($n in 'mn.db101.org','preview-mn.db101.org','db101-mn.eightfoldway.com','preview2-mn.db101.org') {",
+"  $w = Get-Website -Name $n -ErrorAction SilentlyContinue",
+"  if ($w) {",
+"    $p = [Environment]::ExpandEnvironmentVariables($w.physicalPath)",
+"    \"== $n ($p) ==\"",
+"    Select-String -Path \"$p\\web.config\" -Pattern '<trace |customErrors|compilation |httpRuntime|httpErrors' -ErrorAction SilentlyContinue | ForEach-Object { $_.Line.Trim().Substring(0, [Math]::Min(160, $_.Line.Trim().Length)) }",
+"  }",
+"}"
+]}

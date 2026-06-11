@@ -1,0 +1,215 @@
+﻿{
+    "ResourceRecordSets": [
+        {
+            "Name": "vets101.org.",
+            "Type": "A",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "52.8.7.0"
+                }
+            ]
+        },
+        {
+            "Name": "vets101.org.",
+            "Type": "MX",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "10 ASPMX.L.GOOGLE.COM."
+                },
+                {
+                    "Value": "20 ALT1.ASPMX.L.GOOGLE.COM."
+                },
+                {
+                    "Value": "20 ALT2.ASPMX.L.GOOGLE.COM."
+                },
+                {
+                    "Value": "30 ASPMX2.GOOGLEMAIL.COM."
+                },
+                {
+                    "Value": "30 ASPMX3.GOOGLEMAIL.COM."
+                }
+            ]
+        },
+        {
+            "Name": "vets101.org.",
+            "Type": "NS",
+            "TTL": 172800,
+            "ResourceRecords": [
+                {
+                    "Value": "ns-738.awsdns-28.net."
+                },
+                {
+                    "Value": "ns-33.awsdns-04.com."
+                },
+                {
+                    "Value": "ns-1519.awsdns-61.org."
+                },
+                {
+                    "Value": "ns-1865.awsdns-41.co.uk."
+                }
+            ]
+        },
+        {
+            "Name": "vets101.org.",
+            "Type": "SOA",
+            "TTL": 900,
+            "ResourceRecords": [
+                {
+                    "Value": "ns-738.awsdns-28.net. awsdns-hostmaster.amazon.com. 1 7200 900 1209600 86400"
+                }
+            ]
+        },
+        {
+            "Name": "vets101.org.",
+            "Type": "TXT",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "\"v=spf1 include:_spf.google.com ~all\""
+                }
+            ]
+        },
+        {
+            "Name": "_51f739c30e80a1f31aa6aead4a64271e.vets101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "_0c64d8f628d98c059f6d0e4833fdeb05.jkddzztszm.acm-validations.aws."
+                }
+            ]
+        },
+        {
+            "Name": "_amazonses.vets101.org.",
+            "Type": "TXT",
+            "TTL": 1800,
+            "ResourceRecords": [
+                {
+                    "Value": "\"GZWbxeb+x/gi/ekaTm3vUSJS7tLpUt+4NcDPZftPUFM=\""
+                }
+            ]
+        },
+        {
+            "Name": "b4nx52cmjcn5vjdkgyvrcs5yrq4ijep4._domainkey.vets101.org.",
+            "Type": "CNAME",
+            "TTL": 1800,
+            "ResourceRecords": [
+                {
+                    "Value": "b4nx52cmjcn5vjdkgyvrcs5yrq4ijep4.dkim.amazonses.com"
+                }
+            ]
+        },
+        {
+            "Name": "keioj4kaw5higzoyi44vgdfqk26vvdqq._domainkey.vets101.org.",
+            "Type": "CNAME",
+            "TTL": 1800,
+            "ResourceRecords": [
+                {
+                    "Value": "keioj4kaw5higzoyi44vgdfqk26vvdqq.dkim.amazonses.com"
+                }
+            ]
+        },
+        {
+            "Name": "tahtqlh6gena32w2ujf247fvdlxkvnke._domainkey.vets101.org.",
+            "Type": "CNAME",
+            "TTL": 1800,
+            "ResourceRecords": [
+                {
+                    "Value": "tahtqlh6gena32w2ujf247fvdlxkvnke.dkim.amazonses.com"
+                }
+            ]
+        },
+        {
+            "Name": "mail.vets101.org.",
+            "Type": "TXT",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "\"v=spf1 ip4:52.8.7.0 ?all\""
+                }
+            ]
+        },
+        {
+            "Name": "preview.vets101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6a.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "www.preview.vets101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "preview.vets101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview2.vets101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "preview2-site.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "www.preview2.vets101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "preview2.vets101.org"
+                }
+            ]
+        },
+        {
+            "Name": "public-site.vets101.org.",
+            "Type": "A",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "52.8.7.0"
+                }
+            ]
+        },
+        {
+            "Name": "start.vets101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "vets101.org"
+                }
+            ]
+        },
+        {
+            "Name": "www.start.vets101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "start.vets101.org"
+                }
+            ]
+        },
+        {
+            "Name": "www.vets101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "vets101.org"
+                }
+            ]
+        }
+    ]
+}

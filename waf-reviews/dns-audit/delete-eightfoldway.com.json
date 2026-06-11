@@ -1,0 +1,30 @@
+{
+    "Changes":  [
+                    {
+                        "ResourceRecordSet":  {
+                                                  "Name":  "acmetest.eightfoldway.com.",
+                                                  "Type":  "A",
+                                                  "AliasTarget":  {
+                                                                      "HostedZoneId":  "Z368ELLRRE2KJ0",
+                                                                      "DNSName":  "dualstack.nodeappalb-261929749.us-west-1.elb.amazonaws.com.",
+                                                                      "EvaluateTargetHealth":  false
+                                                                  }
+                                              },
+                        "Action":  "DELETE"
+                    },
+                    {
+                        "ResourceRecordSet":  {
+                                                  "Name":  "logon00.eightfoldway.com.",
+                                                  "Type":  "A",
+                                                  "TTL":  300,
+                                                  "ResourceRecords":  [
+                                                                          {
+                                                                              "Value":  "54.85.48.121"
+                                                                          }
+                                                                      ]
+                                              },
+                        "Action":  "DELETE"
+                    }
+                ],
+    "Comment":  "WAF project: remove dangling records 2026-06-10"
+}

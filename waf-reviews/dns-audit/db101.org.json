@@ -1,0 +1,1662 @@
+﻿{
+    "ResourceRecordSets": [
+        {
+            "Name": "db101.org.",
+            "Type": "A",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "52.8.7.0"
+                }
+            ]
+        },
+        {
+            "Name": "db101.org.",
+            "Type": "MX",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "20\talt1.aspmx.l.google.com"
+                },
+                {
+                    "Value": "20\talt2.aspmx.l.google.com"
+                },
+                {
+                    "Value": "30\taspmx2.googlemail.com"
+                },
+                {
+                    "Value": "30\taspmx3.googlemail.com"
+                },
+                {
+                    "Value": "10\taspmx.l.google.com"
+                }
+            ]
+        },
+        {
+            "Name": "db101.org.",
+            "Type": "NS",
+            "TTL": 172800,
+            "ResourceRecords": [
+                {
+                    "Value": "ns-607.awsdns-11.net."
+                },
+                {
+                    "Value": "ns-1287.awsdns-32.org."
+                },
+                {
+                    "Value": "ns-1753.awsdns-27.co.uk."
+                },
+                {
+                    "Value": "ns-505.awsdns-63.com."
+                }
+            ]
+        },
+        {
+            "Name": "db101.org.",
+            "Type": "SOA",
+            "TTL": 900,
+            "ResourceRecords": [
+                {
+                    "Value": "ns-607.awsdns-11.net. awsdns-hostmaster.amazon.com. 1 7200 900 1209600 86400"
+                }
+            ]
+        },
+        {
+            "Name": "db101.org.",
+            "Type": "TXT",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "\"v=spf1 mx a include:_spf.google.com ip4:52.8.7.0 ip4:52.9.28.236 ip4:52.8.75.57 ip4:52.8.219.246 ~all\""
+                },
+                {
+                    "Value": "\"google-site-verification=F-kzsfm-QHHtiFBlxSNpavVCV7kO4x_6JKmOTKU8H8I\""
+                }
+            ]
+        },
+        {
+            "Name": "_6d21750ffae8f9876b324899fd5d3fed.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "_4c7e7dc8fed9f31619c4a5031dc67341.qqqfmgwtgn.acm-validations.aws."
+                }
+            ]
+        },
+        {
+            "Name": "_amazonses.db101.org.",
+            "Type": "TXT",
+            "TTL": 1800,
+            "ResourceRecords": [
+                {
+                    "Value": "\"8XGB2UhpSz9mvVsiFpK0pjoVzRki6KsdcYk2QqvqRgU=\""
+                }
+            ]
+        },
+        {
+            "Name": "_dmarc.db101.org.",
+            "Type": "TXT",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "\"v=DMARC1; p=quarantine; adkim=r\""
+                }
+            ]
+        },
+        {
+            "Name": "374ipki2kazjjfnek4fqlemfdfbg4h7w._domainkey.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "374ipki2kazjjfnek4fqlemfdfbg4h7w.dkim.amazonses.com"
+                }
+            ]
+        },
+        {
+            "Name": "abau32mrxow3aetz7oycmkzc2mbgbf76._domainkey.db101.org.",
+            "Type": "CNAME",
+            "TTL": 1800,
+            "ResourceRecords": [
+                {
+                    "Value": "abau32mrxow3aetz7oycmkzc2mbgbf76.dkim.amazonses.com"
+                }
+            ]
+        },
+        {
+            "Name": "ckvodzlpxdc2xkxvm5oclgcojlbiprhi._domainkey.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "ckvodzlpxdc2xkxvm5oclgcojlbiprhi.dkim.amazonses.com"
+                }
+            ]
+        },
+        {
+            "Name": "cnwrsl7q2ikrq3riqo6v2umkbuyoaave._domainkey.db101.org.",
+            "Type": "CNAME",
+            "TTL": 1800,
+            "ResourceRecords": [
+                {
+                    "Value": "cnwrsl7q2ikrq3riqo6v2umkbuyoaave.dkim.amazonses.com"
+                }
+            ]
+        },
+        {
+            "Name": "egbbfgcjzrfrynqhsxhb4ticbexrbjcq._domainkey.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "egbbfgcjzrfrynqhsxhb4ticbexrbjcq.dkim.amazonses.com"
+                }
+            ]
+        },
+        {
+            "Name": "jxlkwp3jqfqzz2mjeo4shxdj4q7yzsrv._domainkey.db101.org.",
+            "Type": "CNAME",
+            "TTL": 1800,
+            "ResourceRecords": [
+                {
+                    "Value": "jxlkwp3jqfqzz2mjeo4shxdj4q7yzsrv.dkim.amazonses.com"
+                }
+            ]
+        },
+        {
+            "Name": "kenyahvmu74ohyh7jyzmrydgcqxgnome._domainkey.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "kenyahvmu74ohyh7jyzmrydgcqxgnome.dkim.amazonses.com"
+                }
+            ]
+        },
+        {
+            "Name": "rmgt6qersel4grb7mcu7h55ysj2jingx._domainkey.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "rmgt6qersel4grb7mcu7h55ysj2jingx.dkim.amazonses.com"
+                }
+            ]
+        },
+        {
+            "Name": "ubk6ljv4taqlgsxfyu3webofkw47nga7._domainkey.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "ubk6ljv4taqlgsxfyu3webofkw47nga7.dkim.amazonses.com"
+                }
+            ]
+        },
+        {
+            "Name": "_64b4dd20af49384d21740d1cecebb06f.acmetest.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "_5827f2f30d656368f31cf34e714853ab.xlfgrmvvlj.acm-validations.aws."
+                }
+            ]
+        },
+        {
+            "Name": "ak.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "www.ak.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "az-es.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "www.az-es.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "az.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "www.az.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "b630b630570cbca08ecac947aea11777.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "verify.bing.com"
+                }
+            ]
+        },
+        {
+            "Name": "bp101-dummy.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "bp101-dummy.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "ca-es.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "www.ca-es.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "ca.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "ca.db101.org.",
+            "Type": "TXT",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "\"google-site-verification=HCPgAi033o0-h62NKMqMpb4XwT97XNkvLs9Q6mK7F8Y\""
+                }
+            ]
+        },
+        {
+            "Name": "www.ca.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "co-es.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "co.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "db101pdfsvc.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "svc.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "db101sessionsvc.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "svc.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "dev-vault.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "vault-alb.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "_4496af983d339204cd3eac8a0b9a9f71.dev-vault.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "_284c4aaa1a702ac0c8a7326e836da235.jkddzztszm.acm-validations.aws."
+                }
+            ]
+        },
+        {
+            "Name": "dev.db101.org.",
+            "Type": "NS",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "ns-747.awsdns-29.net."
+                },
+                {
+                    "Value": "ns-1669.awsdns-16.co.uk."
+                },
+                {
+                    "Value": "ns-1451.awsdns-53.org."
+                },
+                {
+                    "Value": "ns-26.awsdns-03.com."
+                }
+            ]
+        },
+        {
+            "Name": "efw-content.db101.org.",
+            "Type": "A",
+            "AliasTarget": {
+                "HostedZoneId": "Z2FDTNDATAQYW2",
+                "DNSName": "d26hdpj7qusrbc.cloudfront.net.",
+                "EvaluateTargetHealth": false
+            }
+        },
+        {
+            "Name": "_3190fbe6ada644a9ee2bb73bcd24ce9f.efw-content.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "_3ea7888cae62a35c6c8026c2322f6b37.bbfvkzsszw.acm-validations.aws."
+                }
+            ]
+        },
+        {
+            "Name": "_d2447b61d308b15589814656124701a3.efw-content.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "_d04e7a09ba8c5dd1cfefd96daa328a3b.ltfvzjuylp.acm-validations.aws."
+                }
+            ]
+        },
+        {
+            "Name": "favorites.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s3.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "forms.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "svc.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "ga.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "b630b630570cbca08ecac947aea11777.ga.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "verify.bing.com"
+                }
+            ]
+        },
+        {
+            "Name": "ia-es.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "ia.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "il-es.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "il.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "ky.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "www.ky.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "logon.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s3.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "mail.db101.org.",
+            "Type": "A",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "52.8.7.0"
+                }
+            ]
+        },
+        {
+            "Name": "mail.db101.org.",
+            "Type": "TXT",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "\"v=spf1 ip4:52.8.7.0 ?all\""
+                }
+            ]
+        },
+        {
+            "Name": "mi.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "www.mi.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "mn.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "elearning.mn.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "d2s7ytfhu33z2h.cloudfront.net"
+                }
+            ]
+        },
+        {
+            "Name": "_49bf24849d1b47f0a6eeea13a7c5611a.elearning.mn.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "_3bc562c43f5b315debede9d6dbba5160.dxhlbxbsbv.acm-validations.aws."
+                }
+            ]
+        },
+        {
+            "Name": "www.mn.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "mo.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "www.mo.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "nc-es.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "nc.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "nj-es.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "www.nj-es.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "nj.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "www.nj.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "nv-es.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "nv.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "oh.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "www.oh.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "_3b684322fc706187b956a53f1e316536.pdfshot.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "_b3d0d0fe38d6da35c5d16da2c88e1461.vtqfhvjlcp.acm-validations.aws."
+                }
+            ]
+        },
+        {
+            "Name": "develop.pdfshot.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "pdfsh-LoadB-DY93VSVGX0SM-561566444.us-west-1.elb.amazonaws.com"
+                }
+            ]
+        },
+        {
+            "Name": "preview-ak.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "www.preview-ak.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview-az-es.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "www.preview-az-es.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview-az.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "www.preview-az.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview-ca-es.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "www.preview-ca-es.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview-ca.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "www.preview-ca.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview-co-es.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview-co.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview-favorites-temp.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "ec2-13-56-22-76.us-west-1.compute.amazonaws.com"
+                }
+            ]
+        },
+        {
+            "Name": "preview-favorites.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s3.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview-ga.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview-ia-es.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview-ia.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview-il-es.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview-il.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview-ky.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "www.preview-ky.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview-logon.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s3.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview-master.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "www.preview-master.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview-mi.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "www.preview-mi.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview-mn.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "www.preview-mn.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview-mo.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview-nc-es.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview-nc.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview-nj-es.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "www.preview-nj-es.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview-nj.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "www.preview-nj.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview-nv-es.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview-nv.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview-oh.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview-site.db101.org.",
+            "Type": "A",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "52.8.7.0"
+                }
+            ]
+        },
+        {
+            "Name": "preview.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview2-ak.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "preview2-site.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview2-az-es.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "preview2-site.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview2-az.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "preview2-site.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview2-ca-es.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "preview2-site.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview2-ca.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "preview2-site.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview2-co-es.db101.org.",
+            "Type": "CNAME",
+            "AliasTarget": {
+                "HostedZoneId": "Z3T3K8XH9ZMBIW",
+                "DNSName": "preview2-site.db101.org.",
+                "EvaluateTargetHealth": true
+            }
+        },
+        {
+            "Name": "preview2-co.db101.org.",
+            "Type": "CNAME",
+            "AliasTarget": {
+                "HostedZoneId": "Z3T3K8XH9ZMBIW",
+                "DNSName": "preview2-site.db101.org.",
+                "EvaluateTargetHealth": true
+            }
+        },
+        {
+            "Name": "preview2-db101pdfsvc.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "preview2-svc.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview2-db101sessionsvc.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "preview2-svc.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview2-forms.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "preview2-svc.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview2-ga.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "preview2-site.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview2-ia-es.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "preview2-site.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview2-ia.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "preview2-site.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview2-il-es.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "preview2-site.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview2-il.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "preview2-site.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview2-ky.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "preview2-site.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview2-logon2.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "preview2-site.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview2-master.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "preview2-site.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview2-mi.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "preview2-site.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview2-mn.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "preview2-site.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview2-mo.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "preview2-site.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview2-nc-es.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "preview2-site.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview2-nc.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "preview2-site.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview2-nj-es.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "preview2-site.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview2-nj.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "preview2-site.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview2-nv-es.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "preview2-site.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview2-nv.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "preview2-site.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview2-oh.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "preview2-site.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "preview2-site.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "preview2-site.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "preview2-svc.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "preview2-site.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "preview2.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "preview2-site.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "public-site.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "pxx.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "preview2-site.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "q.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "preview2-site.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "s3.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s3.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "s6.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "staging-vault.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "vault-alb.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "_7399f405df8db839e6f300fad29b0c5b.staging-vault.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "_c21a199bdf333165913401d753a2003d.jkddzztszm.acm-validations.aws."
+                }
+            ]
+        },
+        {
+            "Name": "svc.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "vault-alb.db101.org.",
+            "Type": "A",
+            "AliasTarget": {
+                "HostedZoneId": "Z368ELLRRE2KJ0",
+                "DNSName": "dualstack.vault-alb-vault-alb-live-2109666788.us-west-1.elb.amazonaws.com.",
+                "EvaluateTargetHealth": true
+            }
+        },
+        {
+            "Name": "vault-test-prod.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "vault-alb.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "_70904293e3a7ffc81fd858dc115aece9.vault-test-prod.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "_b4000fa564546726354a3336552fd028.jkddzztszm.acm-validations.aws."
+                }
+            ]
+        },
+        {
+            "Name": "vault-test-stage.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "vault-alb.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "_a8ad89f0254c4af449cd668e3b9faf05.vault-test-stage.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "_59cf8f227264d2157d99f739096159eb.jkddzztszm.acm-validations.aws."
+                }
+            ]
+        },
+        {
+            "Name": "vault-test.db101.org.",
+            "Type": "A",
+            "AliasTarget": {
+                "HostedZoneId": "Z368ELLRRE2KJ0",
+                "DNSName": "dualstack.vault-alb-vault-alb-live-2109666788.us-west-1.elb.amazonaws.com.",
+                "EvaluateTargetHealth": true
+            }
+        },
+        {
+            "Name": "_1652bd8146290eadb343ea4f0475ec58.vault-test.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "_3303903ed4b45b0751aee1b4778cc48e.jkddzztszm.acm-validations.aws."
+                }
+            ]
+        },
+        {
+            "Name": "vault.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "vault-alb.db101.org"
+                }
+            ]
+        },
+        {
+            "Name": "_9a5dc4fd5945469a527baf81874835e7.vault.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "_1f81ecfb7c05741ce6a2362d7385d0d3.jkddzztszm.acm-validations.aws."
+                }
+            ]
+        },
+        {
+            "Name": "www.db101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.db101.org"
+                }
+            ]
+        }
+    ]
+}

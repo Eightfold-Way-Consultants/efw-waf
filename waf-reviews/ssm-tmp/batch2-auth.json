@@ -1,0 +1,10 @@
+{"commands": [
+"Import-Module WebAdministration",
+"foreach ($s in (Get-Website).Name) {",
+"  $w=(Get-WebConfigurationProperty -Filter 'system.webServer/security/authentication/windowsAuthentication' -PSPath 'MACHINE/WEBROOT/APPHOST' -Location $s -Name enabled).Value",
+"  $b=(Get-WebConfigurationProperty -Filter 'system.webServer/security/authentication/basicAuthentication' -PSPath 'MACHINE/WEBROOT/APPHOST' -Location $s -Name enabled).Value",
+"  $a=(Get-WebConfigurationProperty -Filter 'system.webServer/security/authentication/anonymousAuthentication' -PSPath 'MACHINE/WEBROOT/APPHOST' -Location $s -Name enabled).Value",
+"  $p=((Get-WebConfiguration -Filter 'system.webServer/security/authentication/windowsAuthentication/providers' -PSPath 'MACHINE/WEBROOT/APPHOST' -Location $s).Collection | ForEach-Object { $_.Value }) -join '+'",
+"  \"$s|win=$w|basic=$b|anon=$a|prov=$p\"",
+"}"
+]}

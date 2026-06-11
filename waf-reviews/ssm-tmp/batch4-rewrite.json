@@ -1,0 +1,13 @@
+{"commands": [
+"Import-Module WebAdministration",
+"'--- modules ---'",
+"Get-WebGlobalModule | Where-Object { $_.Name -match 'Rewrite|Routing' } | ForEach-Object { $_.Name }",
+"'--- global rewrite rules ---'",
+"(Get-WebConfiguration -Filter 'system.webServer/rewrite/globalRules/rule' -PSPath 'MACHINE/WEBROOT/APPHOST').Collection | ForEach-Object { $_.name }",
+"'--- per-site rewrite rules + httpRedirect (started sites) ---'",
+"foreach ($s in (Get-Website | Where-Object { $_.State -eq 'Started' }).Name) {",
+"  $rules = ((Get-WebConfiguration -Filter 'system.webServer/rewrite/rules/rule' -PSPath \"IIS:\\Sites\\$s\" -ErrorAction SilentlyContinue).Collection | ForEach-Object { $_.name }) -join ';'",
+"  $rd = Get-WebConfigurationProperty -Filter 'system.webServer/httpRedirect' -PSPath \"IIS:\\Sites\\$s\" -Name enabled -ErrorAction SilentlyContinue",
+"  if ($rules -or ($rd -and $rd.Value)) { \"$s|rewrite=$rules|httpRedirect=$($rd.Value)\" }",
+"}"
+]}

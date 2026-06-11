@@ -37,9 +37,9 @@ gravity is **bot-load on the estimators**, not the classic scanner probes.
 | Concern | Rules (priority) | Notes |
 |---|---|---|
 | **Estimator bot-walking** *(primary)* | **Challenge (6)** · RateLimit-Estimator (7) | `/planning/*`, published tiers. Silent browser proof-of-work — real browsers pass invisibly, headless/distributed bots fail. The thing that actually protects origin CPU. |
-| **General website probes** | IP-Blocklist (2) · IpReputation (3) · CommonRuleSet (4) · KnownBadInputs (5) | Standing, mostly auto. Managed rules handle the attack patterns; most file-fishing just 404s. |
-| **General flood** | RateLimit (8) | Per-IP, all paths. |
-| Browser-emulating bots | BotControl (9) | Optional, paid, off by default. |
+| **General website probes** | IP-Blocklist (1) · SensitivePaths (2) · IpReputation (3) · CommonRuleSet (4) · KnownBadInputs (5) | Standing, mostly auto. `SensitivePaths` blocks `.git`/`.env`/`*.bak`/`*.config`/`elmah.axd`/`trace.axd` (a probe "getting lucky" net — tested 2026-06-09, nothing exposed today). Most file-fishing just 404s (wrong stack). |
+| **General flood** | RateLimit (8, 500/IP/5min) | Per-IP backstop above the gov-NAT reality (~185/5min). Not a bot tool. |
+| Browser-emulating bots | BotControl (9) | **Off — deferred.** Paid; only adds value vs JS-headless estimator bots, for which logs show zero evidence. Turn on (TARGETED) only if post-launch data shows it. |
 | ~~Verified-bot allowlist~~ | *(removed)* | robots.txt already bars `/planning/`; Challenge is `/planning`-scoped → allowlist was pure bypass risk. |
 
 **Why Challenge is the centerpiece:** real traffic analysis (2026-06-08 logs) showed the busy

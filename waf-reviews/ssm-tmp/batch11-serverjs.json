@@ -1,0 +1,8 @@
+{"commands": [
+"'--- server.js url lines ---'",
+"Select-String -Path c:\\inetpub\\wwwroot\\pdfnode\\server.js,c:\\inetpub\\wwwroot\\pdfnode\\pdf.js -Pattern 'url|goto|port|listen|host' -ErrorAction SilentlyContinue | Select-Object -First 25 | ForEach-Object { \"$(Split-Path $_.Path -Leaf):$($_.LineNumber): $($_.Line.Trim().Substring(0,[Math]::Min(150,$_.Line.Trim().Length)))\" }",
+"'--- who calls pdfnode: pdfreport4 PDF keys ---'",
+"Select-String -Path c:\\inetpub\\wwwroot\\pdfreport4\\web.config -Pattern 'PDF|node|9000|3000|8080|render' -ErrorAction SilentlyContinue | ForEach-Object { $_.Line.Trim().Substring(0,[Math]::Min(150,$_.Line.Trim().Length)) }",
+"'--- listening ports for node-ish pids ---'",
+"Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Where-Object { $_.LocalPort -in 3000,3001,8080,8081,9000,9090,5000 } | ForEach-Object { \"$($_.LocalAddress):$($_.LocalPort) pid=$($_.OwningProcess) $((Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue).ProcessName)\" }"
+]}

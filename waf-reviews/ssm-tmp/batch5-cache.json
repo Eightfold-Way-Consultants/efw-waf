@@ -1,0 +1,14 @@
+{"commands": [
+"Import-Module WebAdministration",
+"'--- server compression ---'",
+"$u = Get-WebConfiguration -Filter 'system.webServer/urlCompression' -PSPath 'MACHINE/WEBROOT/APPHOST'",
+"\"doStatic=$($u.doStaticCompression) doDynamic=$($u.doDynamicCompression)\"",
+"'--- server clientCache default ---'",
+"$c = Get-WebConfiguration -Filter 'system.webServer/staticContent/clientCache' -PSPath 'MACHINE/WEBROOT/APPHOST'",
+"\"mode=$($c.cacheControlMode) maxAge=$($c.cacheControlMaxAge) custom=$($c.cacheControlCustom)\"",
+"'--- per-site clientCache overrides (started, non-default only) ---'",
+"foreach ($s in (Get-Website | Where-Object { $_.State -eq 'Started' }).Name) {",
+"  $cc = Get-WebConfiguration -Filter 'system.webServer/staticContent/clientCache' -PSPath \"IIS:\\Sites\\$s\" -ErrorAction SilentlyContinue",
+"  if ($cc -and $cc.cacheControlMode -ne $c.cacheControlMode -or $cc.cacheControlMaxAge -ne $c.cacheControlMaxAge) { \"$s|mode=$($cc.cacheControlMode)|maxAge=$($cc.cacheControlMaxAge)|custom=$($cc.cacheControlCustom)\" }",
+"}"
+]}

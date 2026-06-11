@@ -1,0 +1,941 @@
+﻿{
+    "ResourceRecordSets": [
+        {
+            "Name": "eightfoldway.com.",
+            "Type": "A",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "52.8.7.0"
+                }
+            ]
+        },
+        {
+            "Name": "eightfoldway.com.",
+            "Type": "MX",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "5 alt2.aspmx.l.google.com"
+                },
+                {
+                    "Value": "10 aspmx2.googlemail.com"
+                },
+                {
+                    "Value": "5 alt1.aspmx.l.google.com"
+                },
+                {
+                    "Value": "10 aspmx3.googlemail.com"
+                },
+                {
+                    "Value": "20 ms50699060.msv1.invalid.outlook.com"
+                }
+            ]
+        },
+        {
+            "Name": "eightfoldway.com.",
+            "Type": "NS",
+            "TTL": 172800,
+            "ResourceRecords": [
+                {
+                    "Value": "ns-148.awsdns-18.com."
+                },
+                {
+                    "Value": "ns-1865.awsdns-41.co.uk."
+                },
+                {
+                    "Value": "ns-908.awsdns-49.net."
+                },
+                {
+                    "Value": "ns-1091.awsdns-08.org."
+                }
+            ]
+        },
+        {
+            "Name": "eightfoldway.com.",
+            "Type": "SOA",
+            "TTL": 900,
+            "ResourceRecords": [
+                {
+                    "Value": "ns-148.awsdns-18.com. awsdns-hostmaster.amazon.com. 1 7200 900 1209600 86400"
+                }
+            ]
+        },
+        {
+            "Name": "eightfoldway.com.",
+            "Type": "TXT",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "\"MS=ms50699060\""
+                },
+                {
+                    "Value": "\"v=spf1 ip4:52.8.7.0 include:_spf.google.com ~all\""
+                }
+            ]
+        },
+        {
+            "Name": "_amazonses.eightfoldway.com.",
+            "Type": "TXT",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "\"Yypeo1+U6RJaK7EDgzPsFk3wG3wdbceNiCVwfxJsXug=\""
+                }
+            ]
+        },
+        {
+            "Name": "_c54aad08f36c9991444c3089ac626db3.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "_2ead3626ac0a1de5391b65ebb8bd268f.zfyfvmchrl.acm-validations.aws."
+                }
+            ]
+        },
+        {
+            "Name": "_dmarc.eightfoldway.com.",
+            "Type": "TXT",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "\"v=DMARC1; p=none; adkim=r\""
+                }
+            ]
+        },
+        {
+            "Name": "bvek4zhe7oaa7gd7mcnf5pdh34xay6lj._domainkey.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "bvek4zhe7oaa7gd7mcnf5pdh34xay6lj.dkim.amazonses.com"
+                }
+            ]
+        },
+        {
+            "Name": "p5lf7f7sjl3bqwt2cyodsf74ipqec566._domainkey.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 1800,
+            "ResourceRecords": [
+                {
+                    "Value": "p5lf7f7sjl3bqwt2cyodsf74ipqec566.dkim.amazonses.com"
+                }
+            ]
+        },
+        {
+            "Name": "seqrr5257vwukjruy5fhfa7jxsemcwiy._domainkey.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "seqrr5257vwukjruy5fhfa7jxsemcwiy.dkim.amazonses.com"
+                }
+            ]
+        },
+        {
+            "Name": "smkol7bl2minvqfbdhjq5if6tisaxb2u._domainkey.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 1800,
+            "ResourceRecords": [
+                {
+                    "Value": "smkol7bl2minvqfbdhjq5if6tisaxb2u.dkim.amazonses.com"
+                }
+            ]
+        },
+        {
+            "Name": "yim6favqqnc3plzflcz5ow6r47okeh7h._domainkey.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "yim6favqqnc3plzflcz5ow6r47okeh7h.dkim.amazonses.com"
+                }
+            ]
+        },
+        {
+            "Name": "zdfmlnkd4qw7ytq7tejjm4owqtpk4o5o._domainkey.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 1800,
+            "ResourceRecords": [
+                {
+                    "Value": "zdfmlnkd4qw7ytq7tejjm4owqtpk4o5o.dkim.amazonses.com"
+                }
+            ]
+        },
+        {
+            "Name": "_twilio.eightfoldway.com.",
+            "Type": "TXT",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "\"twilio-domain-verification=8207ea59e30e830000c04adeccf5b43c\""
+                }
+            ]
+        },
+        {
+            "Name": "acmetest.eightfoldway.com.",
+            "Type": "A",
+            "AliasTarget": {
+                "HostedZoneId": "Z368ELLRRE2KJ0",
+                "DNSName": "dualstack.nodeappalb-261929749.us-west-1.elb.amazonaws.com.",
+                "EvaluateTargetHealth": false
+            }
+        },
+        {
+            "Name": "_4eaa31c5c899882076da38291889ffab.acmetest.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "_d54dc030b2f54b5f1e490974d6a29256.xlfgrmvvlj.acm-validations.aws."
+                }
+            ]
+        },
+        {
+            "Name": "analytics.eightfoldway.com.",
+            "Type": "A",
+            "AliasTarget": {
+                "HostedZoneId": "Z2FDTNDATAQYW2",
+                "DNSName": "d3g9lr217zixry.cloudfront.net.",
+                "EvaluateTargetHealth": false
+            }
+        },
+        {
+            "Name": "_4e6ba60150bf4a5c9b4b1e3444aff63b.analytics.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "_498494af6ebab8f767ab78c18d581c20.jkddzztszm.acm-validations.aws."
+                }
+            ]
+        },
+        {
+            "Name": "b630b630570cbca08ecac947aea11777.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "verify.bing.com"
+                }
+            ]
+        },
+        {
+            "Name": "bp101-dummy.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 10,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "brk-site.eightfoldway.com.",
+            "Type": "A",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "52.8.85.37"
+                }
+            ]
+        },
+        {
+            "Name": "db101-ak.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "edit-site.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "db101-az-es.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "edit-site.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "db101-az.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "edit-site.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "db101-ca-es.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "edit-site.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "db101-ca.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "edit-site.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "db101-co-es.eightfoldway.com.",
+            "Type": "CNAME",
+            "AliasTarget": {
+                "HostedZoneId": "Z1KW10MTO4TFYM",
+                "DNSName": "edit-site.eightfoldway.com.",
+                "EvaluateTargetHealth": true
+            }
+        },
+        {
+            "Name": "db101-co.eightfoldway.com.",
+            "Type": "CNAME",
+            "AliasTarget": {
+                "HostedZoneId": "Z1KW10MTO4TFYM",
+                "DNSName": "edit-site.eightfoldway.com.",
+                "EvaluateTargetHealth": true
+            }
+        },
+        {
+            "Name": "db101-eco.eightfoldway.com.",
+            "Type": "A",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "69.90.209.68"
+                }
+            ]
+        },
+        {
+            "Name": "db101-ga.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "edit-site.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "db101-ia-es.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "edit-site.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "db101-ia.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "edit-site.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "db101-il-es.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "edit-site.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "db101-il.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "edit-site.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "db101-ky.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "edit-site.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "db101-master.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "edit-site.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "db101-mi.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "edit-site.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "db101-mn.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "edit-site.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "db101-mo.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "edit-site.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "db101-nc-es.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "edit-site.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "db101-nc.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "edit-site.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "db101-nj-es.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "edit-site.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "db101-nj.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "edit-site.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "db101-nv-es.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "edit-site.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "db101-nv.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "edit-site.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "db101-oh.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "edit-site.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "db101.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "edit-site.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "db101sessionsvc-preview2.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "preview2-site.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "design.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "brk-site.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "down.eightfoldway.com.",
+            "Type": "A",
+            "AliasTarget": {
+                "HostedZoneId": "Z2MUQ32089INYE",
+                "DNSName": "d-2mtgcatx13.execute-api.us-west-1.amazonaws.com.",
+                "EvaluateTargetHealth": true
+            }
+        },
+        {
+            "Name": "dtd.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 10,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "edit-site.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s4.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "edit.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "edit-site.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "efw-content-trigger.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "d-vm6uxl2ve6.execute-api.us-west-1.amazonaws.com"
+                }
+            ]
+        },
+        {
+            "Name": "_82604377701c6bfd85ef7e791f4050f7.efw-content-trigger.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "_0ee35ca417005363ab7785d4d074db3a.bbfvkzsszw.acm-validations.aws."
+                }
+            ]
+        },
+        {
+            "Name": "efw-content.eightfoldway.com.",
+            "Type": "A",
+            "AliasTarget": {
+                "HostedZoneId": "Z2FDTNDATAQYW2",
+                "DNSName": "d26hdpj7qusrbc.cloudfront.net.",
+                "EvaluateTargetHealth": false
+            }
+        },
+        {
+            "Name": "_2728606e0d9129eb96e7ed52c02020f7.efw-content.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "_e8f4911b65792430f3bdce96557a5543.bbfvkzsszw.acm-validations.aws."
+                }
+            ]
+        },
+        {
+            "Name": "_f976b9ec665e233922f5b82886fde626.efw-content.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "_248489c1ec25dce3dafa788ca92d0c20.ltfvzjuylp.acm-validations.aws."
+                }
+            ]
+        },
+        {
+            "Name": "efw.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "edit-site.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "f8-cmsdb-nr.eightfoldway.com.",
+            "Type": "A",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "10.3.0.125"
+                }
+            ]
+        },
+        {
+            "Name": "f8-db-nr.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "f8-db.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "f8-db.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "f8-db-01.cndtgll4uw4y.us-west-1.rds.amazonaws.com"
+                }
+            ]
+        },
+        {
+            "Name": "forms.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "h.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "preview2-site.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "hb101-mn.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "edit-site.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "hub-vault-test.eightfoldway.com.",
+            "Type": "CNAME",
+            "AliasTarget": {
+                "HostedZoneId": "Z1KW10MTO4TFYM",
+                "DNSName": "edit-site.eightfoldway.com.",
+                "EvaluateTargetHealth": true
+            }
+        },
+        {
+            "Name": "logon00.eightfoldway.com.",
+            "Type": "A",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "54.85.48.121"
+                }
+            ]
+        },
+        {
+            "Name": "mail.eightfoldway.com.",
+            "Type": "A",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "52.8.7.0"
+                }
+            ]
+        },
+        {
+            "Name": "mail.eightfoldway.com.",
+            "Type": "TXT",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "\"v=spf1 ip4:52.8.7.0 ?all\""
+                }
+            ]
+        },
+        {
+            "Name": "planning-generic.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "edit-site.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "preview-site.eightfoldway.com.",
+            "Type": "A",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "52.8.7.0"
+                }
+            ]
+        },
+        {
+            "Name": "preview.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "preview-site.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "preview2-site.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s4.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "preview2.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "preview2-site.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "remote.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "brk-site.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "rpc.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "brk-site.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "s3.eightfoldway.com.",
+            "Type": "A",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "54.153.101.192"
+                }
+            ]
+        },
+        {
+            "Name": "s3b.eightfoldway.com.",
+            "Type": "A",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "52.8.26.159"
+                }
+            ]
+        },
+        {
+            "Name": "s4.eightfoldway.com.",
+            "Type": "A",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "52.8.85.37"
+                }
+            ]
+        },
+        {
+            "Name": "s6.eightfoldway.com.",
+            "Type": "A",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "52.8.7.0"
+                }
+            ]
+        },
+        {
+            "Name": "s6a.eightfoldway.com.",
+            "Type": "A",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "52.8.7.0"
+                }
+            ]
+        },
+        {
+            "Name": "s6c.eightfoldway.com.",
+            "Type": "A",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "52.8.7.0"
+                }
+            ]
+        },
+        {
+            "Name": "svn.eightfoldway.com.",
+            "Type": "A",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "54.85.186.227"
+                }
+            ]
+        },
+        {
+            "Name": "turtles.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "vb101.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "edit-site.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "vets101.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "edit-site.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "votessvc.eightfoldway.com.",
+            "Type": "A",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "173.164.212.89"
+                }
+            ]
+        },
+        {
+            "Name": "web-03.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s3.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "web-6.eightfoldway.com.",
+            "Type": "A",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "13.52.49.251"
+                }
+            ]
+        },
+        {
+            "Name": "webdeploy-tutorial.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "logon00.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "www.eightfoldway.com.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "eightfoldway.com"
+                }
+            ]
+        }
+    ]
+}

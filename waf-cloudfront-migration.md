@@ -118,21 +118,24 @@ Two distinct concerns, both handled in one ACL (default action Allow; rules in p
 
 | Pri | Rule | Action | Scope | Concern |
 |----|------|--------|-------|---------|
-| 0/1 | `Allow-Googlebot` / `Allow-Bingbot` | Allow (terminating) | verified bots | let real search engines through (SEO) |
-| 2 | `IP-Blocklist-Scanners` | Block/Count | all | known-bad IPs (April-20 set) |
+| 1 | `IP-Blocklist-Scanners` | Block/Count | all | known-bad IPs (empty seed, OpenClaw-fed) |
+| 2 | `SensitivePaths` | Block/Count | all | block `.git`/`.env`/`*.bak`/`*.config`/`elmah.axd`/`trace.axd` — "getting lucky" net |
 | 3 | `AWS-IpReputation` | managed | all | **general probes** — auto bad-actor IPs |
-| 4 | `AWS-CommonRuleSet` | managed | all | **general probes** — path-traversal/.env/.git/SQLi/XSS (CMS tier overrides `SizeRestrictions_BODY`) |
+| 4 | `AWS-CommonRuleSet` | managed | all | **general probes** — path-traversal/SQLi/XSS (CMS tier overrides `SizeRestrictions_BODY`) |
 | 5 | `AWS-KnownBadInputs` | managed | all | **general probes** |
 | 6 | `Challenge-Estimator` | **Challenge** | `/planning/*`, published tiers | **estimator bot-walking (primary)** |
-| 7 | `RateLimit-Estimator` | Block/Count | `/planning/*`, published tiers | estimator flood backstop |
-| 8 | `RateLimit` | Block/Count | all | general flood backstop |
-| 9 | `AWS-BotControl` (optional, paid) | managed | all | browser-emulating bots |
+| 7 | `RateLimit-Estimator` | Block/Count | `/planning/*`, published tiers | estimator flood backstop (300/IP/5min) |
+| 8 | `RateLimit` | Block/Count | all | flood backstop (500/IP/5min — above gov-NAT reality) |
+| 9 | `AWS-BotControl` (optional, paid) | managed | all | **OFF — deferred** (see below) |
+*(No verified-bot allowlist — dropped: robots.txt bars `/planning/`, Challenge is `/planning`-scoped, so a UA+IP allow would be a pure spoof hole.)*
 
 **Primary concern — bots walking estimators.** `/planning/*` is dynamic, no-cache, server-side compute (the planning engine); caching can't absorb it, so the edge WAF is the only lever. `Challenge-Estimator` issues a **silent browser proof-of-work**: real browsers solve it transparently and get a token cookie (one-time per immunity window — a counselor clicking through steps is challenged once, invisibly); headless/scripted/distributed bots fail and never reach IIS. This beats rate-limiting alone, which distributed low-per-IP bot fleets evade. `RateLimit-Estimator` is a per-IP backstop scoped to `/planning/*`.
 
 **Secondary concern — general website probes.** Rules 2–5 + 8 are the standard probe defense (bad-path patterns, reputation, known-bad inputs, rate cap), on all tiers/paths. The continuous IP layer is `AWS-IpReputation` (auto-updating). The manual `IP-Blocklist-Scanners` set is **shipped empty** — the original 2026-04-20 /32 list was verified 0/27 still-active by 2026-06-08 (cloud scanner IPs rotate within weeks), so a static seed is false comfort. Keep the *rule* as a surgical/fast-block lever and **feed it operationally**: have the **OpenClaw nightly job push freshly-observed abusive IPs/CIDRs** into the `efw-scanner-ips` set (supports CIDR/ASN blocks for never-legit hosting nets). For a known-bad manual entry, immediate **Block** is fine (no need to Count-observe an IP you've already judged).
 
-> **Dependency:** the verified-bot allowlist (rules 0/1) lets matching traffic skip the Challenge. If its IP set is too broad (see open item — `base.yaml` currently has general-GCP ranges), a bot on GCP spoofing `User-Agent: Googlebot` would **skip the Challenge and walk estimators freely** — defeating the primary mitigation. So fixing the allowlist (official crawler ranges, or drop it) is **required** for the Challenge to be effective, not optional cleanup.
+**"Getting lucky" / sensitive paths.** Scanners spray WordPress/PHP/Java/Python exploits, but this is .NET/IIS so they 404 (wrong stack). The .NET-relevant lucky-hits are different (exposed `.git/`, `web.config.bak` served as text, `elmah.axd`/`trace.axd` error logs, deploy artifacts). **Tested 2026-06-09: nothing currently exposed** — public site 404s all of them (`trace.axd` is 403/protected), edit site is 401/NTLM-gated. The real risk is a *future deploy* leaking one into wwwroot, so `SensitivePaths` (rule 2) blocks those patterns at the edge as belt-and-suspenders. OWASP alone doesn't catch them (a plain `GET /.git/config` isn't an "injection"). Also harden: confirm `trace.axd` disabled in prod web.config; keep deploy artifacts (`.git`, `*.bak`, `*.zip`) out of wwwroot.
+
+**Bot Control — deferred (OFF at launch).** It costs $10/mo per ACL (×3 ACLs) + per-request fees and would false-alarm `public-url-checker`. Given the rest of the stack, its only *unique* value is catching JS-capable headless bots that solve the Challenge and still walk estimators — for which the real logs show **zero evidence**. Probes are handled by rules 1–5; content scraping is largely absorbed by the CloudFront cache; estimator bots by the Challenge. **Turn on (TARGETED) only if post-launch data shows `/planning/` origin load with non-human patterns despite the Challenge.** For the empty-UA Azure scrapers (~324/5min on content), prefer a free custom "block empty User-Agent" rule (Count first; check the checker's UA) over the paid managed group.
 
 ### Key parameters (`efw-waf-edge`)
 | Parameter | edit-cms | preview2 | public |
@@ -141,7 +144,7 @@ Two distinct concerns, both handled in one ACL (default action Allow; rules in p
 | `SiteType` | `cms` | `published` | `published` |
 | `AcmCertificateArn` | (shared cert ARN) | (same) | (same) |
 | `AlternateDomainNames` (enumerated — see constraints) | `db101-<state>.eightfoldway.com`, `hb101-mn.eightfoldway.com`, `vets101.eightfoldway.com`, `q.db101.org` (CMS utility, never-cache) | `preview2-<state>.db101.org`, `preview2-mn.hb101.org`, `preview2.vets101.org` | public + staging: state `*.db101.org` hosts, apexes (`db101.org`/`hb101.org`/`eightfoldway.com`/`vets101.org`), `www.db101.org`, `www.hb101.org`, `www.eightfoldway.com`, `www.vets101.org`, `mn.hb101.org`, `preview-<state>.db101.org`, `preview-mn.hb101.org`, `preview.vets101.org` |
-| `RateLimit` (site-wide /IP/5min) | `50` | `50` | `100` |
+| `RateLimit` (site-wide /IP/5min) | `500` (NTLM-gated; moot) | `500` | `500` |
 | `PlanningRateLimit` (`/planning/*` /IP/5min) | n/a (cms) | `300` | `300` |
 | `WafRuleAction` | `Count` → `Block` | `Count` → `Block` | `Count` → `Block` |
 | `MinimumOriginSslProtocol` | `TLSv1.2` | `TLSv1.2` | `TLSv1.2` |
@@ -406,3 +409,7 @@ aws cloudfront create-invalidation --distribution-id "$DIST_ID" \
 - **Infrastructure accuracy (02-infra.md):** Origin IPs verified ✅; **5 live zones** (db101.org, hb101.org, eightfoldway.com, vets101.org, housingbenefits101.org — WHOIS-verified); **0 WAF ACLs exist** (must create); **no wildcard ACM certs** in us-east-1 (Phase 0 blocked, but one cert now covers all 5 zones); 5 existing CF distributions noted; cache-bypass list incomplete
 - **Dynamic paths (03-dynamic-paths.md):** Plan misses `*.asmx`, `*_AppService.axd`, `ScriptResource.axd`; likely misses `/auth/*`, `/download/*`, `*.ashx`; static paths (`/content/*`, `/images/*`) can be cached
 - **Route53 (04-route53.md):** Original report counted 18 zones; **WHOIS (2026-06-08) reduces real scope to 5 live zones** — 7 of the "extra" zones are unregistered, 1 (njdb101.org) is parked at NameFind. **Only 3 apex A records need ALIAS conversion** (not 9). `preview2` chain spans the live edit-site zones via cross-zone CNAME.
+
+## Hardening TODOs (related, outside WAF scope)
+- [ ] **Purge plaintext SQL credentials from svn** (found 2026-06-10 during DNS-audit code scan): `C:\svn\f8\Logon\App.config`, `Properties\Settings.settings`/`Settings.Designer.cs`, `LogonSQL.dbml`, and `C:\svn\f8\LogonSvc\Web*.config` + `Properties\PublishProfiles\*.pubxml` carry `sa` and service-account passwords in cleartext (internal DB hosts `8F-0026`, `10.1.0.127`, `127.0.0.1`). Rotate the passwords, move connection strings to Secrets Manager (pattern already exists: `f8/edit-site/credentials`), and scrub svn history if feasible.
+- [ ] CMS prod web.config: flip `<compilation debug="true">` → `false`, set `customErrors` on (found 2026-06-10, db101-mn spot-check).

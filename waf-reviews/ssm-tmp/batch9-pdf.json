@@ -1,0 +1,18 @@
+{"commands": [
+"Import-Module WebAdministration",
+"'--- chrome cmdlines ---'",
+"Get-CimInstance Win32_Process -Filter \"Name='chrome.exe'\" -ErrorAction SilentlyContinue | Select-Object -First 2 -ExpandProperty CommandLine",
+"'--- node cmdlines ---'",
+"Get-CimInstance Win32_Process -Filter \"Name='node.exe'\" -ErrorAction SilentlyContinue | Select-Object -First 5 -ExpandProperty CommandLine",
+"'--- pdf-ish sites/apps physical paths ---'",
+"foreach ($s in (Get-Website | Where-Object { $_.Name -match 'pdf' })) { \"SITE $($s.Name)|$($s.State)|$($s.physicalPath)\" }",
+"foreach ($a in (Get-WebApplication | Where-Object { $_.Path -match 'pdf' } | Select-Object -First 4)) { \"APP $($a.Path)|$($a.PhysicalPath)\" }",
+"'--- pdfreport app web.config (proxy/target hints, first match set) ---'",
+"$app = Get-WebApplication | Where-Object { $_.Path -eq '/pdfreport' } | Select-Object -First 1",
+"if ($app) { Select-String -Path \"$($app.PhysicalPath)\\web.config\" -Pattern 'url|action|http' -ErrorAction SilentlyContinue | Select-Object -First 12 | ForEach-Object { $_.Line.Trim().Substring(0, [Math]::Min(180, $_.Line.Trim().Length)) } }",
+"'--- pdfnode site web.config ---'",
+"$pn = Get-Website | Where-Object { $_.Name -match 'pdfnode' } | Select-Object -First 1",
+"if ($pn) { $pp = [Environment]::ExpandEnvironmentVariables($pn.physicalPath); Select-String -Path \"$pp\\web.config\" -Pattern 'url|action|http|port' -ErrorAction SilentlyContinue | Select-Object -First 12 | ForEach-Object { $_.Line.Trim().Substring(0, [Math]::Min(180, $_.Line.Trim().Length)) } }",
+"'--- config files mentioning target hostname in pdf dirs ---'",
+"if ($app) { Get-ChildItem $app.PhysicalPath -Filter *.config -ErrorAction SilentlyContinue | Select-Object -First 5 | ForEach-Object { $_.FullName } }"
+]}

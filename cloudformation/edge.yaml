@@ -43,8 +43,12 @@ Parameters:
     Description: CNAMEs/aliases this distribution answers for (must be covered by the cert).
   RateLimit:
     Type: Number
-    Default: 100
-    Description: Site-wide requests per 5-min window per IP before the rate rule fires (edit=50, public=100).
+    Default: 500
+    Description: >
+      Site-wide requests/IP/5-min flood backstop. 500 for all tiers: real-traffic data
+      (2026-06-08) shows legit gov-agency NATs peaking ~185/5min, so a low cap false-positives
+      them — this is a flood backstop, NOT a bot tool (IpReputation + Challenge do that).
+      edit-cms relies on NTLM auth, so its limit is moot.
   PlanningRateLimit:
     Type: Number
     Default: 300
@@ -93,15 +97,29 @@ Resources:
         # is /planning-scoped, so real search bots are never challenged (they crawl allowed
         # content, which has no Challenge). A UA+IP allowlist here would only be a terminating
         # bypass of every rule below — a spoof hole — for zero benefit. See README.
-        # 2 — manual scanner blocklist (empty seed; surgical/OpenClaw-fed)
+        # 1 — manual scanner blocklist (empty seed; surgical/OpenClaw-fed)
         - Name: IP-Blocklist-Scanners
-          Priority: 2
+          Priority: 1
           Action: !If [IsBlock, { Block: {} }, { Count: {} }]
           VisibilityConfig: { SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: IP-Blocklist-Scanners }
           Statement:
             IPSetReferenceStatement:
               Arn: !ImportValue
                 'Fn::Sub': '${BaseStackName}-ScannerIpSetArn'
+        # 2 — sensitive-path block: file-fishing for secrets/source/handlers that OWASP does NOT
+        # catch (a plain GET /.git/config isn't an "injection"). Belt-and-suspenders so a probe
+        # can't get lucky if a future deploy ever leaves one of these in wwwroot. Tested 2026-06-09:
+        # nothing currently exposed (all 404; trace.axd 403) — this guards future deploy mistakes.
+        # Only elmah.axd/trace.axd are matched, NOT generic *.axd (ScriptResource/WebResource stay).
+        - Name: SensitivePaths
+          Priority: 2
+          Action: !If [IsBlock, { Block: {} }, { Count: {} }]
+          VisibilityConfig: { SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: SensitivePaths }
+          Statement:
+            RegexMatchStatement:
+              FieldToMatch: { UriPath: {} }
+              TextTransformations: [{ Priority: 0, Type: LOWERCASE }]
+              RegexString: '(/\.git|/\.svn|/\.hg|/\.env|/\.aws|/\.ssh|/\.vs/|/_vti)|(\.bak|\.old|\.config|\.swp|\.sql)$|/(elmah|trace)\.axd'
         # 3 — Amazon IP reputation (free managed group; auto-blocks known bad-actor/scanner IPs — directly targets the April-20 threat)
         - Name: AWS-IpReputation
           Priority: 3

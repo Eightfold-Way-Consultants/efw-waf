@@ -1,0 +1,5 @@
+{"commands": [
+"Import-Module WebAdministration",
+"'--- all apps with planning in path: site, app path, physical path ---'",
+"Get-WebApplication | Where-Object { $_.Path -match 'planning' } | ForEach-Object { $site = $_.GetParentElement().Attributes['name'].Value; \"$site|$($_.Path)|$($_.PhysicalPath)\" }"
+]}

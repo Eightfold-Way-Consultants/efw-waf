@@ -1,0 +1,10 @@
+{"commands": [
+"Import-Module WebAdministration",
+"Get-WebBinding -Protocol https | ForEach-Object { \"$($_.bindingInformation)|$($_.certificateHash)\" }",
+"''",
+"'--- LocalMachine\\My certs ---'",
+"Get-ChildItem Cert:\\LocalMachine\\My | ForEach-Object {",
+"  $san = ($_.Extensions | Where-Object { $_.Oid.Value -eq '2.5.29.17' } | ForEach-Object { $_.Format($false) })",
+"  \"$($_.Thumbprint)|$($_.Subject)|exp=$($_.NotAfter.ToString('yyyy-MM-dd'))|SAN=$san\"",
+"}"
+]}

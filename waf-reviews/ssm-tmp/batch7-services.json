@@ -1,0 +1,10 @@
+{"commands": [
+"'--- WMSvc ---'",
+"Get-Service WMSvc -ErrorAction SilentlyContinue | ForEach-Object { \"$($_.Name)|$($_.Status)|$($_.StartType)\" }",
+"'--- node/chrome/pm2 processes ---'",
+"Get-Process -Name node,chrome,chromium,pm2,msedge -ErrorAction SilentlyContinue | Select-Object -Unique ProcessName,Path | ForEach-Object { \"$($_.ProcessName)|$($_.Path)\" }",
+"'--- pdf/print/puppeteer services ---'",
+"Get-Service | Where-Object { $_.DisplayName -match 'pdf|print|puppet|node' -and $_.Name -ne 'Spooler' -and $_.Name -notmatch 'PrintWorkflow|PrintNotify' } | ForEach-Object { \"$($_.Name)|$($_.DisplayName)|$($_.Status)\" }",
+"'--- scheduled tasks ---'",
+"Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -match 'pdf|print|puppet|estimat|node' } | ForEach-Object { \"$($_.TaskName)|$($_.State)\" }"
+]}
