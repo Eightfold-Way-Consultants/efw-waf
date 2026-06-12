@@ -1,8 +1,12 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
   efw-waf-edge — one WAF Web ACL + one CloudFront distribution for a single origin.
-  Deploy TWICE in us-east-1: efw-waf-edge-edit (origin 52.8.85.37) and
-  efw-waf-edge-public (origin 52.8.7.0). Imports shared resources from efw-waf-base.
+  Deploy TWICE in us-east-1: efw-waf-edge-preview2 (origin s4.eightfoldway.com, web-04)
+  and efw-waf-edge-public (origin s6.eightfoldway.com, web-06). Imports shared
+  resources from efw-waf-base. The edit-cms tier is deliberately NOT fronted
+  (decision 2026-06-11): NTLM is connection-oriented and breaks behind any L7 proxy;
+  the tier is already auth-gated at IIS, so WAF adds ~nothing.
+  edit-site.eightfoldway.com and q.db101.org stay DNS'd direct to web-04.
   DRAFT — validate-template + change-set review before applying. See
   waf-cloudfront-migration.md "Infrastructure as Code".
 
@@ -18,42 +22,53 @@ Parameters:
     Description: Name of the deployed efw-waf-base stack to import shared resources from.
   EnvName:
     Type: String
-    AllowedValues: [edit-cms, preview2, public]
+    AllowedValues: [preview2, public]
     Description: >
-      Deployment label (drives resource naming). edit-cms = live CMS edit-sites on
-      web-04 (dynamic); preview2 = published preview sites on web-04 (static); public
-      = published public sites on web-06 (static). edit-cms + preview2 share origin
-      52.8.85.37 but need separate distributions (cache differs, can't vary by Host).
-  SiteType:
-    Type: String
-    AllowedValues: [cms, published]
-    Description: >
-      cms = live-from-CMS, dynamic (only universal static cached). published = content
-      published from CMS, so the published static set (incl *.htm) is cacheable.
-      preview2 and public are both 'published'; edit-cms is 'cms'.
+      Deployment label (drives resource naming). preview2 = published preview sites on
+      web-04; public = published public + staging (preview-*) sites on web-06. Both
+      tiers serve published content (CMS exports), so the full static set is cacheable.
+      (edit-cms is NOT an option: that tier stays direct-to-origin — NTLM breaks
+      behind any L7 proxy. See template description.)
   OriginDomainName:
     Type: String
-    Description: Origin host (e.g. 52.8.85.37 for edit, 52.8.7.0 for public). IIS must serve TLS here.
+    # Must contain a letter: CloudFront REJECTS raw-IP origins, and with https-only
+    # the origin cert must validate against this exact name (SNI = this value).
+    AllowedPattern: '[a-zA-Z0-9.-]*[a-zA-Z][a-zA-Z0-9.-]*'
+    ConstraintDescription: Must be a DNS name, not an IP. CloudFront rejects IP origins.
+    Description: >
+      Origin FQDN — s4.eightfoldway.com for preview2 (web-04), s6.eightfoldway.com for
+      public (web-06). IIS must have a 443 binding + valid cert for this name (s6
+      binding is a pre-cutover task). These names must NEVER be cut over to CloudFront
+      in DNS (request loop) — they are the direct origin path.
   AcmCertificateArn:
     Type: String
     Description: ACM cert ARN in us-east-1 covering the AlternateDomainNames.
     Default: arn:aws:acm:us-east-1:874922373146:certificate/d25dc33a-a3fa-4273-a14c-2b8b04ed7507
   AlternateDomainNames:
     Type: CommaDelimitedList
-    Description: CNAMEs/aliases this distribution answers for (must be covered by the cert).
+    Description: >
+      CNAMEs/aliases this distribution answers for (must be covered by the cert).
+      Strategy (2026-06-10): public = wildcards + apexes (*.db101.org, db101.org,
+      *.hb101.org, hb101.org, *.vets101.org, vets101.org, *.housingbenefits101.org,
+      housingbenefits101.org, www.eightfoldway.com, eightfoldway.com) — staging
+      preview-* names ride the wildcards. preview2 = explicit per-site list only
+      (preview2-mn.db101.org, ...): CloudFront wildcards cover the whole leftmost
+      label only and aliases are globally unique, but a specific alias overrides a
+      wildcard within/across our own account — so each new state adds ONE preview2
+      alias here + DNS. Never alias s4/s6.eightfoldway.com (origins) or
+      edit names (direct tier).
   RateLimit:
     Type: Number
     Default: 500
     Description: >
-      Site-wide requests/IP/5-min flood backstop. 500 for all tiers: real-traffic data
+      Site-wide requests/IP/5-min flood backstop. 500 for both tiers: real-traffic data
       (2026-06-08) shows legit gov-agency NATs peaking ~185/5min, so a low cap false-positives
       them — this is a flood backstop, NOT a bot tool (IpReputation + Challenge do that).
-      edit-cms relies on NTLM auth, so its limit is moot.
   PlanningRateLimit:
     Type: Number
     Default: 300
     Description: >
-      Per-IP request cap (5-min) scoped to /planning/* on published tiers — estimator backstop
+      Per-IP request cap (5-min) scoped to /planning/* — estimator backstop
       behind the Challenge. Generous (Challenge does the heavy lifting); tune in Count.
   WafRuleAction:
     Type: String
@@ -73,8 +88,6 @@ Parameters:
 Conditions:
   IsBlock: !Equals [!Ref WafRuleAction, Block]
   UseBotControl: !Equals [!Ref EnableBotControl, 'true']
-  IsPublished: !Equals [!Ref SiteType, published]
-  IsCms: !Equals [!Ref SiteType, cms]
 
 # Managed policy IDs (AWS-owned, stable):
 #   CachingDisabled              4135ea2d-6df8-44a3-9df3-4b5a84be39ad
@@ -97,6 +110,19 @@ Resources:
         # is /planning-scoped, so real search bots are never challenged (they crawl allowed
         # content, which has no Challenge). A UA+IP allowlist here would only be a terminating
         # bypass of every rule below — a spoof hole — for zero benefit. See README.
+        # 0 — fast-UNBLOCK lever (empty seed). When a legit IP (gov NAT, partner office) is
+        # being blocked mid-incident, add it here for an immediate terminating Allow — no
+        # stack update, no rule archaeology. Distinct from the dropped bot allowlist: entries
+        # are OUR deliberate, specific /32s added during an incident, not spoofable ranges.
+        # Remove entries after the underlying rule is tuned.
+        - Name: IP-Allowlist-Override
+          Priority: 0
+          Action: { Allow: {} }
+          VisibilityConfig: { SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: IP-Allowlist-Override }
+          Statement:
+            IPSetReferenceStatement:
+              Arn: !ImportValue
+                'Fn::Sub': '${BaseStackName}-AllowIpSetArn'
         # 1 — manual scanner blocklist (empty seed; surgical/OpenClaw-fed)
         - Name: IP-Blocklist-Scanners
           Priority: 1
@@ -130,15 +156,10 @@ Resources:
               VendorName: AWS
               Name: AWSManagedRulesAmazonIpReputationList
         # 4 — OWASP Core.
-        # MEASURED 2026-06-09:
-        #   PUBLISHED estimator (b2w2_mn): start __VIEWSTATE 68B / body ~648B; household-data
-        #     screen __VIEWSTATE 1812B / body ~3061B. Well under 8KB → no override needed.
-        #   CMS admin (db101-mn.eightfoldway.com/admin/): __VIEWSTATE = 45,528 BYTES (~44KB).
-        #     Admin postbacks send that in the body → SizeRestrictions_BODY (8KB) would BLOCK
-        #     CMS editing. So on the CMS tier ONLY, override SizeRestrictions_BODY -> Count.
-        # Published tiers keep the rule fully active (their bodies are small). Watch SQLi_BODY /
-        # CrossSiteScripting_BODY in Count on the CMS tier too — the 45KB base64 ViewState may
-        # trip them (WAF inspects the first 8KB of body by default).
+        # MEASURED 2026-06-09: PUBLISHED estimator (b2w2_mn): start __VIEWSTATE 68B / body
+        # ~648B; household-data screen __VIEWSTATE 1812B / body ~3061B. Well under the 8KB
+        # SizeRestrictions_BODY limit → no overrides needed on these tiers. (The 44KB CMS-admin
+        # ViewState that forced a cms-tier override is moot — edit tier isn't fronted.)
         - Name: AWS-CommonRuleSet
           Priority: 4
           OverrideAction: !If [IsBlock, { None: {} }, { Count: {} }]
@@ -147,11 +168,6 @@ Resources:
             ManagedRuleGroupStatement:
               VendorName: AWS
               Name: AWSManagedRulesCommonRuleSet
-              RuleActionOverrides: !If
-                - IsCms
-                - - Name: SizeRestrictions_BODY
-                    ActionToUse: { Count: {} }
-                - !Ref AWS::NoValue
         # 5 — Known bad inputs
         - Name: AWS-KnownBadInputs
           Priority: 5
@@ -162,45 +178,39 @@ Resources:
               VendorName: AWS
               Name: AWSManagedRulesKnownBadInputsRuleSet
         # 6 — Estimator bot gate (the primary concern): Challenge non-verified traffic on
-        # /planning/* (published tiers only). Estimators are dynamic, no-cache, server-side
-        # compute; bots "walking" them burn origin CPU and caching can't help. Challenge =
-        # silent browser proof-of-work: real browsers pass with a token cookie (one-time per
-        # immunity window), headless/distributed bots fail. Verified search engines already
-        # terminated at rules 0/1, so they skip this. Count -> Challenge via the IsBlock toggle
-        # (observe in Count, enforce on activation). NOT applied to edit-cms (NTLM-authed, low
-        # volume). Scope can later expand to /api/*, /ajax/* if bots hit those compute paths.
-        - !If
-          - IsPublished
-          - Name: Challenge-Estimator
-            Priority: 6
-            Action: !If [IsBlock, { Challenge: {} }, { Count: {} }]
-            VisibilityConfig: { SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: Challenge-Estimator }
-            Statement:
-              ByteMatchStatement:
-                FieldToMatch: { UriPath: {} }
-                PositionalConstraint: STARTS_WITH
-                SearchString: /planning/
-                TextTransformations: [{ Priority: 0, Type: LOWERCASE }]
-          - !Ref AWS::NoValue
-        # 7 — Estimator rate-limit backstop: per-IP cap scoped to /planning/* (published tiers),
+        # /planning/*. Estimators are dynamic, no-cache, server-side compute; bots "walking"
+        # them burn origin CPU and caching can't help. Challenge = silent browser
+        # proof-of-work: real browsers pass with a token cookie (one-time per immunity
+        # window), headless/distributed bots fail. Verified search engines already
+        # terminated at rules 0/1, so they skip this. Count -> Challenge via the IsBlock
+        # toggle (observe in Count, enforce on activation). Scope can later expand to
+        # /api/*, /ajax/* if bots hit those compute paths.
+        - Name: Challenge-Estimator
+          Priority: 6
+          Action: !If [IsBlock, { Challenge: {} }, { Count: {} }]
+          VisibilityConfig: { SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: Challenge-Estimator }
+          Statement:
+            ByteMatchStatement:
+              FieldToMatch: { UriPath: {} }
+              PositionalConstraint: STARTS_WITH
+              SearchString: /planning/
+              TextTransformations: [{ Priority: 0, Type: LOWERCASE }]
+        # 7 — Estimator rate-limit backstop: per-IP cap scoped to /planning/*,
         # for bots that solve the challenge or flood from a few IPs.
-        - !If
-          - IsPublished
-          - Name: RateLimit-Estimator
-            Priority: 7
-            Action: !If [IsBlock, { Block: {} }, { Count: {} }]
-            VisibilityConfig: { SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: RateLimit-Estimator }
-            Statement:
-              RateBasedStatement:
-                Limit: !Ref PlanningRateLimit
-                AggregateKeyType: IP
-                ScopeDownStatement:
-                  ByteMatchStatement:
-                    FieldToMatch: { UriPath: {} }
-                    PositionalConstraint: STARTS_WITH
-                    SearchString: /planning/
-                    TextTransformations: [{ Priority: 0, Type: LOWERCASE }]
-          - !Ref AWS::NoValue
+        - Name: RateLimit-Estimator
+          Priority: 7
+          Action: !If [IsBlock, { Block: {} }, { Count: {} }]
+          VisibilityConfig: { SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: RateLimit-Estimator }
+          Statement:
+            RateBasedStatement:
+              Limit: !Ref PlanningRateLimit
+              AggregateKeyType: IP
+              ScopeDownStatement:
+                ByteMatchStatement:
+                  FieldToMatch: { UriPath: {} }
+                  PositionalConstraint: STARTS_WITH
+                  SearchString: /planning/
+                  TextTransformations: [{ Priority: 0, Type: LOWERCASE }]
         # 8 — site-wide per-IP rate limit (general probe / flood backstop, all paths)
         - Name: RateLimit
           Priority: 8
@@ -335,63 +345,47 @@ Resources:
             AllowedMethods: [GET, HEAD]
             CachePolicyId: !Ref CachePolicyStatic
             Compress: true
-          # Published-only static paths (preview2 + public, NOT live CMS edit-sites).
-          # On edit-cms these are dynamic/being-authored, so the behaviors are omitted
-          # and fall through to the no-cache default (always fresh for editors).
-          - !If
-            - IsPublished
-            - PathPattern: '*.htm'
-              TargetOriginId: iis-origin
-              ViewerProtocolPolicy: redirect-to-https
-              AllowedMethods: [GET, HEAD]
-              CachePolicyId: !Ref CachePolicyStatic
-              Compress: true
-            - !Ref AWS::NoValue
-          - !If
-            - IsPublished
-            - PathPattern: '/master_images/*'
-              TargetOriginId: iis-origin
-              ViewerProtocolPolicy: redirect-to-https
-              AllowedMethods: [GET, HEAD]
-              CachePolicyId: !Ref CachePolicyStatic
-              Compress: true
-            - !Ref AWS::NoValue
-          - !If
-            - IsPublished
-            - PathPattern: '/master_documents/*'
-              TargetOriginId: iis-origin
-              ViewerProtocolPolicy: redirect-to-https
-              AllowedMethods: [GET, HEAD]
-              CachePolicyId: !Ref CachePolicyStatic
-              Compress: true
-            - !Ref AWS::NoValue
-          - !If
-            - IsPublished
-            - PathPattern: '/documents/*'
-              TargetOriginId: iis-origin
-              ViewerProtocolPolicy: redirect-to-https
-              AllowedMethods: [GET, HEAD]
-              CachePolicyId: !Ref CachePolicyStatic
-              Compress: true
-            - !Ref AWS::NoValue
-          - !If
-            - IsPublished
-            - PathPattern: '/images/*'
-              TargetOriginId: iis-origin
-              ViewerProtocolPolicy: redirect-to-https
-              AllowedMethods: [GET, HEAD]
-              CachePolicyId: !Ref CachePolicyStatic
-              Compress: true
-            - !Ref AWS::NoValue
+          # Published static paths (both tiers serve CMS-published exports, so the
+          # full static set incl *.htm is safe to cache; invalidation on publish
+          # via InvalidateCdn).
+          - PathPattern: '*.htm'
+            TargetOriginId: iis-origin
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods: [GET, HEAD]
+            CachePolicyId: !Ref CachePolicyStatic
+            Compress: true
+          - PathPattern: '/master_images/*'
+            TargetOriginId: iis-origin
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods: [GET, HEAD]
+            CachePolicyId: !Ref CachePolicyStatic
+            Compress: true
+          - PathPattern: '/master_documents/*'
+            TargetOriginId: iis-origin
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods: [GET, HEAD]
+            CachePolicyId: !Ref CachePolicyStatic
+            Compress: true
+          - PathPattern: '/documents/*'
+            TargetOriginId: iis-origin
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods: [GET, HEAD]
+            CachePolicyId: !Ref CachePolicyStatic
+            Compress: true
+          - PathPattern: '/images/*'
+            TargetOriginId: iis-origin
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods: [GET, HEAD]
+            CachePolicyId: !Ref CachePolicyStatic
+            Compress: true
         # NOTE: ScriptResource.axd / *_AppService.axd are dynamic — they correctly
         # fall through to the no-cache default. Do NOT add *.axd to static behaviors.
 
   # Per-tier distribution id, owned by this stack. The app servers' existing
   # efw.policy.secrets.read covers reading it — no new IAM. InvalidateCdn looks up
-  # efw-waf/dist/{tier}. (Not created for cms — that tier is a no-op invalidation.)
+  # efw-waf/dist/{tier}.
   DistIdSecret:
     Type: AWS::SecretsManager::Secret
-    Condition: IsPublished
     Properties:
       Name: !Sub 'efw-waf/dist/${EnvName}'
       Description: !Sub 'CloudFront distribution id for the ${EnvName} tier (read by InvalidateCdn).'

@@ -24,9 +24,12 @@ The current defense (NACL IP-based blocking at Layer 3) is a blunt tool. **WAF +
 ## Architecture
 
 ```
-Internet → CloudFront (edge, caches static) → WAF Web ACL → IIS Origin (52.8.7.0 public / 52.8.85.37 edit)
+Internet → CloudFront (edge, caches static) → WAF Web ACL → IIS Origin (s6.eightfoldway.com public+staging / s4.eightfoldway.com preview2)
                                                    │
         estimators / dynamic paths always reach origin (no-cache) → WAF is the only lever there
+
+Edit-cms tier (db101-*.eightfoldway.com etc., q.db101.org): DIRECT to web-04 — never fronted.
+NTLM is connection-oriented and dies behind any L7 proxy; the tier is NTLM/401-gated at IIS.
 ```
 
 ### Defense layers at a glance
@@ -36,7 +39,8 @@ gravity is **bot-load on the estimators**, not the classic scanner probes.
 
 | Concern | Rules (priority) | Notes |
 |---|---|---|
-| **Estimator bot-walking** *(primary)* | **Challenge (6)** · RateLimit-Estimator (7) | `/planning/*`, published tiers. Silent browser proof-of-work — real browsers pass invisibly, headless/distributed bots fail. The thing that actually protects origin CPU. |
+| **Fast unblock** | **IP-Allowlist-Override (0)** | Empty seed; add a legit /32 (gov NAT) mid-incident for an instant terminating Allow, remove after tuning the offending rule. |
+| **Estimator bot-walking** *(primary)* | **Challenge (6)** · RateLimit-Estimator (7) | `/planning/*`. Silent browser proof-of-work — real browsers pass invisibly, headless/distributed bots fail. The thing that actually protects origin CPU. |
 | **General website probes** | IP-Blocklist (1) · SensitivePaths (2) · IpReputation (3) · CommonRuleSet (4) · KnownBadInputs (5) | Standing, mostly auto. `SensitivePaths` blocks `.git`/`.env`/`*.bak`/`*.config`/`elmah.axd`/`trace.axd` (a probe "getting lucky" net — tested 2026-06-09, nothing exposed today). Most file-fishing just 404s (wrong stack). |
 | **General flood** | RateLimit (8, 500/IP/5min) | Per-IP backstop above the gov-NAT reality (~185/5min). Not a bot tool. |
 | Browser-emulating bots | BotControl (9) | **Off — deferred.** Paid; only adds value vs JS-headless estimator bots, for which logs show zero evidence. Turn on (TARGETED) only if post-launch data shows it. |
@@ -50,8 +54,9 @@ rate-limits miss. AWS managed rules cover *probes* but never fire on a well-form
 that bot **load** is the actual pain, so Challenge carries it. See `waf-cloudfront-migration.md`.
 
 **Key design decisions:**
-- Edit-site first (lower blast radius, single origin, no live estimator traffic)
-- **SiteType-driven caching** (cms vs published), 3 CloudFront distributions; `Host` in the static cache key (IIS routes by Host)
+- **Edit-cms tier never fronted** (Decision B, 2026-06-11): NTLM breaks behind any L7 proxy; tier already auth-gated → WAF adds ~nothing. preview2 leads the rollout, public follows; nothing on s6 moves until preview2 is proven.
+- **2 content distributions** (preview2 on s4, public+staging on s6) + housingbenefits101 redirect; both published cache model; `Host` in the static cache key (IIS routes by Host). Public dist uses `*.zone` wildcards + apexes; preview2 enumerates (specific-overrides-wildcard). New state = 1 preview2 alias + DNS, zero other WAF/CF config.
+- Origins are FQDNs (`s4`/`s6.eightfoldway.com`), never IPs (CloudFront rejects them) and never DNS'd at CloudFront (loop).
 - Start all WAF rules in **Count mode** for 72h–1 week before switching to Block
 - Cache bypasses for all dynamic paths: `/planning/*`, `/api/*`, `*.aspx`, `*.ashx`, `*.asmx`, `*_AppService.axd`, `ScriptResource.axd`, `/tw/*`, `/vault/*`, etc.
 - WebDeploy continues via VPN (port 8172, not proxied through CloudFront)

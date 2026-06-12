@@ -1,5 +1,5 @@
 ---
-title: WAF + CloudFront — edit-site first, then public-site
+title: WAF + CloudFront — preview2 first, then public; edit tier stays direct
 status: today
 assignee: jack
 priority: high
@@ -12,7 +12,7 @@ reorder: 2026-06-04
 ## Summary
 Deploy AWS WAF + CloudFront to block automated scanner traffic (28+ malicious IP clusters scanning for `.env`, `.git`, AI configs, WordPress paths on April 20).
 
-**Strategic change (2026-06-04): Roll out on edit-site / preview2 first.** The edit-site is lower-traffic, the origin is a single IIS box (52.8.85.37), and CloudFront caching provides minimal benefit (all edit-site pages are CMS-generated dynamic content — essentially 0% cache hit rate). The primary value on edit-site is **WAF edge blocking** of scanner traffic. This validates WAF rules, the cache-bypass configuration, the WebDeploy-over-VPN flow, and Route53 TTL behavior before touching production public-site traffic. Public-site rollout only begins after edit-site has been in Count → Block for a full week with no surprises.
+**Strategic change (2026-06-11, supersedes 2026-06-04 "edit-site first"): the edit-cms tier is NOT fronted at all — preview2 leads, then public. Two distributions, not three.** The IIS-accuracy review (2026-06-10) found editors authenticate with NTLM/Negotiate, which is connection-oriented and breaks behind any L7 proxy (CloudFront and ALB both reuse origin connections across viewers); CloudFront additionally strips `Authorization` unless it's in the cache key. Fronting the edit tier would force a downgrade to Basic auth (browser password prompt — daily UX regression) for ~zero gain: the tier already 401s all anonymous traffic at IIS, and its content is dynamic (no cache value). **Decision B (2026-06-11): `edit-site.eightfoldway.com`, the `db101-*`/`hb101-*` edit names, `brk-site`, and `q.db101.org` stay DNS'd direct to web-04.** Rollout order: preview2 (low-traffic published canary on web-04) → public (web-06). Cost: web-04's 443 stays internet-open in Phase 5 (editors are distributed; surface is NTLM-gated) — partial SG lockdown only.
 
 ## Context
 - Investigation: `memory/2026-04-21.md`
@@ -26,18 +26,19 @@ Deploy AWS WAF + CloudFront to block automated scanner traffic (28+ malicious IP
   - 04-route53.md — listed 18 Route53 hosted zones; **WHOIS (2026-06-08) proves only 5 are live + in scope** (see Decisions). Most "extra" zones are unregistered or parked.
 
 ## Decisions
-- **Edit-site first.** Lower blast radius, single origin, no estimator live traffic.
+- **Edit-cms tier NOT fronted (Decision B, 2026-06-11).** NTLM is connection-oriented → dead behind any L7 proxy (CloudFront/ALB); WAF can only attach to L7 termination, so "WAF without losing NTLM" is impossible. Tier is already auth-gated at IIS → WAF adds ~nothing; Basic-auth fallback would be a daily editor UX regression. Edit names + `q.db101.org` stay direct to web-04. Net: **2 content distributions** (preview2, public) + 1 redirect.
+- **preview2 first, then public.** preview2 = lower blast radius on web-04, published cache model, validates WAF rules/caching/invalidation/DNS before any s6 (public) traffic moves. **Nothing on s6 moves until preview2 is proven** (Count → Block clean).
 - **CloudFront + WAF** (not ALB) — blocks at edge, caches static content, lower cost.
 - **WebDeploy** routes via VPN to non-routable IPs (10.3.x.x), no public exposure — must be re-verified end-to-end after edit-site cutover.
 - **NACLs** can be decommissioned once WAF is active on a stack (WAF is superset). Defer NACL removal until public-site Phase B, after one clean week of edit-site Block mode.
 - **Cache bypass** — plan's list is incomplete (review 03-dynamic-paths.md). Must add: `*.asmx`, `*_AppService.axd`, `ScriptResource.axd`. Likely missing: `/auth/*`, `/download/*`, `*.ashx`.
-- **Start in Count mode**, monitor 72h before switching to Block. (Edit-site gets a slightly longer 1-week Count window before Block given the new rollout order.)
+- **Start in Count mode**, monitor 72h before switching to Block. (preview2 gets a longer 1-week Count window before Block — it's the validation tier.)
 - **ACM cert required before Phase 0** — no wildcard cert in us-east-1; must request `*.eightfoldway.com` before CloudFront distribution can be created.
 - **Zone scope = 5 live zones (WHOIS-verified 2026-06-08).** Registry WHOIS proves the migration touches only `db101.org`, `hb101.org`, `eightfoldway.com`, `vets101.org`, `housingbenefits101.org` — all registered with AWS Route53 NS delegation. Review 04's larger zone count was inflated by **orphan hosted zones**: a Route53 zone is inert unless the domain's registrar NS points back at AWS.
   - **Unregistered** (do not exist at registry): `njdisabilitybenefits.org`, `njdisabilitybenefits.net`, `njdb101.net`, `njdb101.com`, `vb101.org`, `workbenefitsyouth.org`, `disabilitiesbenefits101.org` (typo zone). Their A-records to 52.8.7.0 resolve for nobody.
   - **Parked** (registered, NS at NameFind/GoDaddy, not Route53): `njdb101.org` — zone dead.
   - **Live but out of scope:** `disabilitybenefits101.org` (owned + Route53 but unused — leave alone); `maybeckstudio.org` (separate origin).
-- **Renew `hb101.org` before cutover** — registry expiry **2026-06-23**. Live + important domain; do not front a lapsing domain with CloudFront.
+- **`hb101.org` renewal — VERIFIED OK 2026-06-11** via GoDaddy API: `renewAuto=True`, expires 2026-06-23 (all 11 domains in the account auto-renew). One-time check of the payment method in the GoDaddy UI is the only residual.
 - **`housingbenefits101.org` → redirect to `hb101.org`, not fronted content.** Verified 2026-06-08: the zone has no apex/www records and only `mn.`/`preview-mn.`/`preview2-mn.housingbenefits101.org` content hosts (a parallel HB101-MN brand on the same origins). Decision: collapse the whole domain to a 301 redirect to `hb101.org` — retire/redirect the `mn.*` content hosts rather than add them to the content distributions. Implement as a small **redirect distribution** — scaffolded at [`cloudformation/redirect.yaml`](cloudformation/redirect.yaml) (CloudFront Function returning `301` to `https://hb101.org` + path/query; cfn-lint clean), using the existing cert (`housingbenefits101.org` + `*.housingbenefits101.org` SANs already on it; verified present). Aliases `housingbenefits101.org` + `*.housingbenefits101.org`. Route53: apex `housingbenefits101.org` ALIAS + `www` + the `mn.*`/`preview*.*` hosts all point at the redirect distribution. This keeps it out of the content-caching stacks entirely.
 - **One ACM cert covers all 5 zones** (10 SANs: apex + wildcard each) — well under the 30-SAN limit. The 2-cert concern in review 04 no longer applies. **Status: ISSUED 2026-06-08** — `arn:aws:acm:us-east-1:874922373146:certificate/d25dc33a-a3fa-4273-a14c-2b8b04ed7507`.
 - **HTTP→HTTPS redirect moves to the front end (CloudFront).** `edge.yaml` sets `ViewerProtocolPolicy: redirect-to-https` on all behaviors → CloudFront 301s at the edge (no origin round-trip). The existing **on-IIS http→https redirect becomes redundant for fronted traffic** (CloudFront connects to origin HTTPS-only, so IIS never sees viewer HTTP) — keep it as defense-in-depth for direct-origin access until Phase 5 SG lockdown, then it's moot. *Host*-level www canonicalization (www.<state>.db101.org → bare host) is **out of scope** — those 2-level www hosts don't work today anyway (and aren't covered by the `*.db101.org` cert), so they're not being migrated or redirected. Content www's (`www.db101.org`, `www.eightfoldway.com`) stay as content on the public dist; `www.hb101.org`/`www.db101.org` are CNAMEs handled normally.
@@ -53,22 +54,24 @@ These are **application-side** changes (not AWS config) that must land **before*
 
 ## Infrastructure as Code (CloudFormation)
 
-All WAF + CloudFront objects are provisioned via CloudFormation in **us-east-1** (required for `CLOUDFRONT`-scope WAF and CloudFront). Templates live in [`cloudformation/`](cloudformation/). Two-template design: one shared base stack + one parameterized edge stack deployed **three times**.
+All WAF + CloudFront objects are provisioned via CloudFormation in **us-east-1** (required for `CLOUDFRONT`-scope WAF and CloudFront). Templates live in [`cloudformation/`](cloudformation/). Two-template design: one shared base stack + one parameterized edge stack deployed **twice** (preview2, public).
 
-> **Four site tiers across two origins.** Caching is driven by **SiteType (cms vs published)**, not by origin:
+> **Four site tiers across two origins — the edit-cms tier stays direct (Decision B):**
 >
-> | Tier | Example host | Origin (server) | SiteType |
+> | Tier | Example host | Origin (server) | Fronting |
 > |---|---|---|---|
-> | CMS edit-site | `db101-nv.eightfoldway.com` | 52.8.85.37 (s4/web-04) | `cms` — dynamic |
-> | preview2 (rapid prototyping) | `preview2-nv.db101.org` | 52.8.85.37 (s4/web-04) | `published` |
-> | staging | `preview-nv.db101.org` | 52.8.7.0 (s6/web-06) | `published` |
-> | public | `nv.db101.org` | 52.8.7.0 (s6/web-06) | `published` |
+> | CMS edit-site | `db101-nv.eightfoldway.com` | s4.eightfoldway.com (web-04) | **DIRECT — never fronted** (NTLM) |
+> | preview2 (rapid prototyping) | `preview2-nv.db101.org` | s4.eightfoldway.com (web-04) | `efw-waf-edge-preview2` dist |
+> | staging | `preview-nv.db101.org` | s6.eightfoldway.com (web-06) | `efw-waf-edge-public` dist |
+> | public | `nv.db101.org` | s6.eightfoldway.com (web-06) | `efw-waf-edge-public` dist |
 >
-> **HB101 mirrors this** in the `hb101.org`/`eightfoldway.com` zones: `hb101-mn.eightfoldway.com` (cms), `preview2-mn.hb101.org` (preview2), `preview-mn.hb101.org` (staging), `mn.hb101.org` (public). Same 3 distributions, just added to the alias lists.
+> **HB101 mirrors this** in the `hb101.org`/`eightfoldway.com` zones: `hb101-mn.eightfoldway.com` (direct), `preview2-mn.hb101.org` (preview2), `preview-mn.hb101.org` (staging), `mn.hb101.org` (public). Same 2 distributions, just added to the alias lists.
 >
-> **vets101 is a national site** (single site, no per-state wildcard) with the same 4 tiers: `vets101.eightfoldway.com` (cms), `preview2.vets101.org` (preview2), `preview.vets101.org` (staging), `vets101.org` apex with `www.vets101.org` → apex (public). The `vets101.org` apex needs **ALIAS** conversion.
+> **vets101 is a national site** (single site, no per-state wildcard) with the same 4 tiers: `vets101.eightfoldway.com` (direct), `preview2.vets101.org` (preview2), `preview.vets101.org` (staging), `vets101.org` apex with `www.vets101.org` → apex (public). The `vets101.org` apex needs **ALIAS** conversion.
 >
-> Because CloudFront can't vary caching by Host within one distribution, **edit-cms and preview2 (same origin, different SiteType) need separate distributions**. Staging and public share the s6 origin *and* the published cache model, so they share **one** distribution (distinguished by alias). Net: **3 distributions**.
+> Both fronted tiers serve **published** content (CMS exports), so they share one cache model (full static set cached, dynamic no-cache). They still need separate distributions because they sit on different origins. Staging and public share the s6 origin *and* the cache model → one distribution (distinguished by alias). Net: **2 content distributions** + the housingbenefits101 redirect distribution.
+>
+> **Origin FQDNs, not IPs:** CloudFront rejects raw-IP origins, and `https-only` means the origin cert must validate the name (SNI = origin domain). `OriginDomainName` = `s4.eightfoldway.com` (preview2) / `s6.eightfoldway.com` (public). These names must **never** be DNS'd at CloudFront (request loop). Pre-cutover: web-06 needs an IIS 443 binding for `s6.eightfoldway.com` (cert 8CA90463 already covers it); origin certs expire **2026-08-05 (web-04) / 2026-08-26 (web-06)** — renewal calendar item, expiry = outage under https-only.
 >
 > **Host is in the static cache key** (`CachePolicyStatic`): IIS routes by Host, so `nv.db101.org/x.htm` ≠ `mn.db101.org/x.htm` at the same path. Without Host in the key, states collide and staging could leak onto public. Including Host also forwards it to the origin for IIS routing.
 
@@ -77,25 +80,27 @@ Account-global building blocks reused by all edge stacks.
 
 | Logical resource | CFN type | Purpose |
 |---|---|---|
-| `ScannerIpSet` | `AWS::WAFv2::IPSet` | 27 malicious scanner IPs from April 20 investigation |
-| `GooglebotIpSet` | `AWS::WAFv2::IPSet` | Google crawler CIDRs (allowlist, two-layer verify) |
-| `BingbotIpSet` | `AWS::WAFv2::IPSet` | Bing crawler CIDRs (allowlist) |
+| `ScannerIpSet` | `AWS::WAFv2::IPSet` | Manual surgical blocklist (empty seed, OpenClaw-fed) |
+| `AllowIpSet` | `AWS::WAFv2::IPSet` | Fast-UNBLOCK lever (empty seed) — priority-0 terminating Allow in each ACL; add a legit /32 mid-incident for instant relief, remove after tuning |
 | `WafLogBucket` | `AWS::S3::Bucket` | WAF + CloudFront access logs, lifecycle expiry 90d |
 | `OriginVerifySecret` | `AWS::SecretsManager::Secret` | `X-Origin-Verify` shared secret (CF → origin header) |
-| `AlarmTopic` | `AWS::SNS::Topic` | CloudWatch alarm notifications |
+| `AlarmTopic` | `AWS::SNS::Topic` | CloudWatch alarm notifications — **email-subscribed via `AlarmEmail` param** (confirm the SNS subscription email on deploy, or every alarm is silent) |
 
-### Stack 2 — `efw-waf-edge` (parameterized template, deploy 3×)
-Deployed **three times**, same template, different parameters (HB101 follows the same tier pattern as DB101, in the `hb101.org` + `eightfoldway.com` zones):
-- **`efw-waf-edge-edit-cms`** — origin 52.8.85.37, `SiteType=cms`. Aliases: `db101-*.eightfoldway.com`, `hb101-*.eightfoldway.com`, `vets101.eightfoldway.com`, **`q.db101.org`** (CMS utility, edit-tier, never cached — requires DNS decouple from the preview2-site chain) (live CMS edit-sites + CMS utility, dynamic).
-- **`efw-waf-edge-preview2`** — origin 52.8.85.37, `SiteType=published`. Aliases: `preview2-*.db101.org`, `preview2-*.hb101.org`, `preview2.vets101.org` (rapid-prototyping published sites, static incl `*.htm`).
-- **`efw-waf-edge-public`** — origin 52.8.7.0, `SiteType=published`. Aliases: **both** public (`nv.db101.org`…, `db101.org` apex, `www.db101.org`, `mn.hb101.org`, `hb101.org` apex, `www.hb101.org`→mn, `vets101.org` apex, `www.vets101.org`, `eightfoldway.com` apex, `www.eightfoldway.com`) **and** staging (`preview-*.db101.org`, `preview-*.hb101.org`, `preview.vets101.org`) — same origin + cache model.
+*(No Googlebot/Bingbot IP sets — verified-bot allowlist dropped, see WAF rule notes.)*
 
-### ⚠️ Alternate domain name (CNAME) constraints
-CloudFront alternate domain names are not as flexible as the cert's wildcards — two rules drive how the alias lists above must actually be built:
-1. **Partial-label wildcards are invalid.** `db101-*.eightfoldway.com`, `preview2-*.db101.org`, `preview-*.db101.org` are **not** valid CloudFront alternate domain names — the `*` must replace an *entire* leftmost label (`*.db101.org` is valid). So those "host families" must be **enumerated as specific hostnames** per distribution (e.g. list `preview2-nv.db101.org`, `preview2-mn.db101.org`, … individually). The ACM cert wildcard still covers them for TLS; this constraint is only about the per-distribution CNAME list. Each is bounded (~24 states × brand) and well under the 100-alias default limit.
-2. **Sibling hosts split across distributions ⇒ no broad wildcard.** `preview2-nv.db101.org` (preview2 dist, s4) and `nv.db101.org` (public dist, s6) are both `<label>.db101.org`, so you **cannot** put `*.db101.org` on the public dist — it would swallow the preview2 hosts. Either enumerate specific public hosts, or rely on CloudFront's **specific-overrides-wildcard** rule (a specific `preview2-nv.db101.org` on the preview2 dist wins over `*.db101.org` on the public dist). Same applies to `*.eightfoldway.com` — it's split between edit-cms (`db101-*`, `hb101-*`, `vets101`) and public (`www`, apex), and `analytics.eightfoldway.com` is already on a *separate existing* distribution. Do **not** claim `*.eightfoldway.com` on our stacks; enumerate.
+### Stack 2 — `efw-waf-edge` (parameterized template, deploy 2×)
+Deployed **twice**, same template, different parameters (HB101 follows the same tier pattern as DB101, in the `hb101.org` + `eightfoldway.com` zones):
+- **`efw-waf-edge-preview2`** — origin `s4.eightfoldway.com`. Aliases: explicit list — `preview2-*.db101.org`, `preview2-*.hb101.org`, `preview2.vets101.org` (rapid-prototyping published sites, static incl `*.htm`).
+- **`efw-waf-edge-public`** — origin `s6.eightfoldway.com`. Aliases: **both** public (wildcards + apexes — see alias strategy below) **and** staging (`preview-*` rides the wildcards) — same origin + cache model.
+- **Edit-cms names are NOT in any alias list** — `db101-*`/`hb101-*`.eightfoldway.com, `vets101.eightfoldway.com`, `edit-site`, `brk-site`, and **`q.db101.org`** stay DNS'd direct to web-04. **DNS wrinkle for `q.db101.org`:** today it CNAMEs through the `preview2-site` chain; at preview2 cutover that chain head repoints to CloudFront, so `q` must first be **decoupled — re-point it directly at `s4.eightfoldway.com`** so it keeps bypassing the cache/WAF entirely.
 
-**Net:** `AlternateDomainNames` is supplied per deploy as an explicit, enumerated list (the template takes a `CommaDelimitedList`). The `*`-family notation in this doc is shorthand for "all hosts in that family," not a literal CloudFront alias.
+### ⚠️ Alternate domain name (CNAME) strategy (decided 2026-06-10)
+CloudFront alias mechanics that drive the lists: wildcards replace the **whole leftmost label only** (`*.db101.org` valid, `preview2-*.db101.org` invalid); aliases are **globally unique across all CloudFront accounts**; a **specific alias overrides a wildcard** (and can move/coexist within our own account); the edge routes by SNI/Host lookup, not by distribution IP.
+
+- **Public dist gets the wildcards + apexes:** `*.db101.org`, `db101.org`, `*.hb101.org`, `hb101.org`, `*.vets101.org`, `vets101.org`, plus explicit `www.eightfoldway.com`, `eightfoldway.com`. Staging `preview-*` names ride the wildcards automatically. (No `*.eightfoldway.com` — that zone is mostly edit/infra names that stay direct, and `analytics.eightfoldway.com` lives on a separate existing distribution.)
+- **preview2 dist = explicit enumerated list** (`preview2-nv.db101.org`, …, `preview2-mn.hb101.org`, `preview2.vets101.org`): specific-overrides-wildcard carves each one out of the public dist's `*.db101.org`. Bounded (~24 states × brand), well under the 100-alias limit. **New state = one preview2 alias entry + DNS records; zero other per-site config anywhere in WAF/CloudFront.**
+- `housingbenefits101.org` + `*.housingbenefits101.org` go on the **redirect** distribution, not the content dists.
+- **Never alias:** `s4`/`s6`.eightfoldway.com (origin FQDNs — loop), edit-tier names, `q.db101.org`.
 
 | Logical resource | CFN type | Purpose |
 |---|---|---|
@@ -108,9 +113,7 @@ CloudFront alternate domain names are not as flexible as the cert's wildcards �
 | `Alarm5xx` | `AWS::CloudWatch::Alarm` | Origin 5xx rate spike |
 | `AlarmWafBlocked` | `AWS::CloudWatch::Alarm` | WAF blocked/counted-request spike |
 
-**Cache model (fail-closed):** default behavior = `CachingDisabled`; only the static set is cached.
-- **Universal static** (all SiteTypes, incl edit-cms): `/dist/*`, `*.css`, `*.js`.
-- **Published-only static** (`SiteType=published` → preview2 + public): `*.htm`, `/master_images/*`, `/master_documents/*`, `/documents/*`, `/images/*`. Omitted on edit-cms (authored content → always fresh).
+**Cache model (fail-closed):** default behavior = `CachingDisabled`; only the static set is cached. Both fronted tiers are published (CMS exports), so one set: `/dist/*`, `*.css`, `*.js`, `*.htm`, `/master_images/*`, `/master_documents/*`, `/documents/*`, `/images/*`. (The cms/published SiteType split is gone — the edit tier isn't fronted.)
 
 ### WAF Web ACL rule set & bot strategy
 
@@ -118,13 +121,14 @@ Two distinct concerns, both handled in one ACL (default action Allow; rules in p
 
 | Pri | Rule | Action | Scope | Concern |
 |----|------|--------|-------|---------|
+| 0 | `IP-Allowlist-Override` | **Allow** (terminating) | all | fast-unblock lever — empty seed, add legit /32s mid-incident |
 | 1 | `IP-Blocklist-Scanners` | Block/Count | all | known-bad IPs (empty seed, OpenClaw-fed) |
 | 2 | `SensitivePaths` | Block/Count | all | block `.git`/`.env`/`*.bak`/`*.config`/`elmah.axd`/`trace.axd` — "getting lucky" net |
 | 3 | `AWS-IpReputation` | managed | all | **general probes** — auto bad-actor IPs |
-| 4 | `AWS-CommonRuleSet` | managed | all | **general probes** — path-traversal/SQLi/XSS (CMS tier overrides `SizeRestrictions_BODY`) |
+| 4 | `AWS-CommonRuleSet` | managed | all | **general probes** — path-traversal/SQLi/XSS (no overrides: published bodies are small; the 44KB CMS-admin ViewState is moot — edit tier not fronted) |
 | 5 | `AWS-KnownBadInputs` | managed | all | **general probes** |
-| 6 | `Challenge-Estimator` | **Challenge** | `/planning/*`, published tiers | **estimator bot-walking (primary)** |
-| 7 | `RateLimit-Estimator` | Block/Count | `/planning/*`, published tiers | estimator flood backstop (300/IP/5min) |
+| 6 | `Challenge-Estimator` | **Challenge** | `/planning/*` | **estimator bot-walking (primary)** |
+| 7 | `RateLimit-Estimator` | Block/Count | `/planning/*` | estimator flood backstop (300/IP/5min) |
 | 8 | `RateLimit` | Block/Count | all | flood backstop (500/IP/5min — above gov-NAT reality) |
 | 9 | `AWS-BotControl` (optional, paid) | managed | all | **OFF — deferred** (see below) |
 *(No verified-bot allowlist — dropped: robots.txt bars `/planning/`, Challenge is `/planning`-scoped, so a UA+IP allow would be a pure spoof hole.)*
@@ -138,18 +142,15 @@ Two distinct concerns, both handled in one ACL (default action Allow; rules in p
 **Bot Control — deferred (OFF at launch).** It costs $10/mo per ACL (×3 ACLs) + per-request fees and would false-alarm `public-url-checker`. Given the rest of the stack, its only *unique* value is catching JS-capable headless bots that solve the Challenge and still walk estimators — for which the real logs show **zero evidence**. Probes are handled by rules 1–5; content scraping is largely absorbed by the CloudFront cache; estimator bots by the Challenge. **Turn on (TARGETED) only if post-launch data shows `/planning/` origin load with non-human patterns despite the Challenge.** For the empty-UA Azure scrapers (~324/5min on content), prefer a free custom "block empty User-Agent" rule (Count first; check the checker's UA) over the paid managed group.
 
 ### Key parameters (`efw-waf-edge`)
-| Parameter | edit-cms | preview2 | public |
-|---|---|---|---|
-| `OriginDomainName` | `52.8.85.37` | `52.8.85.37` | `52.8.7.0` |
-| `SiteType` | `cms` | `published` | `published` |
-| `AcmCertificateArn` | (shared cert ARN) | (same) | (same) |
-| `AlternateDomainNames` (enumerated — see constraints) | `db101-<state>.eightfoldway.com`, `hb101-mn.eightfoldway.com`, `vets101.eightfoldway.com`, `q.db101.org` (CMS utility, never-cache) | `preview2-<state>.db101.org`, `preview2-mn.hb101.org`, `preview2.vets101.org` | public + staging: state `*.db101.org` hosts, apexes (`db101.org`/`hb101.org`/`eightfoldway.com`/`vets101.org`), `www.db101.org`, `www.hb101.org`, `www.eightfoldway.com`, `www.vets101.org`, `mn.hb101.org`, `preview-<state>.db101.org`, `preview-mn.hb101.org`, `preview.vets101.org` |
-| `RateLimit` (site-wide /IP/5min) | `500` (NTLM-gated; moot) | `500` | `500` |
-| `PlanningRateLimit` (`/planning/*` /IP/5min) | n/a (cms) | `300` | `300` |
-| `WafRuleAction` | `Count` → `Block` | `Count` → `Block` | `Count` → `Block` |
-| `MinimumOriginSslProtocol` | `TLSv1.2` | `TLSv1.2` | `TLSv1.2` |
-
-*(`Challenge-Estimator` + `RateLimit-Estimator` are auto-included on `published` tiers only; the CMS tier auto-overrides `SizeRestrictions_BODY`.)*
+| Parameter | preview2 | public |
+|---|---|---|
+| `OriginDomainName` | `s4.eightfoldway.com` | `s6.eightfoldway.com` |
+| `AcmCertificateArn` | (shared cert ARN) | (same) |
+| `AlternateDomainNames` (see alias strategy) | explicit: `preview2-<state>.db101.org`, `preview2-mn.hb101.org`, `preview2.vets101.org` | wildcards + apexes: `*.db101.org`, `db101.org`, `*.hb101.org`, `hb101.org`, `*.vets101.org`, `vets101.org`, `www.eightfoldway.com`, `eightfoldway.com` (staging `preview-*` rides the wildcards) |
+| `RateLimit` (site-wide /IP/5min) | `500` | `500` |
+| `PlanningRateLimit` (`/planning/*` /IP/5min) | `300` | `300` |
+| `WafRuleAction` | `Count` → `Block` | `Count` → `Block` |
+| `MinimumOriginSslProtocol` | `TLSv1.2` | `TLSv1.2` |
 
 ### What is NOT in CloudFormation (deliberate)
 - **ACM cert** — already issued out-of-band; passed in as a parameter (ARN), never recreated.
@@ -157,11 +158,10 @@ Two distinct concerns, both handled in one ACL (default action Allow; rules in p
 - **Validation CNAMEs** — already in Route53, left in place for auto-renew.
 
 ### Deploy order
-1. `aws cloudformation deploy --stack-name efw-waf-base --template-file cloudformation/base.yaml --capabilities CAPABILITY_NAMED_IAM --region us-east-1`
+1. `aws cloudformation deploy --stack-name efw-waf-base --template-file cloudformation/base.yaml --capabilities CAPABILITY_NAMED_IAM --region us-east-1` (then **confirm the SNS subscription email**)
 2. `... efw-waf-edge-preview2` with preview2 params (Phase 0 canary)
-3. `... efw-waf-edge-edit-cms` with edit-cms params (Phase 1)
-4. `... efw-waf-edge-public` with public params (Phase 3/4)
-5. Read distribution domain from each stack's `Outputs`, use it as the DNS cutover target.
+3. `... efw-waf-edge-public` with public params (Phase 3/4 — only after preview2 is proven)
+4. Read distribution domain from each stack's `Outputs`, use it as the DNS cutover target.
 
 ## Testing & measurement — two distinct activities
 
@@ -184,8 +184,8 @@ Keep these separate; they answer different questions:
 | Public | Estimator / dynamic (`*.aspx`, no-cache) | `https://mn.db101.org/planning/` |
 | Public | API (no-cache) | `https://mn.db101.org/api/tips` |
 | Public | Static asset (cacheable) | a real asset under `/dist/` (or a `*.css` / `*.js`) |
-| Edit | CMS dynamic page | a `preview2` `*.aspx` page |
-| Edit | Static asset | a `*.css` under the edit-site |
+| preview2 | Dynamic page | a `preview2` `*.aspx` page |
+| preview2 | Static asset | a `*.css` under a preview2 site |
 
 ### Metrics (per URL)
 - DNS lookup, TCP connect, TLS handshake, **TTFB** (time-to-first-byte), total transfer time.
@@ -223,7 +223,7 @@ The hourly liveness system already exists at [`C:\git\public-url-checker`](../..
 **Migration impact / action items:**
 - [x] **Scope of `q.db101.org` and `rts.hb101.org` — RESOLVED 2026-06-09:**
   - **`rts.hb101.org` = OUT of scope** — a **whole separate Fargate cluster** (behind its own ELB `hbrts-loadb-…elb.amazonaws.com`, `13.56.60.42`). Not the IIS origin; unaffected by this migration.
-  - **`q.db101.org` = IN scope — CMS utility, EDIT-TIER, MUST NEVER BE CACHED.** Serves CMS utility endpoints (`params.xml`, `tips.json`, `quantities_index.xml`, `events.xml`, `screens.xml`) from the edit box (`s4`/52.8.85.37). **Belongs on the `edit-cms` distribution** (`SiteType=cms` → no published-static caching; no Challenge), **not** preview2 (which caches `*.htm`/static). **DNS wrinkle:** today `q.db101.org` CNAMEs to `preview2-site.db101.org` (preview2 chain) — at cutover its record **must be decoupled from the preview2-site chain and pointed at the `edit-cms` distribution** so it lands on the no-cache edit tier. (Caveat: even edit-cms caches the *universal* static set `/dist`/`*.css`/`*.js`; q serves only `*.xml`/`*.json` so that never bites — but if q must guarantee zero caching of *anything*, give it a dedicated all-no-cache distribution.) Watch on the uptime checker through cutover.
+  - **`q.db101.org` = IN scope — CMS utility, EDIT-TIER, MUST NEVER BE CACHED.** Serves CMS utility endpoints (`params.xml`, `tips.json`, `quantities_index.xml`, `events.xml`, `screens.xml`) from the edit box (s4/web-04). **Decision B update (2026-06-11): the edit tier isn't fronted, so `q` stays DIRECT — no distribution at all.** **DNS wrinkle:** today `q.db101.org` CNAMEs to `preview2-site.db101.org` (preview2 chain) — **before preview2 cutover, decouple it: re-point `q.db101.org` directly at `s4.eightfoldway.com`** so it doesn't follow the chain into CloudFront. Zero caching guaranteed by never entering CloudFront. Watch on the uptime checker through cutover.
 - [ ] **The consumer is a non-browser HTTP client.** With the current rule set it passes (clean low-rate GETs to `/` and `*.xml` — no OWASP/reputation/rate-limit hit; Challenge is `/planning`-only). **But if Bot Control is ever enabled, the checker would be flagged as a bot → false downtime.** Then allowlist the checker's egress (give the Lambda a fixed NAT EIP and `Allow` it, or have it send a known secret header). Note this in the Bot Control decision.
 - [ ] **Watch the checker during every canary/cutover.** A cutover that trips the WAF or breaks routing shows up as a **downtime spike on the status page / in BigQuery** — treat that as the real-user signal, distinct from the §A validation curls. Don't flip to Block on a tier while the checker shows fresh failures.
 - [ ] The status host `down.eightfoldway.com` is separate infrastructure — not in migration scope.
@@ -232,9 +232,7 @@ The hourly liveness system already exists at [`C:\git\public-url-checker`](../..
 
 With CloudFront in front, the **publication process must invalidate cached objects** or editors will publish a change and not see it until the cache TTL (up to 1 day) expires. This is a hard requirement, not optional. It must fire both **automatically after a PubBot publish** and **manually per sub-tree** when a `ExportForPreview` library call is made on a file/directory (via API, CLI, or admin site).
 
-**What actually needs invalidation:** only the **cached** paths. Per the `edge.yaml` cache model:
-- `/dist/*`, `*.css`, `*.js` — cached on **all** SiteTypes (incl. live CMS edit-sites).
-- `*.htm`, `/master_images/*`, `/master_documents/*`, `/documents/*`, `/images/*` — cached on **published** sites (preview2 + public); omitted on live CMS edit-sites (being authored → always fresh).
+**What actually needs invalidation:** only the **cached** paths. Per the `edge.yaml` cache model, both fronted tiers (preview2 + public) cache: `/dist/*`, `*.css`, `*.js`, `*.htm`, `/master_images/*`, `/master_documents/*`, `/documents/*`, `/images/*`. (Edit-sites aren't fronted — nothing of theirs is ever cached.)
 
 All dynamic content (`*.aspx`, `/planning/*`, `/api/*`, `*.axd`, etc.) is served no-cache and updates instantly — **no invalidation needed for estimator/API**. Invalidation matters whenever a **publish** changes a cached static path (notably `*.htm` on published sites).
 
@@ -291,7 +289,7 @@ aws iam attach-role-policy --role-name efw.web.06.role \
   --policy-arn arn:aws:iam::874922373146:policy/efw.policy.cloudfront.invalidate
 ```
 
-> `cms` tier is a no-op in `InvalidateCdn`, so the edit-cms distribution ARN is intentionally omitted from the policy. Add it only if CMS-tier static invalidation is ever enabled.
+> `cms` tier is a no-op in `InvalidateCdn` (the edit tier has no distribution at all — Decision B), so only the preview2 + public distribution ARNs appear in the policy.
 
 **Long-term optimization:** versioned/fingerprinted static asset URLs (`main.abc123.css` or `?v=<build>`) make every change a new cache key — no invalidation needed for those assets at all. Adopt where the publish pipeline can stamp a version; `InvalidateCdn` then only handles `*.htm` and unversioned paths.
 
@@ -302,18 +300,29 @@ aws cloudfront create-invalidation --distribution-id "$DIST_ID" \
   --paths "/mn/index.htm" "/mn/planning/results.htm" "/mn/dir/*"
 ```
 
-## Phases (reordered — edit-site leads)
+## Phases (preview2 leads; nothing on s6 moves until preview2 is proven; edit tier never moves)
 
-### Phase 0 — Edit-site Canary (preview2 first)
+### Phase -1 — Pre-cutover server & ops tasks (before any DNS change)
+From the 2026-06-10 IIS-accuracy + test-plan reviews:
+- [ ] **XFF logging both servers** (web-04 also missing TimeTaken/Referer/BytesSent): add `X-Forwarded-For` W3C custom log field so origin logs stay attributable once traffic arrives from CloudFront IPs. Do this BEFORE Phase 0 so before/after logs are comparable.
+- [ ] **web-06: add IIS 443 binding for `s6.eightfoldway.com`** (cert 8CA90463 already covers it) — gates the public stack, not preview2, but cheap to do now.
+- [ ] **Hosts-file pin on BOTH servers**: pin the public/preview2 hostnames to `127.0.0.1` so the Puppeteer PDF/print path (`pdfnode` — runs on both boxes) renders via loopback, never via CloudFront/WAF. Gates Phase 2 (Block), not just Phase 4.
+- [ ] **Decouple `q.db101.org`**: re-point directly at `s4.eightfoldway.com` (today it rides the preview2-site chain — would follow it into CloudFront).
+- [ ] **Catch-all 404 site on both servers** (no-host-header binding, 80+443) — dangling-DNS policy; also gives stray wildcard-routed names a clean 404.
+- [ ] **Create Athena tables over the WAF/CloudFront log bucket** at base-stack deploy time (not at first incident — 30-min setup under pressure otherwise). DDL in `waf-reviews/test-diagnostics-plan-2026-06-10.md`.
+- [ ] **Pre-stage DNS revert change-batches** (`waf-reviews/dns-audit/` pattern) for every record the phase touches — revert = one CLI call.
+- [ ] **Origin cert renewal calendar**: web-04 cert expires **2026-08-05**, web-06 **2026-08-26**. With `https-only` origins, expiry = total outage. Renew before Phase 3/4 if cutover slips into August.
+
+### Phase 0 — preview2 Canary (`preview2.eightfoldway.com`)
 
 **✅ Pre-req DONE:** ACM cert ISSUED in us-east-1 (2026-06-08) covering all 5 live zones — `arn:aws:acm:us-east-1:874922373146:certificate/d25dc33a-a3fa-4273-a14c-2b8b04ed7507`. Validation CNAMEs in place.
 
 - [x] **Pre-req:** ACM cert issued + validated in us-east-1
-- [ ] **Capture origin perf baseline** for edit-site key pages → `perf-baseline-edit-<date>.md` (see Performance Measurement)
-- [ ] Deploy `efw-waf-base` stack (IP sets, log bucket, origin-verify secret, SNS topic)
-- [ ] Confirm `preview2.eightfoldway.com` chain: `preview2` → `preview2-site.eightfoldway.com` → `s4.eightfoldway.com` → **52.8.85.37** (3 CNAME hops, all pointing to edit-site)
+- [ ] **Capture origin perf baseline** for preview2 key pages → `perf-baseline-preview2-<date>.md` (see Performance Measurement)
+- [ ] Deploy `efw-waf-base` stack (IP sets incl. AllowIpSet, log bucket, origin-verify secret, SNS topic) — **confirm the SNS subscription email immediately** (unconfirmed = silent alarms)
+- [ ] Confirm `preview2.eightfoldway.com` chain: `preview2` → `preview2-site.eightfoldway.com` → `s4.eightfoldway.com` (3 CNAME hops onto web-04)
 - [ ] Lower Route53 TTL on `preview2.eightfoldway.com` to 60s
-- [ ] Deploy `efw-waf-edge-preview2` stack (`OriginDomainName=52.8.85.37`, `SiteType=published`, `RateLimit=50`, `WafRuleAction=Count`, ACM cert ARN, `AlternateDomainNames=preview2.eightfoldway.com`). preview2 is published → static set (incl `*.htm`) cached, everything else no-cache, WAF attached in Count mode. Creates the Web ACL + CloudFront distribution.
+- [ ] Deploy `efw-waf-edge-preview2` stack (`OriginDomainName=s4.eightfoldway.com`, `RateLimit=500`, `WafRuleAction=Count`, ACM cert ARN, `AlternateDomainNames=preview2.eightfoldway.com`). Static set (incl `*.htm`) cached, everything else no-cache, WAF attached in Count mode.
 - [ ] Read CloudFront domain from stack `Outputs`
 - [ ] Pre-stage DNS revert record (have `preview2` → `preview2-site.eightfoldway.com` revert ready to flip in one click)
 - [ ] Change `preview2` DNS to point at CloudFront domain
@@ -333,71 +342,70 @@ aws cloudfront create-invalidation --distribution-id "$DIST_ID" \
 ```
 *(Run codebase audit before Phase 1 to confirm completeness)*
 
-### Phase 1 — Edit-site Full Migration (Count mode)
-- [ ] Migrate remaining edit-site aliases to CloudFront: `edit-site.eightfoldway.com`, `s4.eightfoldway.com`, `brk-site.eightfoldway.com`, and all 30+ state previews
+### Phase 1 — preview2 Full Migration (Count mode)
+- [ ] Verify `q.db101.org` was decoupled (Phase -1) — it must NOT follow the preview2-site chain into CloudFront
+- [ ] Migrate all preview2 aliases: add explicit `preview2-<state>.db101.org` (×~24), `preview2-mn.hb101.org`, `preview2.vets101.org` to the stack's `AlternateDomainNames` and repoint their DNS (chain heads where possible)
 - [ ] **Run codebase audit** for all `*.ashx`, `*.asmx`, `*.axd` handlers — update cache-bypass list before migrating each alias
 - [ ] Verify WebDeploy via VPN still works on at least one site end-to-end (port 8172 → 10.3.x.x)
-- [ ] Verify CMS publish flow (PubBot) still works against the CloudFront-fronted site
-- [ ] **Verify PubBot CloudFront invalidation:** publish a static-asset change, confirm the invalidation fires and the new asset is served (not the cached old one). See "CloudFront Invalidation on Publish".
-- [ ] Confirm scanner-ips IP set populated (in `efw-waf-base` template) and referenced by the Web ACL
-- [ ] Confirm CloudFront + WAF logs ship to `WafLogBucket` (provisioned by `efw-waf-base`) — readable, lifecycle applied
-- [ ] Confirm CloudWatch alarms (`Alarm5xx`, `AlarmWafBlocked`) created by the edge stack and wired to `AlarmTopic`
-- [ ] If cache-bypass audit found new paths, update the `efw-waf-edge` template behaviors and `cloudformation deploy` (stack diff = reviewable change)
+- [ ] **Verify `ExportForPreview` CloudFront invalidation** against the fronted preview2 tier: export a static change, confirm invalidation fires and fresh content serves. (PubBot/public verification happens in Phase 3/4.)
+- [ ] Confirm CloudFront + WAF logs ship to `WafLogBucket` — readable via the Athena tables
+- [ ] Confirm CloudWatch alarms (`Alarm5xx`, `AlarmWafBlocked`) created and the SNS subscription delivers (send a test alarm)
+- [ ] If cache-bypass audit found new paths, update the `efw-waf-edge` template behaviors and redeploy (stack diff = reviewable change)
 - [ ] **Hold in Count mode for a full week** monitoring for false positives, broken paths, deploy regressions
 
-### Phase 2 — Edit-site Block Activation
-- [ ] **Before flipping:** review WAF Count logs **per rule name**. In particular the `AWSManagedRulesCommonRuleSet` body rules (`SizeRestrictions_BODY`, `SQLi_BODY`, `CrossSiteScripting_BODY`) and rate-limit, for hits on *legitimate* traffic. For any tripping real requests, add a per-rule `RuleActionOverride` → Count in `edge.yaml` before Block. (Measure — don't pre-tune on assumption.)
-  - **Already applied (measured 2026-06-09):** CMS admin `__VIEWSTATE` is ~45KB (vs ~3KB for the published estimator), so the CMS tier (`SiteType=cms`) overrides `SizeRestrictions_BODY` → Count — otherwise OWASP would block CMS admin postbacks. Published tiers keep the rule active. Still watch `SQLi_BODY`/`XSS_BODY` on the CMS tier in Count (WAF inspects the first 8KB of the base64 ViewState).
-- [ ] After 1 week clean in Count, flip `WafRuleAction=Block` param and `cloudformation deploy` the edit edge stack (Count → Block via stack update, fully reversible by redeploying with `Count`)
+### Phase 2 — preview2 Block Activation
+- [ ] **Before flipping:** review WAF Count logs **per rule name** (Athena). In particular `AWSManagedRulesCommonRuleSet` body rules (`SizeRestrictions_BODY`, `SQLi_BODY`, `CrossSiteScripting_BODY`) and the rate limits, for hits on *legitimate* traffic. For any tripping real requests, add a per-rule `RuleActionOverride` → Count in `edge.yaml` before Block. (Measure — don't pre-tune on assumption.)
+- [ ] Verify the hosts-file pin (Phase -1): generate a PDF on a preview2 site with Block live — the print path must render via loopback, untouched by the Challenge
+- [ ] **Supervised enforcement window** (Challenge/Block are no-ops in Count — they can only be validated live): full estimator walk with Challenge ON, static/dynamic split check, Host-key isolation across two states
+- [ ] After 1 week clean in Count, flip `WafRuleAction=Block` and `cloudformation deploy` the preview2 stack (reversible by redeploying with `Count`)
 - [ ] Document any WAF false-positive matches that required rule tuning
-- [ ] Confirm NACLs on the edit-site SG/SG are still in place as defense-in-depth
-- [ ] Lock down: security group on 52.8.85.37 restricts 80/443 to CloudFront prefix list (still optional — see Phase 5)
 
-### Phase 3 — Public-site Canary (lowest-traffic alias)
+### Phase 3 — Public-site Canary (lowest-traffic alias) — **only after Phase 2 is clean**
 
 **✅ Pre-req DONE:** the issued ACM cert already covers `db101.org` + `*.db101.org` (and the other 4 zones) — no new cert needed.
+**Gate:** web-06 `s6.eightfoldway.com` 443 binding in place (Phase -1); Puppeteer/print hosts-pin verified on web-06; origin cert validity through the Count window.
 
-- [ ] Deploy `efw-waf-edge-public` stack with public-site params (`OriginDomainName=52.8.7.0`, `RateLimit=100`, `WafRuleAction=Count`, ACM cert ARN, public `AlternateDomainNames`). Creates `db101-public-web-acl` + `cf-public-canary` distribution.
-- [ ] Pick lowest-traffic public-site alias (e.g. `ak.db101.org`) as canary
+- [ ] Deploy `efw-waf-edge-public` stack (`OriginDomainName=s6.eightfoldway.com`, `RateLimit=500`, `WafRuleAction=Count`, ACM cert ARN, canary-only `AlternateDomainNames` to start)
+- [ ] Pick lowest-traffic public-site alias (e.g. `ak.db101.org`) as canary — needs an explicit alias entry while the wildcards aren't claimed yet
 - [ ] Lower Route53 TTL to 60s
 - [ ] Migrate canary DNS to the stack's CloudFront `Outputs` domain
 - [ ] Smoke test: full estimator flow (login → run → save), static content, API endpoints
-- [ ] Monitor 2 hours
+- [ ] Monitor 2 hours; watch public-url-checker for the canary state
 
 ### Phase 4 — Public-site Full Migration
 
-**⚠️ DNS scope (WHOIS-verified 2026-06-08):** Public-site zones in scope: `db101.org`, `hb101.org`, `vets101.org`, `eightfoldway.com`, `housingbenefits101.org` (**5 zones**). All other zones review 04 flagged are out of scope — 7 are **unregistered** at the registry (`njdisabilitybenefits.org`, `njdisabilitybenefits.net`, `njdb101.net`, `njdb101.com`, `vb101.org`, `workbenefitsyouth.org`, `disabilitiesbenefits101.org`) and 1 is **parked at NameFind** (`njdb101.org`). Their Route53 A-records to 52.8.7.0 are orphans that resolve for nobody. Do not migrate or recreate them.
+**⚠️ DNS scope (WHOIS-verified 2026-06-08):** Public-site zones in scope: `db101.org`, `hb101.org`, `vets101.org`, `eightfoldway.com`, `housingbenefits101.org` (**5 zones**). All other zones review 04 flagged are out of scope — 7 are **unregistered** at the registry and 1 is **parked at NameFind** (`njdb101.org`). Their Route53 A-records to the origin are orphans that resolve for nobody. Do not migrate or recreate them.
 
-**⚠️ Apex A records:** **4 real apexes** need ALIAS conversion (`db101.org`, `hb101.org`, `eightfoldway.com`, `vets101.org`) — review 04's "9 apex conversions" counted dead/unregistered zones. `vets101.org` is the canonical national public host (`www.vets101.org` → apex), so its apex must be ALIAS'd. `housingbenefits101.org` reaches the origin via non-apex records (CNAME-safe) — verify before cutover. Apex A records pointing directly to 52.8.7.0 need ALIAS conversion before CloudFront can front them:
+**⚠️ Apex A records:** **4 real apexes** need ALIAS conversion (`db101.org`, `hb101.org`, `eightfoldway.com`, `vets101.org`). `housingbenefits101.org` apex goes to the **redirect** distribution. Apex A records pointing directly at the origin need ALIAS conversion before CloudFront can front them:
 1. Change A → ALIAS (Route53 auto-converts when target is CloudFront)
 2. Delete the old A record
 3. Safe at 60s TTL.
 
-- [ ] Migrate `s6.db101.org` and remaining aliases → all 48 public-state sites + hb101.org + vets101.org
-- [ ] Convert apex A records for in-scope zones → ALIAS → CloudFront domain
-- [ ] Run 72h Count mode on public-site
-- [ ] Flip `WafRuleAction=Block` and `cloudformation deploy` the public edge stack
+- [ ] Update the public stack's `AlternateDomainNames` to the wildcard strategy (`*.db101.org`, apexes, …) — the canary's explicit entry can then be dropped
+- [ ] Repoint chain heads (`s6.db101.org` etc. — but NEVER `s6.eightfoldway.com` itself, that's the origin) + convert apexes → ALIAS → CloudFront domain
+- [ ] Deploy the `redirect.yaml` stack for `housingbenefits101.org` + `*.housingbenefits101.org` → 301 `hb101.org`
+- [ ] **Verify PubBot invalidation** end-to-end on the public tier: publish a change, confirm invalidation + fresh content
+- [ ] Run 72h Count mode on public-site (watch gov-NAT IPs vs the rate limits in Athena)
+- [ ] Flip `WafRuleAction=Block` and `cloudformation deploy` the public stack
 - [ ] Decommission NACLs on public-site SG
 
-### Phase 5 — Origin Isolation (Optional, edit-site first)
+### Phase 5 — Origin Isolation (partial — web-04 stays editor-reachable)
 - [ ] Add NAT Gateway to vpc-331ad056
-- [ ] Remove public IPs from EC2 instances (edit-site 52.8.85.37 first, then public-site 52.8.7.0)
-- [ ] Restrict security group to CloudFront prefix list (`com.amazonaws.global.cloudfront.origin-facing`)
+- [ ] **web-06**: restrict SG 80/443 to the CloudFront prefix list (`com.amazonaws.global.cloudfront.origin-facing`); can also drop its public IP if the print path uses loopback
+- [ ] **web-04**: 443 must stay open to the internet — editors hit it directly via NTLM (Decision B). SG = CloudFront prefix list (for preview2) + world on 443. The direct surface is NTLM/401-gated; revisit IP-restricting if editor locations ever consolidate.
+- [ ] **X-Origin-Verify enforcement at IIS** (deferred to here): require the header on fronted host-headers (preview2 sites on web-04, all sites on web-06), with a **loopback/localhost exemption** for the print path and health checks. Edit-site host-headers on web-04 are exempt (never fronted).
 
 ## Cost
-- Baseline (edit-site + public-site, Count mode): **$25-35/mo**
-- With Bot Control on both: $45-55/mo
+- Baseline (preview2 + public stacks, Count mode): **$20-30/mo**
+- With Bot Control on both: $40-50/mo
 - With NAT Gateway (Phase 5): +$45/mo
 
 ## DNS Records (Key aliases)
-- `s6.db101.org` → s6.eightfoldway.com → 52.8.7.0 (public-site, **Phase 3+**)
-- `s6c.eightfoldway.com` → A 52.8.7.0 (hb101 public, **Phase 4**)
-- `s6a.eightfoldway.com` → A 52.8.7.0 (alternate, **Phase 4**)
-- `edit-site.eightfoldway.com` → s4.eightfoldway.com → 52.8.85.37 (**Phase 1**)
-- `s4.eightfoldway.com` → A 52.8.85.37 (**Phase 1**)
-- `brk-site.eightfoldway.com` → A 52.8.85.37 (**Phase 1**)
-- `preview2.eightfoldway.com` → `preview2-site.eightfoldway.com` → `s4.eightfoldway.com` → 52.8.85.37 (**Phase 0 canary**)
-- State preview2 records: `preview2-{state}.db101.org`, `preview2.vets101.org`, `preview2-site.hb101.org`, `preview2-site.housingbenefits101.org` — all chain through s4 → 52.8.85.37
+- `preview2.eightfoldway.com` → `preview2-site.eightfoldway.com` → `s4.eightfoldway.com` (**Phase 0 canary**)
+- State preview2 records: `preview2-{state}.db101.org`, `preview2.vets101.org`, `preview2-site.hb101.org` — all chain through s4 (**Phase 1**)
+- `s6.db101.org` → s6.eightfoldway.com → web-06 (public-site chain head, **Phase 3+**)
+- `s6c.eightfoldway.com`, `s6a.eightfoldway.com` → A web-06 (hb101/alternate public, **Phase 4**)
+- **NEVER migrate** (stay direct, permanently): `s4.eightfoldway.com` + `s6.eightfoldway.com` (ORIGIN FQDNs — DNS'ing them at CloudFront = request loop), `edit-site.eightfoldway.com`, `brk-site.eightfoldway.com`, `db101-*`/`hb101-*`/`vets101.eightfoldway.com` (edit tier, Decision B), `q.db101.org` (decoupled to s4 direct, Phase -1)
 
 ## Malicious IP Summary
 - 28 unique IPs across 3 ASNs (Azure 57%, GCP 18%, others 25%)
@@ -413,4 +421,4 @@ aws cloudfront create-invalidation --distribution-id "$DIST_ID" \
 ## Hardening TODOs (related, outside WAF scope)
 - [ ] **Purge plaintext SQL credentials from svn** (found 2026-06-10 during DNS-audit code scan): `C:\svn\f8\Logon\App.config`, `Properties\Settings.settings`/`Settings.Designer.cs`, `LogonSQL.dbml`, and `C:\svn\f8\LogonSvc\Web*.config` + `Properties\PublishProfiles\*.pubxml` carry `sa` and service-account passwords in cleartext (internal DB hosts `8F-0026`, `10.1.0.127`, `127.0.0.1`). Rotate the passwords, move connection strings to Secrets Manager (pattern already exists: `f8/edit-site/credentials`), and scrub svn history if feasible.
 - [ ] CMS prod web.config: flip `<compilation debug="true">` → `false`, set `customErrors` on (found 2026-06-10, db101-mn spot-check).
-- [ ] **Registrar (GoDaddy) housekeeping**: set up API creds (developer.godaddy.com → Secrets Manager `godaddy/api`) + a `/godaddy` skill for expiry/auto-renew monitoring. Verify `hb101.org` auto-renew is actually ON (expires 2026-06-23; believed auto-renewing — confirm, don't assume). Update stale WID owner contacts on some domain records.
+- [ ] **Registrar (GoDaddy) housekeeping** — partially DONE 2026-06-11: ✅ API creds in Secrets Manager `godaddy/api` + `/godaddy` skill created; ✅ `hb101.org` auto-renew VERIFIED ON (expires 2026-06-23; all 11 domains renewAuto=True). **Remaining:** (1) one-time check the GoDaddy payment method is valid; (2) update stale registrant contacts — 6 domains still registered to "World Institute on Disability / Bryon MacDonald" (`db101.info`, `db101.org`, `disabilitybenefits101.com`, `disabilitybenefits101.org`, `vets101.com`, `vets101.org`) and `eightfoldway.com` has placeholder email `nocontactsfound@secureserver.net`. Target pattern (per hb101 domains): Eightfold Way Consultants / Jack Eastman / jeastman@eightfoldway.com. ⚠️ Registrant org/name change can trigger ICANN change-of-registrant (email confirmation + 60-day transfer lock) — sequence around any planned transfers.

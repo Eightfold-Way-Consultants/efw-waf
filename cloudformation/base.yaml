@@ -2,7 +2,7 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: >
   efw-waf-base — shared building blocks for the WAF + CloudFront migration.
   Deploy ONCE in us-east-1 (required for CLOUDFRONT-scope WAF). Reused by both
-  efw-waf-edge stacks (edit-site + public-site).
+  efw-waf-edge stacks (preview2 + public).
   DRAFT — run `aws cloudformation validate-template` and a deploy --no-execute-changeset
   review before applying. See waf-cloudfront-migration.md "Infrastructure as Code".
 
@@ -11,6 +11,13 @@ Parameters:
     Type: Number
     Default: 90
     Description: Days to retain WAF + CloudFront access logs in S3.
+  AlarmEmail:
+    Type: String
+    Default: jeastman@eightfoldway.com
+    Description: >
+      Email subscribed to the alarm SNS topic. Without a subscription the topic is a
+      black hole and every alarm is silent (test-plan gap 3). SNS sends a confirmation
+      email on deploy — must be clicked before alarms deliver.
 
 Resources:
 
@@ -26,6 +33,19 @@ Resources:
     Properties:
       Name: efw-scanner-ips
       Description: Manual surgical blocklist for currently-active abusive IPs or CIDRs. Seeded empty on purpose. Populate operationally via the OpenClaw nightly job. IP reputation managed rule is the continuous layer.
+      Scope: CLOUDFRONT
+      IPAddressVersion: IPV4
+      Addresses: []
+
+  # Fast-UNBLOCK lever (empty seed): referenced by the edge stacks as a priority-0
+  # terminating Allow. When a legit IP (gov NAT, partner office) gets blocked
+  # mid-incident, add its /32 here for instant relief, then tune the offending rule
+  # and remove the entry. Deliberate specific entries only, never broad ranges.
+  AllowIpSet:
+    Type: AWS::WAFv2::IPSet
+    Properties:
+      Name: efw-allow-ips
+      Description: Emergency allow override for legit IPs caught by a rule. Seeded empty. Add specific /32s during an incident then remove after the rule is tuned.
       Scope: CLOUDFRONT
       IPAddressVersion: IPV4
       Addresses: []
@@ -73,11 +93,17 @@ Resources:
     Properties:
       TopicName: efw-waf-alarms
       DisplayName: efw-waf alarms
+      Subscription:
+        - Protocol: email
+          Endpoint: !Ref AlarmEmail
 
 Outputs:
   ScannerIpSetArn:
     Value: !GetAtt ScannerIpSet.Arn
     Export: { Name: !Sub '${AWS::StackName}-ScannerIpSetArn' }
+  AllowIpSetArn:
+    Value: !GetAtt AllowIpSet.Arn
+    Export: { Name: !Sub '${AWS::StackName}-AllowIpSetArn' }
   WafLogBucketArn:
     Value: !GetAtt WafLogBucket.Arn
     Export: { Name: !Sub '${AWS::StackName}-WafLogBucketArn' }
