@@ -1,0 +1,44 @@
+[
+    {
+        "deleted":  "2026-06-15",
+        "zoneId":  "Z1KW10MTO4TFYM",
+        "record":  {
+                       "Name":  "forms.eightfoldway.com.",
+                       "Type":  "CNAME",
+                       "TTL":  300,
+                       "ResourceRecords":  [
+                                               {
+                                                   "Value":  "eightfoldway.com"
+                                               }
+                                           ]
+                   }
+    },
+    {
+        "deleted":  "2026-06-15",
+        "zoneId":  "Z1KW10MTO4TFYM",
+        "record":  {
+                       "Name":  "bp101-dummy.eightfoldway.com.",
+                       "Type":  "CNAME",
+                       "TTL":  10,
+                       "ResourceRecords":  [
+                                               {
+                                                   "Value":  "s6.eightfoldway.com"
+                                               }
+                                           ]
+                   }
+    },
+    {
+        "deleted":  "2026-06-15",
+        "zoneId":  "Z3T3K8XH9ZMBIW",
+        "record":  {
+                       "Name":  "bp101-dummy.db101.org.",
+                       "Type":  "CNAME",
+                       "TTL":  300,
+                       "ResourceRecords":  [
+                                               {
+                                                   "Value":  "bp101-dummy.eightfoldway.com"
+                                               }
+                                           ]
+                   }
+    }
+]

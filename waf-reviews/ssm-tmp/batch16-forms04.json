@@ -1,0 +1,7 @@
+{"commands": [
+"Import-Module WebAdministration",
+"'=== web-04 sites/bindings mentioning forms or preview.eightfoldway ==='",
+"Get-Website | ForEach-Object { $n=$_.Name; $_.Bindings.Collection | ForEach-Object { if ($_.bindingInformation -match 'forms|^\\*:\\d+:preview\\.eightfoldway') { \"$n | $($_.protocol) | $($_.bindingInformation)\" } } }",
+"'=== any site name containing forms ==='",
+"Get-Website | Where-Object { $_.Name -match 'forms|logon' } | ForEach-Object { \"$($_.Name) state=$($_.State) path=$($_.PhysicalPath)\"; $_.Bindings.Collection | ForEach-Object { \"   $($_.protocol) $($_.bindingInformation)\" } }"
+]}

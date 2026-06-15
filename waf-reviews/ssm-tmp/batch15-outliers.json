@@ -1,0 +1,20 @@
+{"commands": [
+"Import-Module WebAdministration",
+"$targets = 'turtles','bp101-dummy','forms','preview','logs','planning-generic'",
+"foreach ($t in $targets) {",
+"  $s = Get-Website | Where-Object { $_.Name -like \"*$t*\" }",
+"  foreach ($site in $s) {",
+"    $p = [System.Environment]::ExpandEnvironmentVariables($site.PhysicalPath)",
+"    \"=== SITE: $($site.Name) state=$($site.State) pool=$($site.applicationPool) ===\"",
+"    \"  path=$p exists=$(Test-Path $p)\"",
+"    $site.Bindings.Collection | ForEach-Object { \"  bind: $($_.protocol) $($_.bindingInformation)\" }",
+"    if (Test-Path $p) {",
+"      $files = Get-ChildItem $p -File -ErrorAction SilentlyContinue",
+"      \"  files=$($files.Count) newest=$(( $files | Sort-Object LastWriteTime -Descending | Select-Object -First 1).LastWriteTime.ToString('yyyy-MM-dd'))\"",
+"      $files | Select-Object -First 12 | ForEach-Object { \"    $($_.Name) ($($_.Length)b)\" }",
+"      $idx = Join-Path $p 'index.htm'; $idx2 = Join-Path $p 'default.htm'; $idx3 = Join-Path $p 'index.html'; $idx4 = Join-Path $p 'default.aspx'",
+"      foreach ($i in $idx,$idx2,$idx3,$idx4) { if (Test-Path $i) { \"  --- $([System.IO.Path]::GetFileName($i)) head ---\"; (Get-Content $i -TotalCount 6 -ErrorAction SilentlyContinue) -join ' ' } }",
+"    }",
+"  }",
+"}"
+]}

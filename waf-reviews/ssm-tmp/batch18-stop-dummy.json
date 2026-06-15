@@ -1,0 +1,8 @@
+{"commands": [
+"Import-Module WebAdministration",
+"$n='bp101-dummy.eightfoldway.com'",
+"\"before: $((Get-Website | Where-Object {$_.Name -eq $n}).State)\"",
+"Stop-Website -Name $n",
+"Start-Sleep -Seconds 2",
+"\"after:  $((Get-Website | Where-Object {$_.Name -eq $n}).State)\""
+]}

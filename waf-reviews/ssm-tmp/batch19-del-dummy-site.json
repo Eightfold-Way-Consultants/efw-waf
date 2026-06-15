@@ -1,0 +1,13 @@
+{"commands": [
+"$appcmd = \"$env:windir\\System32\\inetsrv\\appcmd.exe\"",
+"'--- backup ---'",
+"& $appcmd add backup waf-retire-bp101dummy-20260615",
+"'--- site exists before ---'",
+"& $appcmd list site \"bp101-dummy.eightfoldway.com\"",
+"'--- delete site ---'",
+"& $appcmd delete site \"bp101-dummy.eightfoldway.com\"",
+"'--- verify gone ---'",
+"$r = & $appcmd list site \"bp101-dummy.eightfoldway.com\"; if ($r) { \"STILL PRESENT: $r\" } else { 'CONFIRMED: site deleted' }",
+"'--- physical folder left in place (not deleted) ---'",
+"$p='c:\\inetpub\\wwwroot\\bp101-dummy.eightfoldway.com'; \"folder still on disk: $(Test-Path $p)\""
+]}

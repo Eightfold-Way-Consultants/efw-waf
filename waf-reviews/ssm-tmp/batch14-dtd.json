@@ -1,0 +1,17 @@
+{"commands": [
+"Import-Module WebAdministration",
+"'=== sites whose bindings mention dtd or schema or disabilitybenefits ==='",
+"Get-Website | ForEach-Object { $n=$_.Name; $_.Bindings.Collection | ForEach-Object { if ($_.bindingInformation -match 'schema|dtd|disabilitybenefits') { \"$n | $($_.protocol) | $($_.bindingInformation)\" } } }",
+"'=== dtd site detail ==='",
+"$s = Get-Website | Where-Object { $_.Name -eq 'dtd' }; if ($s) { \"name=$($s.Name) state=$($s.State) path=$($s.PhysicalPath) pool=$($s.applicationPool)\" } else { 'no site named dtd' }",
+"'=== all bindings on dtd ==='",
+"Get-WebBinding -Name 'dtd' -ErrorAction SilentlyContinue | ForEach-Object { \"$($_.protocol) | $($_.bindingInformation) | sslFlags=$($_.sslFlags)\" }",
+"'=== physical path listing (top) ==='",
+"$p = (Get-Website | Where-Object { $_.Name -eq 'dtd' }).PhysicalPath; if ($p) { $p = [System.Environment]::ExpandEnvironmentVariables($p); \"PATH=$p exists=$(Test-Path $p)\"; if (Test-Path $p) { Get-ChildItem $p -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 40 | ForEach-Object { $_.FullName.Substring($p.Length) + ' (' + $_.Length + 'b)' } } }",
+"'=== auth config on dtd (why 403?) ==='",
+"$pp = 'IIS:\\Sites\\dtd'; foreach ($f in 'anonymousAuthentication','windowsAuthentication','basicAuthentication') { try { $v = (Get-WebConfigurationProperty -PSPath $pp -Filter \"system.webServer/security/authentication/$f\" -Name enabled -ErrorAction Stop).Value; \"$f=$v\" } catch { \"$f=?\" } }",
+"try { (Get-WebConfigurationProperty -PSPath $pp -Filter 'system.webServer/security/ipSecurity' -Name '.' -ErrorAction Stop).Collection | ForEach-Object { \"ipSecurity: allowed=$($_.allowed) $($_.ipAddress)/$($_.subnetMask)\" } } catch {}",
+"try { $da = (Get-WebConfigurationProperty -PSPath $pp -Filter 'system.webServer/security/ipSecurity' -Name allowUnlisted -ErrorAction Stop).Value; \"ipSecurity allowUnlisted=$da\" } catch {}",
+"'=== default docs / static content presence ==='",
+"if ($p -and (Test-Path $p)) { Get-ChildItem $p -Filter '*.xsd' -Recurse -ErrorAction SilentlyContinue | Select-Object -First 20 | ForEach-Object { $_.Name } }"
+]}

@@ -1,0 +1,16 @@
+{"commands": [
+"Import-Module WebAdministration",
+"$hosts = 'www.eightfoldway.com','eightfoldway.com','preview.eightfoldway.com','preview2.eightfoldway.com'",
+"foreach ($h in $hosts) {",
+"  $hit = $false",
+"  Get-Website | ForEach-Object {",
+"    $site=$_; $site.Bindings.Collection | ForEach-Object {",
+"      if ($_.bindingInformation -match \":$([regex]::Escape($h))$\") {",
+"        $hit=$true; $p=[System.Environment]::ExpandEnvironmentVariables($site.PhysicalPath)",
+"        \"HOST $h -> site=$($site.Name) state=$($site.State) proto=$($_.protocol) path=$p files=$(if(Test-Path $p){(Get-ChildItem $p -File -EA SilentlyContinue).Count}else{'NA'})\"",
+"      }",
+"    }",
+"  }",
+"  if (-not $hit) { \"HOST $h -> NO BINDING on this server\" }",
+"}"
+]}

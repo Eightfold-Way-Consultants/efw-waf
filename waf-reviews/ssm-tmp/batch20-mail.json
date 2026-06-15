@@ -1,0 +1,12 @@
+{"commands": [
+"'=== listening mail ports (25/587/465/110/143/993/995) ==='",
+"Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Where-Object { $_.LocalPort -in 25,587,465,110,143,993,995 } | ForEach-Object { $p=(Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue).ProcessName; \"LISTEN $($_.LocalPort) pid=$($_.OwningProcess) proc=$p\" }",
+"'=== mail-related services ==='",
+"Get-Service -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'smtp|mail|imap|pop|exchange|mailenable|hmail|smtpsvc' -or $_.DisplayName -match 'SMTP|Mail|IMAP|POP3|Exchange' } | ForEach-Object { \"$($_.Status) | $($_.Name) | $($_.DisplayName)\" }",
+"'=== IIS sites binding any mail.* host ==='",
+"Import-Module WebAdministration",
+"Get-Website | ForEach-Object { $n=$_.Name; $_.Bindings.Collection | ForEach-Object { if ($_.bindingInformation -match 'mail') { \"$n | $($_.protocol) | $($_.bindingInformation)\" } } }",
+"'=== SMTP feature/service quick check ==='",
+"$svc = Get-Service -Name SMTPSVC -ErrorAction SilentlyContinue; if ($svc) { \"SMTPSVC: $($svc.Status)\" } else { 'SMTPSVC: not installed' }",
+"'=== done ==='"
+]}

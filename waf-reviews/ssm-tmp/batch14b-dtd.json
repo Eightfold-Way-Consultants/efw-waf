@@ -1,0 +1,16 @@
+{"commands": [
+"Import-Module WebAdministration",
+"$name='dtd.eightfoldway.com'; $pp=\"IIS:\\Sites\\$name\"",
+"$s = Get-Website | Where-Object { $_.Name -eq $name }; \"name=$($s.Name) state=$($s.State) path=$($s.PhysicalPath) pool=$($s.applicationPool)\"",
+"'=== physical path listing ==='",
+"$p = [System.Environment]::ExpandEnvironmentVariables($s.PhysicalPath); \"PATH=$p exists=$(Test-Path $p)\"; if (Test-Path $p) { Get-ChildItem $p -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 60 | ForEach-Object { $_.FullName.Substring($p.Length) + ' (' + $_.Length + 'b)' } }",
+"'=== file count + xsd ==='",
+"if (Test-Path $p) { $all=Get-ChildItem $p -Recurse -File -ErrorAction SilentlyContinue; \"total files=$($all.Count)\"; $all | Where-Object { $_.Extension -in '.xsd','.dtd' } | ForEach-Object { $_.Name } }",
+"'=== auth (why 403) ==='",
+"foreach ($f in 'anonymousAuthentication','windowsAuthentication','basicAuthentication') { try { $v=(Get-WebConfigurationProperty -PSPath $pp -Filter \"system.webServer/security/authentication/$f\" -Name enabled -ErrorAction Stop).Value; \"$f=$v\" } catch { \"$f=err\" } }",
+"try { $da=(Get-WebConfigurationProperty -PSPath $pp -Filter 'system.webServer/security/ipSecurity' -Name allowUnlisted -ErrorAction Stop).Value; \"ipSecurity allowUnlisted=$da\"; (Get-WebConfigurationProperty -PSPath $pp -Filter 'system.webServer/security/ipSecurity' -Name '.').Collection | ForEach-Object { \"  allow=$($_.allowed) $($_.ipAddress)/$($_.subnetMask)\" } } catch { 'no ipSecurity' }",
+"'=== directory browse + default docs ==='",
+"try { \"dirBrowse=$((Get-WebConfigurationProperty -PSPath $pp -Filter 'system.webServer/directoryBrowse' -Name enabled).Value)\" } catch {}",
+"'=== last-write of newest file (staleness) ==='",
+"if (Test-Path $p) { Get-ChildItem $p -Recurse -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 3 | ForEach-Object { \"$($_.LastWriteTime.ToString('yyyy-MM-dd')) $($_.Name)\" } }"
+]}
