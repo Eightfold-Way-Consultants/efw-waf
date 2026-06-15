@@ -1,0 +1,13 @@
+{"commands": [
+"'=== cert 8CA90463 issuer + validity (is it ACME?) ==='",
+"Get-ChildItem Cert:\\LocalMachine\\My | Where-Object { $_.Thumbprint -like '8CA90463*' } | ForEach-Object { \"subject=$($_.Subject)\"; \"issuer=$($_.Issuer)\"; \"notBefore=$($_.NotBefore.ToString('yyyy-MM-dd')) notAfter=$($_.NotAfter.ToString('yyyy-MM-dd'))\" }",
+"'=== all eightfoldway/db101 certs in store (renewal leaves old ones) ==='",
+"Get-ChildItem Cert:\\LocalMachine\\My | Where-Object { $_.Subject -match 'eightfoldway|db101' } | Sort-Object NotAfter | ForEach-Object { \"$($_.Thumbprint.Substring(0,12)) notAfter=$($_.NotAfter.ToString('yyyy-MM-dd')) subj=$($_.Subject)\" }",
+"'=== ACME clients present? ==='",
+"$paths = 'C:\\ProgramData\\win-acme','C:\\Program Files\\win-acme','C:\\tools\\win-acme','C:\\win-acme','C:\\ProgramData\\Certify','C:\\Program Files\\CertifyTheWeb','C:\\ProgramData\\acme-posh','C:\\Certbot'; foreach ($p in $paths) { if (Test-Path $p) { \"FOUND: $p\" } }",
+"(Get-Command wacs.exe -ErrorAction SilentlyContinue).Source",
+"'=== scheduled tasks for cert renewal ==='",
+"Get-ScheduledTask -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -match 'acme|wacs|certify|cert|renew|ssl' -or $_.TaskPath -match 'acme|win-acme|certify' } | ForEach-Object { \"$($_.TaskName) [$($_.State)] path=$($_.TaskPath)\" }",
+"'=== win-acme renewal config (which hosts/bindings it manages) ==='",
+"$wa = 'C:\\ProgramData\\win-acme'; if (Test-Path $wa) { Get-ChildItem $wa -Recurse -Filter '*.renewal.json' -ErrorAction SilentlyContinue | Select-Object -First 5 | ForEach-Object { \"--- $($_.FullName) ---\"; (Get-Content $_.FullName -Raw) } }"
+]}

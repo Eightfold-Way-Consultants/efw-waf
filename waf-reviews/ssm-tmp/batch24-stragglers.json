@@ -1,0 +1,7 @@
+{"commands": [
+"Import-Module WebAdministration",
+"'=== bindings NOT on the current cert 8CA90463 (stragglers) ==='",
+"Get-Website | ForEach-Object { $s=$_; $s.Bindings.Collection | Where-Object { $_.protocol -eq 'https' } | ForEach-Object { $th=[string]$_.certificateHash; if ($th -notlike '8CA90463*') { \"$($s.Name) (id=$($s.Id)) host=$($_.bindingInformation) thumb=$($th.Substring(0,[Math]::Min(12,$th.Length))) state=$($s.State)\" } } }",
+"'=== what is 9F747ED1 (expired?) ==='",
+"Get-ChildItem Cert:\\LocalMachine\\My | Where-Object { $_.Thumbprint -like '9F747ED1*' } | ForEach-Object { \"notAfter=$($_.NotAfter.ToString('yyyy-MM-dd')) subj=$($_.Subject)\" }"
+]}

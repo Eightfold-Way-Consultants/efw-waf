@@ -1,0 +1,18 @@
+{"commands": [
+"Import-Module WebAdministration",
+"$site='s6.eightfoldway.com'; $fqdn='s6.eightfoldway.com'; $root='C:\\inetpub\\_origin404'",
+"& \"$env:windir\\System32\\inetsrv\\appcmd.exe\" add backup waf-origin404-s6-20260615",
+"if (-not (Test-Path $root)) { New-Item -ItemType Directory -Path $root -Force | Out-Null }; \"root: $(Test-Path $root)\"",
+"$ths=@(); Get-Website | ForEach-Object { $_.Bindings.Collection | Where-Object { $_.protocol -eq 'https' } | ForEach-Object { $h=[string]$_.certificateHash; if ($h) { $ths += $h } } }; $thumb=($ths | Group-Object | Sort-Object Count -Descending | Select-Object -First 1).Name; \"dominant cert thumb=$thumb\"",
+"$hasRewrite = Test-Path \"$env:windir\\System32\\inetsrv\\rewrite.dll\"; \"rewrite module present=$hasRewrite\"",
+"$wc = '<?xml version=\"1.0\" encoding=\"UTF-8\"?><configuration><system.webServer><rewrite><rules><rule name=\"all404\" stopProcessing=\"true\"><match url=\".*\" /><action type=\"CustomResponse\" statusCode=\"404\" statusReason=\"Not Found\" statusDescription=\"Not Found\" /></rule></rules></rewrite></system.webServer></configuration>'; if ($hasRewrite) { Set-Content -Path \"$root\\web.config\" -Value $wc -Encoding UTF8; 'web.config(404) written' } else { 'NO rewrite module; / will be 403.14, sub-paths 404' }",
+"if (-not (Get-Website | Where-Object { $_.Name -eq $site })) { New-Website -Name $site -PhysicalPath $root -Port 80 -HostHeader $fqdn -Force | Out-Null; 'site created' } else { Set-ItemProperty \"IIS:\\Sites\\$site\" -Name physicalPath -Value $root; 'site existed; path repointed' }",
+"if (-not (Get-WebBinding -Name $site -Protocol https -ErrorAction SilentlyContinue | Where-Object { $_.bindingInformation -match \":$([regex]::Escape($fqdn))$\" })) { New-WebBinding -Name $site -Protocol https -Port 443 -HostHeader $fqdn -SslFlags 1; 'https SNI binding added' } else { 'https binding already present' }",
+"$b = Get-WebBinding -Name $site -Protocol https -HostHeader $fqdn; $b.AddSslCertificate($thumb, 'My'); \"cert $thumb assigned\"",
+"& \"$env:windir\\System32\\inetsrv\\appcmd.exe\" set config \"$site\" /section:system.webServer/security/authentication/anonymousAuthentication /enabled:true /commit:apphost",
+"& \"$env:windir\\System32\\inetsrv\\appcmd.exe\" set config \"$site\" /section:system.webServer/security/authentication/windowsAuthentication /enabled:false /commit:apphost",
+"Start-Website -Name $site -ErrorAction SilentlyContinue; 'started'",
+"$s=Get-Website | Where-Object { $_.Name -eq $site }; \"VERIFY name=$($s.Name) state=$($s.State) path=$($s.PhysicalPath)\"; $s.Bindings.Collection | ForEach-Object { \"  $($_.protocol) $($_.bindingInformation) hash=$([string]$_.certificateHash)\" }",
+"netsh http show sslcert hostnameport=s6.eightfoldway.com:443 | Select-String 'Hostname|Certificate Hash' | ForEach-Object { $_.Line.Trim() }",
+"curl.exe -s -o NUL -w \"probe sni=s6 http=%{http_code} sslverify=%{ssl_verify_result}`n\" --resolve s6.eightfoldway.com:443:127.0.0.1 https://s6.eightfoldway.com/"
+]}

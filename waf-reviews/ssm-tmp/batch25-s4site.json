@@ -1,0 +1,7 @@
+{"commands": [
+"Import-Module WebAdministration",
+"'=== web-04 site bound to s4.eightfoldway.com (id 55) ==='",
+"$s = Get-Website | Where-Object { $_.Id -eq 55 }; if ($s) { \"name=$($s.Name) state=$($s.State) path=$($s.PhysicalPath) pool=$($s.applicationPool)\"; $p=[System.Environment]::ExpandEnvironmentVariables($s.PhysicalPath); \"exists=$(Test-Path $p) files=$(if(Test-Path $p){(Get-ChildItem $p -File -EA SilentlyContinue).Count}else{'NA'})\"; if (Test-Path $p) { Get-ChildItem $p -File -EA SilentlyContinue | Select-Object -First 10 | ForEach-Object { '  '+$_.Name } }; '--- bindings ---'; $s.Bindings.Collection | ForEach-Object { \"  $($_.protocol) $($_.bindingInformation)\" } }",
+"'=== probe what s4 serves over https (host header s4) ==='",
+"try { $r = Invoke-WebRequest -Uri 'https://localhost/' -Headers @{Host='s4.eightfoldway.com'} -UseBasicParsing -TimeoutSec 8 -MaximumRedirection 0 -ErrorAction Stop; \"status=$($r.StatusCode) len=$($r.RawContentLength)\" } catch { \"status/err=$($_.Exception.Response.StatusCode.value__) $($_.Exception.Message.Split([Environment]::NewLine)[0])\" }"
+]}

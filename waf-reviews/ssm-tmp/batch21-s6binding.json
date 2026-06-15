@@ -1,0 +1,11 @@
+{"commands": [
+"Import-Module WebAdministration",
+"'=== IIS https bindings that mention s6 or have NO host header (fallback) ==='",
+"Get-Website | ForEach-Object { $n=$_.Name; $_.Bindings.Collection | Where-Object { $_.protocol -eq 'https' } | ForEach-Object { if ($_.bindingInformation -match ':s6\\.eightfoldway\\.com$' -or $_.bindingInformation -match '^\\*?:443:$') { \"$n | $($_.bindingInformation) | sslFlags=$($_.sslFlags)\" } } }",
+"'=== http.sys SSL cert mappings (hostname:port SNI + 0.0.0.0:443 default) ==='",
+"$out = netsh http show sslcert; $out | Select-String -Pattern 's6\\.eightfoldway|0.0.0.0:443|\\[::\\]:443|:443' -Context 0,6 | ForEach-Object { $_.Line.Trim() }",
+"'=== does cert 8CA90463 exist in LocalMachine\\My and cover s6? ==='",
+"Get-ChildItem Cert:\\LocalMachine\\My | Where-Object { $_.Thumbprint -like '8CA90463*' } | ForEach-Object { \"thumb=$($_.Thumbprint) NotAfter=$($_.NotAfter.ToString('yyyy-MM-dd'))\"; \"  subject=$($_.Subject)\"; \"  SANs=$(($_.DnsNameList | ForEach-Object { $_.Unicode }) -join ', ')\" }",
+"'=== quick: any https binding cert hash for the s6 name (netsh focused) ==='",
+"(netsh http show sslcert hostnameport=s6.eightfoldway.com:443) 2>$null | ForEach-Object { $_.Trim() } | Where-Object { $_ -match 'Hostname|Certificate Hash|s6' }"
+]}

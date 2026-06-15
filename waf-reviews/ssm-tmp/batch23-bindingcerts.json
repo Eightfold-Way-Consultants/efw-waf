@@ -1,0 +1,14 @@
+{"commands": [
+"Import-Module WebAdministration",
+"'=== SiteId 1 identity ==='",
+"Get-Website | Where-Object { $_.Id -eq 1 } | ForEach-Object { \"SiteId 1 = $($_.Name) state=$($_.State)\" }",
+"'=== https bindings: site -> id -> cert thumbprint (do they span many SiteIds on one thumbprint?) ==='",
+"$rows = @()",
+"Get-Website | ForEach-Object { $s=$_; $s.Bindings.Collection | Where-Object { $_.protocol -eq 'https' } | ForEach-Object { $rows += [pscustomobject]@{ Site=$s.Name; Id=$s.Id; Host=($_.bindingInformation -replace '^\\*?:443:',''); Thumb=([string]$_.certificateHash) } } }",
+"\"total https bindings: $($rows.Count)\"",
+"\"distinct SiteIds with https bindings: $((($rows | Select-Object -Expand Id -Unique) | Sort-Object) -join ',')\"",
+"'--- thumbprint usage (which certs, how many bindings, across how many sites) ---'",
+"$rows | Group-Object Thumb | ForEach-Object { $g=$_; $sites=($g.Group | Select-Object -Expand Id -Unique).Count; \"thumb=$($g.Name.Substring(0,[Math]::Min(12,$g.Name.Length))) bindings=$($g.Count) acrossSiteIds=$sites\" }",
+"'--- sample: 8 sites holding the current cert, with their SiteIds (proves cross-site if Id != 1) ---'",
+"$rows | Where-Object { $_.Thumb -like '8CA90463*' } | Select-Object -First 8 | ForEach-Object { \"  $($_.Site) (id=$($_.Id)) <- $($_.Host)\" }"
+]}
