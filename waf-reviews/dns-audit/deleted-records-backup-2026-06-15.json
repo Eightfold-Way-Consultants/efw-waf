@@ -1,44 +1,72 @@
 [
-    {
-        "deleted":  "2026-06-15",
-        "zoneId":  "Z1KW10MTO4TFYM",
-        "record":  {
-                       "Name":  "forms.eightfoldway.com.",
-                       "Type":  "CNAME",
-                       "TTL":  300,
-                       "ResourceRecords":  [
-                                               {
-                                                   "Value":  "eightfoldway.com"
-                                               }
-                                           ]
-                   }
-    },
-    {
-        "deleted":  "2026-06-15",
-        "zoneId":  "Z1KW10MTO4TFYM",
-        "record":  {
-                       "Name":  "bp101-dummy.eightfoldway.com.",
-                       "Type":  "CNAME",
-                       "TTL":  10,
-                       "ResourceRecords":  [
-                                               {
-                                                   "Value":  "s6.eightfoldway.com"
-                                               }
-                                           ]
-                   }
-    },
-    {
-        "deleted":  "2026-06-15",
-        "zoneId":  "Z3T3K8XH9ZMBIW",
-        "record":  {
-                       "Name":  "bp101-dummy.db101.org.",
-                       "Type":  "CNAME",
-                       "TTL":  300,
-                       "ResourceRecords":  [
-                                               {
-                                                   "Value":  "bp101-dummy.eightfoldway.com"
-                                               }
-                                           ]
-                   }
+  {
+    "deleted": "2026-06-15",
+    "zoneId": "Z1KW10MTO4TFYM",
+    "record": {
+      "Name": "forms.eightfoldway.com.",
+      "Type": "CNAME",
+      "TTL": 300,
+      "ResourceRecords": [ { "Value": "eightfoldway.com" } ]
     }
+  },
+  {
+    "deleted": "2026-06-15",
+    "zoneId": "Z1KW10MTO4TFYM",
+    "record": {
+      "Name": "bp101-dummy.eightfoldway.com.",
+      "Type": "CNAME",
+      "TTL": 10,
+      "ResourceRecords": [ { "Value": "s6.eightfoldway.com" } ]
+    }
+  },
+  {
+    "deleted": "2026-06-15",
+    "zoneId": "Z3T3K8XH9ZMBIW",
+    "record": {
+      "Name": "bp101-dummy.db101.org.",
+      "Type": "CNAME",
+      "TTL": 300,
+      "ResourceRecords": [ { "Value": "bp101-dummy.eightfoldway.com" } ]
+    }
+  },
+  {
+    "deleted": "2026-06-15",
+    "zoneId": "Z1KW10MTO4TFYM",
+    "record": {
+      "Name": "mail.eightfoldway.com.",
+      "Type": "A",
+      "TTL": 300,
+      "ResourceRecords": [ { "Value": "52.8.7.0" } ]
+    }
+  },
+  {
+    "deleted": "2026-06-15",
+    "zoneId": "Z1KW10MTO4TFYM",
+    "record": {
+      "Name": "mail.eightfoldway.com.",
+      "Type": "TXT",
+      "TTL": 300,
+      "ResourceRecords": [ { "Value": "\"v=spf1 ip4:52.8.7.0 ?all\"" } ]
+    }
+  },
+  {
+    "deleted": "2026-06-15",
+    "zoneId": "Z3T3K8XH9ZMBIW",
+    "record": {
+      "Name": "mail.db101.org.",
+      "Type": "A",
+      "TTL": 300,
+      "ResourceRecords": [ { "Value": "52.8.7.0" } ]
+    }
+  },
+  {
+    "deleted": "2026-06-15",
+    "zoneId": "Z3T3K8XH9ZMBIW",
+    "record": {
+      "Name": "mail.db101.org.",
+      "Type": "TXT",
+      "TTL": 300,
+      "ResourceRecords": [ { "Value": "\"v=spf1 ip4:52.8.7.0 ?all\"" } ]
+    }
+  }
 ]
