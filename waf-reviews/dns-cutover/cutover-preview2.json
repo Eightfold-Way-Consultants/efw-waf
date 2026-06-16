@@ -1,0 +1,14 @@
+{
+  "Comment": "Phase 0 CUTOVER: point preview2.eightfoldway.com at cf-preview2 (CloudFront). Zone Z1KW10MTO4TFYM. Apply: aws route53 change-resource-record-sets --hosted-zone-id Z1KW10MTO4TFYM --change-batch file://cutover-preview2.json",
+  "Changes": [
+    {
+      "Action": "UPSERT",
+      "ResourceRecordSet": {
+        "Name": "preview2.eightfoldway.com.",
+        "Type": "CNAME",
+        "TTL": 60,
+        "ResourceRecords": [ { "Value": "cf-preview2.eightfoldway.com" } ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "Comment": "Phase 0 ROLLBACK: point preview2.eightfoldway.com back to direct origin (preview2-site). Zone Z1KW10MTO4TFYM. Apply: aws route53 change-resource-record-sets --hosted-zone-id Z1KW10MTO4TFYM --change-batch file://revert-preview2.json",
+  "Changes": [
+    {
+      "Action": "UPSERT",
+      "ResourceRecordSet": {
+        "Name": "preview2.eightfoldway.com.",
+        "Type": "CNAME",
+        "TTL": 60,
+        "ResourceRecords": [ { "Value": "preview2-site.eightfoldway.com" } ]
+      }
+    }
+  ]
+}
