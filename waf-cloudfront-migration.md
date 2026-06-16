@@ -156,6 +156,7 @@ Two distinct concerns, both handled in one ACL (default action Allow; rules in p
 ### What is NOT in CloudFormation (deliberate)
 - **ACM cert** — already issued out-of-band; passed in as a parameter (ARN), never recreated.
 - **Route53 cutover records** — the apex ALIAS / `s6`/`s4` CNAME flips stay manual + staged so the canary, 60s-TTL pre-lower, and one-click rollback work without a full stack update. (Optional later: a separate record-only stack once cutover is proven.)
+- **Route53 `cf-*` terminator records** — `cf-preview2`/`cf-public`/`cf-redirect` (each → its distribution's domain) are created/maintained **manually**, deliberately NOT stack-owned, so a stack teardown or distribution replacement can't NXDOMAIN the live site records that depend on them. The stack only **outputs** the dist domain. Full rationale under "DNS terminator scheme" below.
 - **Validation CNAMEs** — already in Route53, left in place for auto-renew.
 
 ### Deploy order
@@ -403,19 +404,21 @@ From the 2026-06-10 IIS-accuracy + test-plan reviews:
 - With Bot Control on both: $40-50/mo
 - With NAT Gateway (Phase 5): +$45/mo
 
-## PROPOSAL (2026-06-12, NOT yet approved): named DNS terminators
+## DNS terminator scheme (ACCEPTED 2026-06-16) + cutover mechanics
 
-Idea (owner): re-architect chains so **every hostname terminates at exactly one named terminator**, and migration = repointing one CNAME per name, deliberately — no accidental riders.
+Every hostname terminates at exactly one **named terminator**; migration = repointing one CNAME per name, deliberately — no accidental riders.
 
-| Terminator | Points at | Meaning |
-|---|---|---|
-| `s4.eightfoldway.com` | A 52.8.85.37 (exists) | direct web-04 — edit tier, `q.db101.org`, plumbing |
-| `s6.eightfoldway.com` | A 52.8.7.0 (exists) | direct web-06 — dtd/schema, opted-out sites |
-| `cf-public.eightfoldway.com` (new) | CNAME → public dist | fronted public+staging |
-| `cf-preview2.eightfoldway.com` (new) | CNAME → preview2 dist | fronted preview2 |
-| `cf-redirect.eightfoldway.com` (new) | CNAME → redirect dist | housingbenefits101 301 |
+| Terminator | Points at | Owner | Meaning |
+|---|---|---|---|
+| `s4.eightfoldway.com` | A 52.8.85.37 | manual (exists) | direct web-04 — edit tier, `q.db101.org`, plumbing |
+| `s6.eightfoldway.com` | A 52.8.7.0 | manual (exists) | direct web-06 — dtd/schema, opted-out sites |
+| `cf-preview2.eightfoldway.com` | CNAME → preview2 dist domain | **manual (new)** | fronted preview2 |
+| `cf-public.eightfoldway.com` | CNAME → public dist domain | **manual (new)** | fronted public + staging |
+| `cf-redirect.eightfoldway.com` | CNAME → redirect dist domain | **manual (new)** | housingbenefits101 301 |
 
-Mechanics: intermediate chain names need NOT be dist aliases (CloudFront routes on the originally-queried Host/SNI), but each rider's own hostname still needs alias+cert coverage. Apexes can't CNAME — they ALIAS straight at the dist, so **move all apex riders off the apexes first** (`www`/`turtles`/`forms` ride `eightfoldway.com` today — that's the trap this dissolves). Per-name revert = one CNAME flip back to `s6`. Phase 5 breakage audit = "list names terminating at s6.eightfoldway.com". Bulk heads (`s6.db101.org` ×74 riders, `preview-site.*`, `s6c`/`s6a`) re-terminate at `cf-public` to move families wholesale.
+**The `cf-*` terminators are MANUAL / external — deliberately NOT in any CloudFormation stack (decided 2026-06-16).** They are the *stable anchors* that live site records point at, so they must **outlive the stack lifecycle**. If a `cf-*` record were stack-owned, a stack **delete** or a distribution **replacement** would remove it → every `preview2-*` / public CNAME pointing at it goes **NXDOMAIN → mass outage** of everything cut over. Keeping them manual means tearing down or rebuilding an edge stack never touches DNS that live traffic depends on. The only cost — a hand-edit if a distribution's domain ever changes — is rare and happens only during a deliberate dist delete+recreate (already a hands-on event). The edge stack merely **outputs** `Distribution.DomainName`; a human sets/updates the one `cf-*` record from it. (A `DeletionPolicy: Retain` RecordSet was considered and rejected: it becomes an unmanaged orphan that conflicts on stack re-create.)
+
+**Cutover mechanics (per tier):** once the edge stack exists, create that tier's `cf-*` record once (→ the dist's `Outputs` domain). Canary = point ONE site CNAME (e.g. `preview2.eightfoldway.com`) at `cf-preview2` at 60s TTL, with the prior record pre-staged for revert; validate; then roll the rest by pointing each `preview2-<state>` → `cf-preview2`. CloudFront routes on the **originally-queried Host/SNI** (the site name), so a `cf-*` name is **pure DNS plumbing** — it does NOT need to be a dist alias or on the cert; each *site* hostname still needs alias+cert coverage. Per-name revert = flip that site CNAME back to its origin chain (`s4`/`s6`). **Apexes can't CNAME** — they Route53-ALIAS straight at the dist, so move any apex riders (`www`/`turtles`) off the apex first. Bulk heads (`s6.db101.org` ×74 riders, `preview-site.*`, `s6c`/`s6a`) can re-terminate at `cf-public` to move families wholesale. Phase 5 breakage audit = "list names terminating at `s6`".
 
 Open per-name fates feeding this (web-06 enumeration 2026-06-12):
 - `dtd.eightfoldway.com` + `schema.disabilitybenefits101.org` — **RESOLVED 2026-06-15: runtime-inert, NOT a Phase 5 blocker.** SSM on web-06: the `dtd.eightfoldway.com` IIS site (Started, DefaultAppPool, anonymous) holds exactly ONE file `entity.dtd` (5.9KB, 2024-12-17). The `schema.disabilitybenefits101.org/bp101-quantities.xsd` namespace URI is an identifier (no `.xsd` exists on the box). The `http://dtd.eightfoldway.com/entity.dtd` DOCTYPE is intercepted by `f8XmlEntityResolver` (`bp101-interface/utility/f8XmlEntityResolver.cs`, compiled into `utility.dll`): `ResolveUri` → `urn:XHTMLEntities`, `GetEntity` → embedded resource `bp101.utility.entity.dtd`; returns null for all other externals. `ContentFilter.cs:136` wires that resolver; `XmlSnippet.cs:29` never sets a resolver (→ .NET 4.6+ default null = no DTD fetch). Both runtime paths = zero HTTP fetch. Physical `entity.dtd` on web-06 is a pre-.NET-4.6 leftover. → **Fate: stay direct on s6 OR retire entirely (site + 3 bindings + `dtd` DNS + `schema.*` zone), zero runtime impact, no urgency. Full web-06 Phase 5 SG lockdown is unobstructed.**
