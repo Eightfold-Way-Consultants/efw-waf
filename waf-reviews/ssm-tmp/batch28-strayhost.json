@@ -1,0 +1,8 @@
+{"commands": [
+"'=== origin behavior: SNI=s6 (valid cert) + unmatched Host headers ==='",
+"curl.exe -s -o NUL -w \"Host=bogus.db101.org      -> http=%{http_code} sslverify=%{ssl_verify_result}`n\" --resolve s6.eightfoldway.com:443:127.0.0.1 -H \"Host: bogus.db101.org\" https://s6.eightfoldway.com/",
+"curl.exe -s -o NUL -w \"Host=nope.eightfoldway.com -> http=%{http_code}`n\" --resolve s6.eightfoldway.com:443:127.0.0.1 -H \"Host: nope.eightfoldway.com\" https://s6.eightfoldway.com/",
+"curl.exe -s -o NUL -w \"Host=mn.db101.org (real)   -> http=%{http_code}`n\" --resolve s6.eightfoldway.com:443:127.0.0.1 -H \"Host: mn.db101.org\" https://s6.eightfoldway.com/planning/b2w2_mn_start.aspx",
+"'=== and a totally unknown SNI (what cert/handshake for a name with no binding)? ==='",
+"curl.exe -s -o NUL -w \"SNI=zzz.db101.org -> http=%{http_code} sslverify=%{ssl_verify_result}`n\" --resolve zzz.db101.org:443:127.0.0.1 https://zzz.db101.org/ ; curl.exe -k -s -o NUL -w \"  (k) SNI=zzz.db101.org -> http=%{http_code}`n\" --resolve zzz.db101.org:443:127.0.0.1 https://zzz.db101.org/"
+]}

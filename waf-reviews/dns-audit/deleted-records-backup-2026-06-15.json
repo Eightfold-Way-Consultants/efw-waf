@@ -68,5 +68,25 @@
       "TTL": 300,
       "ResourceRecords": [ { "Value": "\"v=spf1 ip4:52.8.7.0 ?all\"" } ]
     }
+  },
+  {
+    "deleted": "2026-06-15",
+    "zoneId": "Z1KW10MTO4TFYM",
+    "record": {
+      "Name": "votessvc.eightfoldway.com.",
+      "Type": "A",
+      "TTL": 300,
+      "ResourceRecords": [ { "Value": "173.164.212.89" } ]
+    }
+  },
+  {
+    "deleted": "2026-06-15",
+    "zoneId": "Z1KW10MTO4TFYM",
+    "record": {
+      "Name": "db101-eco.eightfoldway.com.",
+      "Type": "A",
+      "TTL": 300,
+      "ResourceRecords": [ { "Value": "69.90.209.68" } ]
+    }
   }
 ]

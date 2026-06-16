@@ -1,0 +1,12 @@
+[
+    {
+        "IpProtocol":  "tcp",
+        "ToPort":  3306,
+        "FromPort":  3306,
+        "IpRanges":  [
+                         {
+                             "CidrIp":  "173.164.212.89/32"
+                         }
+                     ]
+    }
+]

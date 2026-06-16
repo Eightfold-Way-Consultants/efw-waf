@@ -1,0 +1,9 @@
+{"commands": [
+"'=== SNI=s6.eightfoldway.com (CloudFront always uses this), varying unmatched Host across zones ==='",
+"$hosts = 'bogus.db101.org','bogus.hb101.org','bogus.vets101.org','bogus.housingbenefits101.org','bogus.eightfoldway.com','www.hb101.org','example.com','random.notours.net'",
+"foreach ($h in $hosts) { $code = curl.exe -s -o NUL -w \"%{http_code}\" --resolve s6.eightfoldway.com:443:127.0.0.1 -H \"Host: $h\" https://s6.eightfoldway.com/ ; \"  Host=$h -> http=$code\" }",
+"'=== sanity: a REAL matched host still serves (not swallowed) ==='",
+"curl.exe -s -o NUL -w \"  Host=mn.hb101.org -> http=%{http_code}`n\" --resolve s6.eightfoldway.com:443:127.0.0.1 -H \"Host: mn.hb101.org\" https://s6.eightfoldway.com/",
+"'=== is there ANY site with a blank-hostheader (true catch-all) binding? ==='",
+"Import-Module WebAdministration; $blank=@(); Get-Website | ForEach-Object { $s=$_; $s.Bindings.Collection | ForEach-Object { if ($_.bindingInformation -match '^\\*?:(80|443):$') { $blank += \"$($s.Name) | $($_.bindingInformation)\" } } }; if ($blank) { 'BLANK-HOST bindings:'; $blank } else { 'no blank-host bindings (404 is http.sys no-match default)' }"
+]}
