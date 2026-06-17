@@ -38,6 +38,11 @@ The preview2 dist (`edge.yaml`) is **fail-closed**: `DefaultCacheBehavior` = Man
 - **Empirical X-Cache (each hit twice):** static `*.js`/`*.svg`/`*.css` → Miss→**Hit** (cached ✓); dynamic `/`, `/planning/...aspx`, `/pdfreport/...asmx` → Miss→**Miss** (never cached ✓).
 - **Notes:** (a) `*.htm` is cached — safe per design (CMS-published templates, client-side personalization, invalidation on publish); flag only if any `.htm` ever serves server-personalized content. (b) Homepage `/` is **not** cached (no extension → default no-cache) — correctness-safe, minor perf (every homepage hit → origin); add a `/` behavior only if perf warrants.
 
+## Logged-in capture — DONE ✓ (2026-06-17)
+Injected a real session token into `localStorage['efw.logon.token']` (read-only; temp file, deleted after). Passive page load did NOT fire the authenticated XHR — the bundle gates Favorites/Sessions/vault behind the `efw.logon` gevent (published by `DoLogon`), not by token presence. Confirmed the endpoints instead via read-only bearer GETs (all 200):
+- **`/planning/SavedSessions?max=` — SAME-ORIGIN** authenticated dynamic (also `AutosaveSession` POST, from code). Both `/planning/*` → already no-cache + Challenge-scoped. ✓ (only same-origin authenticated dynamic paths on preview2)
+- **Favorites `/api/Favorites?site=` → cross-origin `preview-favorites.db101.org`**; **Organizations / `Account/UserInfo` → cross-origin `preview-logon.db101.org`**. Separate dists/hosts — NOT under the preview2 site WAF.
+- **Public (`_final`) collapses these to same-origin `/f2svc`, `/l2svc`** → on the public dist they ARE in-scope (no-cache via default + the auth-endpoint protection of the Turnstile plan).
+
 ## TODOs
-2. **Logged-in capture** to surface authenticated dynamic paths (`/f2svc` Favorites, `SavedSessions`, `AutosaveSession`, vault, and the `/l2svc` auth POSTs same-origin on public).
-3. **Max-household body-size check** (8KB `_BODY` window).
+1. **Max-household body-size check** (8KB `_BODY` window) — a maximal `query.aspx` postback (many household members/jobs) could exceed WAF's body-inspection window.
