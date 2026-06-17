@@ -1,0 +1,7 @@
+{"commands": [
+"Import-Module WebAdministration",
+"'=== web-04 sites/bindings matching logon2 or preview2-logon ==='",
+"$hit=$false; Get-Website | ForEach-Object { $s=$_; $s.Bindings.Collection | ForEach-Object { if ($_.bindingInformation -match 'logon2') { $hit=$true; \"$($s.Name) | $($_.protocol) | $($_.bindingInformation)\" } } }; if (-not $hit) { 'NO binding mentions logon2 on web-04' }",
+"'=== any site NAME with logon ==='",
+"Get-Website | Where-Object { $_.Name -match 'logon' } | ForEach-Object { \"$($_.Name) state=$($_.State)\" }"
+]}

@@ -1,0 +1,12 @@
+[
+  {
+    "deleted": "2026-06-16",
+    "zoneId": "Z3T3K8XH9ZMBIW",
+    "record": {
+      "Name": "preview2-logon2.db101.org.",
+      "Type": "CNAME",
+      "TTL": 300,
+      "ResourceRecords": [ { "Value": "preview2-site.db101.org" } ]
+    }
+  }
+]
