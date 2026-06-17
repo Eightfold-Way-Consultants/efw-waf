@@ -47,6 +47,44 @@ POSTs to the `/l2svc/*` account/auth API on 260616:
 - **~50% (112 reqs / 21 IPs) originate from Tor exit nodes / anonymizers**: the `185.220.100.0/22` and `185.220.101.0/24` Tor blocks, `171.25.193.78` (DFRI Tor), `109.71.252.97`, `104.223.84.84`, plus OVH/`45.84.107.x`. The *same* Tor IPs appear across register + forgotpassword + resetpassword doing ~3 each — one coordinated actor fanned out over Tor.
 - **Why current/planned WAF misses it:** the attack targets `/l2svc/*`, **not `/planning/*`**, so the Estimator Challenge never fires. Per-IP rate limits (500 site / 300 planning per 5 min) are untouched at 2-3 req/IP. AmazonIpReputation covers *some* anonymizers but not the full Tor list. There is **no auth-specific rule and no Tor handling**. This is the clearest gap.
 
+#### Raw evidence (260616) — the registration burst is a headless browser running our own JS
+
+`/l2svc` is served via IIS **ARR reverse-proxy** to the logon server (query field = `X-ARR-*`; `SERVER-STATUS=` is the upstream reply). One Tor exit, `185.220.101.5`, 01:44:54 → 01:45:08 (**14 seconds**):
+
+```
+01:44:54  GET  /l2svc/api/Organizations    200   ← populate the registration org dropdown (GetOrgs)
+01:44:58  POST /l2svc/api/Account/Register  200   ← account CREATED (writes a user + fires an SES email)
+01:44:58  POST /l2svc/Token                 200   ← auto-login (the DoRegister→DoLogon chain in efw.logon.3.0.js)
+01:45:00  GET  /l2svc/api/Role              200   ← post-login role fetch
+01:45:02  POST /l2svc/api/Account/Register  409   ← retry, now "taken"
+01:45:08  POST /l2svc/api/Account/Register  409   ← retry
+23:33:00  POST /l2svc/Token                 400   ← returns 22h later for a credential-stuffing pass
+```
+
+**This is the key finding:** the bot executed the *exact* `efw.bundle` registration sequence — fetched `Organizations` to fill the form, registered, followed the auto-login into `/Token`, fetched `Role`. That is **not `curl`; it is a headless browser running our real JavaScript.** Empirical proof that a **silent Challenge would not stop it** (the client has a working JS engine and would solve the proof-of-work) — which is why the right control here is **CAPTCHA** (humanness), not Challenge.
+
+The fleet, same toolkit fanned across Tor + every state site (each IP → one state, identical `200→409→409` cadence ~4–6s apart):
+```
+185.220.101.5   ga   ·  185.220.101.13  ky  ·  185.220.100.241 mo  ·  109.71.252.97 nc
+64.190.76.14    nj   ·  45.84.107.33/.97 nj ·  185.220.100.243 oh  ·  51.38.225.46  ak  ·  147.90.234.213 oh
+```
+
+**Attack-vs-legit fingerprint** (the actionable tuning signal):
+
+| Signal | Attack fleet | Real user |
+|---|---|---|
+| **User-Agent** | `Chrome/142` Mac — **frozen/stale**, identical across all nodes | `Chrome/149` Win/iPhone/Android — current, varied |
+| **Referer** | bare site root `https://<state>.db101.org/` | in-flow: `/my.htm`, `/planning/(S(…))/query.aspx` |
+| **Source** | Tor `185.220.100/101.x`, OVH `51.38/45.84.x`, datacenter | residential (`68.107.x`, `68.114.x`, `69.71.x`) |
+| **Cadence** | 3 POSTs / ~10s, `200→409→409` | single `200` |
+| **Spread** | 1 IP → 1 state, blanket across all states | one site |
+
+Of 39 `Register` POSTs on 260616, **34 carry the frozen `Chrome/142`** (hostile), **5 carry current `Chrome/149`** (genuine, residential, in-flow Referer). `/Token` day total: **66× 200, 34× 400** (34% auth failures = credential/grant guessing).
+
+**Per-call cost is real:** each `Register 200` writes a DB user **and sends an SES confirmation email** (~350–650ms = the SES send). The day's fake registrations = account-table pollution + SES-reputation exposure (the recipient is attacker-chosen, so this is also a potential email-relay/abuse vector).
+
+> **Payload visibility — NONE.** IIS W3C logs here record stem+query only: **no request bodies, no cookies, no `cs-host`.** The registered emails / guessed credentials in these POSTs are not in this dataset. Recoverable only from the **logon DB** (created-account usernames persist), the **SES send log** (recipients), the **logon server trace/ELMAH**, or a **deliberate body-capture** (WAF behind CloudFront inspects body for rules but does **not** log it by default).
+
 ### #2 — Vulnerability/recon scanner `66.175.211.202` (Linode) — **PARTIALLY covered**
 Persistent (260613:162, 260615:1,006, 260616:1,008). Spoofed iPhone/`CriOS` UA + blank UA. Probes enterprise gear across mo/mi/nj/il: `/owa/` (Exchange), `/webui`, `/confluence/rest/applinks/...` (Atlassian), **`/dana-na/nc/nc_gina_ver.txt` (Pulse Secure VPN exploit path)**, Citrix-style paths. 573× 302, 413× 404 — nothing found, but this is active CVE recon. KnownBadInputs would catch *some* of these CVE payloads; the bare path probes (`/owa/`, `/webui`) would not.
 
