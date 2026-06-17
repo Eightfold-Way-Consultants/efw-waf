@@ -1,0 +1,14 @@
+{
+  "Comment": "Phase 1 ROLLBACK: preview2-il.db101.org back to direct origin (preview2-site.db101.org). Zone Z3T3K8XH9ZMBIW. Apply: aws route53 change-resource-record-sets --hosted-zone-id Z3T3K8XH9ZMBIW --change-batch file://revert-preview2-il.json",
+  "Changes": [
+    {
+      "Action": "UPSERT",
+      "ResourceRecordSet": {
+        "Name": "preview2-il.db101.org.",
+        "Type": "CNAME",
+        "TTL": 60,
+        "ResourceRecords": [ { "Value": "preview2-site.db101.org" } ]
+      }
+    }
+  ]
+}
