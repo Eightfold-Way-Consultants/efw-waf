@@ -177,7 +177,40 @@ Resources:
             ManagedRuleGroupStatement:
               VendorName: AWS
               Name: AWSManagedRulesKnownBadInputsRuleSet
-        # 6 — Estimator bot gate (the primary concern): Challenge non-verified traffic on
+        # 6 — SQL injection (dedicated AWS SQLi group). CommonRuleSet has NO SQLi rule; the
+        # 2026-06-17 WAF test on preview2-il confirmed ZERO SQLi coverage without this
+        # (7/7 textbook SQLi probes matched nothing). Free managed group.
+        - Name: AWS-SQLi
+          Priority: 6
+          OverrideAction: !If [IsBlock, { None: {} }, { Count: {} }]
+          VisibilityConfig: { SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: AWS-SQLi }
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesSQLiRuleSet
+        # 7 — Windows/IIS-specific attacks (PowerShell & cmd injection, LOLBins). On-stack:
+        # origin is Windows/IIS and CommonRuleSet doesn't cover these. Free managed group.
+        - Name: AWS-Windows
+          Priority: 7
+          OverrideAction: !If [IsBlock, { None: {} }, { Count: {} }]
+          VisibilityConfig: { SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: AWS-Windows }
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesWindowsRuleSet
+        # 8 — Admin-page protection: blocks external access to admin URLs. Added in COUNT
+        # ONLY — pinned, deliberately NOT on the IsBlock toggle — pending a false-positive
+        # review of its counts vs real public traffic (some legit paths can look admin-ish).
+        # Promote to the IsBlock toggle only after it's confirmed clean. See plan post-deploy eval.
+        - Name: AWS-AdminProtection
+          Priority: 8
+          OverrideAction: { Count: {} }
+          VisibilityConfig: { SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: AWS-AdminProtection }
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesAdminProtectionRuleSet
+        # 9 — Estimator bot gate (the primary concern): Challenge non-verified traffic on
         # /planning/*. Estimators are dynamic, no-cache, server-side compute; bots "walking"
         # them burn origin CPU and caching can't help. Challenge = silent browser
         # proof-of-work: real browsers pass with a token cookie (one-time per immunity
@@ -186,7 +219,7 @@ Resources:
         # toggle (observe in Count, enforce on activation). Scope can later expand to
         # /api/*, /ajax/* if bots hit those compute paths.
         - Name: Challenge-Estimator
-          Priority: 6
+          Priority: 9
           Action: !If [IsBlock, { Challenge: {} }, { Count: {} }]
           VisibilityConfig: { SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: Challenge-Estimator }
           Statement:
@@ -195,10 +228,10 @@ Resources:
               PositionalConstraint: STARTS_WITH
               SearchString: /planning/
               TextTransformations: [{ Priority: 0, Type: LOWERCASE }]
-        # 7 — Estimator rate-limit backstop: per-IP cap scoped to /planning/*,
+        # 10 — Estimator rate-limit backstop: per-IP cap scoped to /planning/*,
         # for bots that solve the challenge or flood from a few IPs.
         - Name: RateLimit-Estimator
-          Priority: 7
+          Priority: 10
           Action: !If [IsBlock, { Block: {} }, { Count: {} }]
           VisibilityConfig: { SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: RateLimit-Estimator }
           Statement:
@@ -211,20 +244,20 @@ Resources:
                   PositionalConstraint: STARTS_WITH
                   SearchString: /planning/
                   TextTransformations: [{ Priority: 0, Type: LOWERCASE }]
-        # 8 — site-wide per-IP rate limit (general probe / flood backstop, all paths)
+        # 11 — site-wide per-IP rate limit (general probe / flood backstop, all paths)
         - Name: RateLimit
-          Priority: 8
+          Priority: 11
           Action: !If [IsBlock, { Block: {} }, { Count: {} }]
           VisibilityConfig: { SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: RateLimit }
           Statement:
             RateBasedStatement:
               Limit: !Ref RateLimit
               AggregateKeyType: IP
-        # 9 — Bot Control (optional, paid). Complements the Challenge for browser-emulating bots.
+        # 12 — Bot Control (optional, paid). Complements the Challenge for browser-emulating bots.
         - !If
           - UseBotControl
           - Name: AWS-BotControl
-            Priority: 9
+            Priority: 12
             OverrideAction: !If [IsBlock, { None: {} }, { Count: {} }]
             VisibilityConfig: { SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: AWS-BotControl }
             Statement:

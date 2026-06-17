@@ -24,6 +24,34 @@ No automatic persistent-blacklist vector — safe to send attack probes from our
 ## Public-phase add-on — OpenClaw cross-check (do when testing a PUBLIC canary)
 Because OpenClaw only sees public logs, run a tagged repeat of the bot/attack probes against a **public** canary, then read OpenClaw's next nightly /planning report. Two wins: (1) **validate OpenClaw's detector** — does it flag our synthetic bot-walking? (2) confirm our test traffic is recognized (tagged) so a reviewer doesn't manually action our IP into `ScannerIpSet`. Compare OpenClaw's verdict against what the WAF actually COUNTed for the same traffic.
 
+## RESULTS — non-rate battery (2026-06-17, preview2-il, Count mode)
+Verified via near-real-time `get-sampled-requests` + authoritative raw WAF S3 logs (parsed by args, since query-string probes share path `/`).
+- **Count mode confirmed non-blocking:** every probe returned an *origin* code (404/403/405/200), zero WAF 403-blocks.
+- **Track A — all rules fired (COUNT) except one:** SensitivePaths 6/6 (`.git`/`.env`/`.bak`/`.sql`/`elmah.axd`/`trace.axd`); CommonRuleSet matched XSS, GenericLFI, NoUserAgent, SizeRestrictions_BODY, RestrictedExtensions(`.bak`); KnownBadInputs matched Log4JRCE + ExploitablePaths(`.env`); Challenge-Estimator matched `/planning/`. Negative controls correct: `/ScriptResource.axd` and `/my.htm` matched nothing.
+- **⚠️ FINDING — SQLi gap:** the canonical tautology `q=1' OR '1'='1` matched **no rule**. AWS CommonRuleSet `SQLi_QUERYARGUMENTS` runs at LOW sensitivity and misses tautologies. Sent 7 SQLi variants (tautology/comment/admin/UNION/DROP/SLEEP/xp_cmdshell) to characterize coverage (breakdown pending log flush). **Recommendation:** if SQLi coverage matters, add the dedicated `AWSManagedRulesSQLiRuleSet` (HIGH-sensitivity SQL DB rule group) to the ACL; app is .NET/parameterized so app-layer risk is lower, but the WAF gap is real. Decide before Count→Block.
+- **Track B — ZERO false positives:** legit free-text that *looks* malicious all passed clean — `O'Brien` (apostrophe), `earnings < $2000 & rent > $800` (`<`/`>`/`&`), `select a plan or drop coverage union` (SQL words), unicode/es, Googlebot/Bingbot crawling content, `robots.txt`, checker UA. No managed-rule COUNT on any.
+- **Tooling note:** `get-sampled-requests` is near-real-time but partial (sampled subset); the raw S3 logs are complete but lag ~5 min — use logs for definitive FP/coverage calls, parse with gzip+ConvertFrom-Json keyed on `httpRequest.args`.
+- **Still pending:** A9/A10 rate-limit bursts (held for explicit go); B1/B6 browser estimator + fast-session (owner); SQLi-variant breakdown (poller).
+
+## Track A12 — estimator-walk bot simulation (THE PRIMARY THREAT — not yet run)
+The whole reason for `Challenge-Estimator` + the `/planning` rate limit. A scraper walking the estimator burns origin **and** the ECO engine (each step = no-cache dynamic compute over the VPC peering). My earlier tests only did ONE validation walk + one `/planning` GET — they did NOT establish a session and hammer/crawl it. To run:
+- **A12a single-session crawl:** GET `b2w2_il_index.aspx` → capture the cookieless session `(S(...))` + cookies → walk the wizard (GET/POST successive screens within that session to results). Measure: requests-per-full-walk, that **every** `/planning/*` hit is `Challenge-Estimator` COUNT, and how close one walk gets to the limits.
+- **A12b hammer / replay:** repeat entry+walk N times rapidly from one IP → drive `RateLimit-Estimator` (300/IP/5min on /planning) and `RateLimit` (500/IP/5min). Confirm those rules COUNT on the overage. **Bound N + time-box — this runs real ECO engine compute per step; hold the heavy run for explicit go (like A9/A10).**
+- **A12c distributed-evasion (note):** a low-per-IP distributed fleet *evades* the rate limits but the **Challenge** stops it (can't solve proof-of-work) — the Challenge's whole raison d'être; hard to simulate without many source IPs.
+- **Count-mode caveat:** Challenge is a no-op in Count, so a curl/headless bot CAN walk now → use that to MEASURE footprint. The **Block flip** is what actually stops it (bot Challenged at entry → no session); verify the STOP in a supervised Block window on preview2-il.
+- **Compare to legit (B6):** a real counselor's fast walk generates similar `/planning` volume — the Challenge distinguishes by browser-PoW, not request pattern. Measure requests-per-legit-walk to confirm a fast (or gov-NAT-shared) legit session doesn't trip the 300/500 limits.
+
+## Post-deployment evaluation (after adding SQLi + Windows + AdminProtection, 2026-06-17)
+Stack updated: `efw-waf-edge-preview2` now carries `AWS-SQLi`(pri6), `AWS-Windows`(pri7), `AWS-AdminProtection`(pri8, **pinned Count**), 1448 WCU, in-place Modify. Eval steps:
+1. **SQLi fires — DONE ✓:** re-ran 7 variants → all match `AWS-SQLi#SQLi_QUERYARGUMENTS` (COUNT), incl. the previously-missed tautology. Gap closed.
+2. **Windows fires — TODO:** send Windows cmd/PowerShell-injection probes (e.g. `?x=cmd.exe /c dir`, `?p=powershell -enc <b64>`, `& dir`) → expect `AWS-Windows` COUNT. Confirm via sampled-requests/logs.
+3. **No NEW false positives — TODO:** re-run the Track B FP battery (B2–B5 free text incl. apostrophes/`<>&`/SQL-words/unicode, crawler UAs) and confirm **none** now match `AWS-SQLi`/`AWS-Windows`/`AWS-AdminProtection`. (Windows + SQLi groups can FP on legit content; verify.)
+4. **AdminProtection Count review (the gate for promoting it) — TODO:** let it run in Count over real preview2-il traffic for a window (≥ a few days, or correlate with the threat-report harvest), then pull `AWS-AdminProtection` `CountedRequests` + sampled-requests. Inspect every match: is it a *legit* path that merely looks admin-ish (e.g. a counselor/admin-labeled but public URL), or a genuine admin-probe? 
+   - **If zero / only genuine probes →** promote AdminProtection from pinned `Count` to the `IsBlock` toggle (`OverrideAction: !If [IsBlock,{None:{}},{Count:{}}]`) so it enforces with the others.
+   - **If it flags legit paths →** keep it pinned `Count`, or add per-rule `RuleActionOverride`/scope-down exclusions for those paths, then re-review.
+5. **Per-rule Count monitoring:** watch CloudWatch `CountedRequests` for AWS-SQLi / AWS-Windows / AWS-AdminProtection across the Count window for legit-traffic hits before any Block flip.
+6. **Go/no-go update:** Count→Block requires — SQLi/Windows confirmed firing + no new FPs (steps 2–3); AdminProtection either promoted (passed review) or left pinned-Count; plus the original gates (rate tests, browser fast-session).
+
 ## Track A — deliberately trigger (each should COUNT; would Block when flipped)
 | # | Rule (pri) | Probe | Expected match | Negative control |
 |---|---|---|---|---|

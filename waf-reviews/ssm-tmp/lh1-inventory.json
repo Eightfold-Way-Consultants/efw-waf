@@ -1,0 +1,11 @@
+{"commands": [
+"Import-Module WebAdministration",
+"'===== SITES (Name,Id,State) ====='",
+"Get-Website | Select-Object Name,Id,State | Sort-Object Id | Format-Table -AutoSize | Out-String -Width 200",
+"'===== BINDINGS (Id -> host:port) ====='",
+"foreach ($s in Get-Website) { foreach ($b in $s.Bindings.Collection) { \"{0}`t{1}`t{2}\" -f $s.Id, $s.Name, $b.bindingInformation } }",
+"'===== LOG DIRS ====='",
+"foreach ($s in Get-Website) { $ld=[Environment]::ExpandEnvironmentVariables($s.logFile.directory); \"{0}`t{1}`t{2}\" -f $s.Id, $s.Name, $ld }",
+"'===== RECENT LOG FILES (W3SVC*, last 4 days) ====='",
+"$cut=(Get-Date).AddDays(-4); Get-ChildItem -Path 'C:\\inetpub\\logs\\LogFiles' -Recurse -Filter 'u_ex*.log' -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -ge $cut } | Sort-Object Directory,Name | ForEach-Object { '{0}`t{1}`t{2:N0}' -f $_.FullName, $_.LastWriteTime.ToString('s'), $_.Length }"
+]}
