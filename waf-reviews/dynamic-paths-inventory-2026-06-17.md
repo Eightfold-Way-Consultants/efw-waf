@@ -32,7 +32,12 @@ WAF inspects ~first 8KB of a POST body. Estimator `query.aspx` postbacks maxed *
 ## WAF `_BODY` coverage — confirmed
 Direct `/tw` POST (origin 403, no ticket; WAF inspects at edge): injection body → **AWS-Windows** (`& whoami`) + **AWS-SQLi** (`1' OR`/`union select`) COUNTed; FP body (`O'Brien`, `< $2000 & rent >`, SQL-words) → **zero** matches. So `_BODY` inspection works on real same-origin POSTs and doesn't FP on legit free text (≤8KB).
 
+## Cache-bypass verification — DONE ✓ (2026-06-17, dist `E1ZUT1S4LS09PI`)
+The preview2 dist (`edge.yaml`) is **fail-closed**: `DefaultCacheBehavior` = Managed-**CachingDisabled** + `OriginRequestPolicyDynamic` (AllViewer: cookies/headers/qs all) + all methods (GET…DELETE). Only explicit **static** patterns are cached: `*.css`, `*.js`, `/dist/*`, `*.htm`, `/master_images/*`, `/master_documents/*`, `/documents/*`, `/images/*` (CachePolicyStatic: **Host in key** → no cross-site/staging leak; QueryString in key → cache-busting; GET/HEAD only).
+- **No dynamic path matches a static pattern** → all of `/planning/*` (.aspx), `ScriptResource.axd`, `/pdfreport/*.asmx`, `/tw/*` (.json), `/l2svc`,`/f2svc`, `SavedSessions`, `AutosaveSession` fall through to no-cache. (edge.yaml L440 explicitly keeps `*.axd` out of static.)
+- **Empirical X-Cache (each hit twice):** static `*.js`/`*.svg`/`*.css` → Miss→**Hit** (cached ✓); dynamic `/`, `/planning/...aspx`, `/pdfreport/...asmx` → Miss→**Miss** (never cached ✓).
+- **Notes:** (a) `*.htm` is cached — safe per design (CMS-published templates, client-side personalization, invalidation on publish); flag only if any `.htm` ever serves server-personalized content. (b) Homepage `/` is **not** cached (no extension → default no-cache) — correctness-safe, minor perf (every homepage hit → origin); add a `/` behavior only if perf warrants.
+
 ## TODOs
-1. **Verify cache-bypass coverage** in the CloudFront behaviors for every path above — esp. `/pdfreport/*.asmx`, `/tw/*`, `/planning/SavedSessions`, `*/AutosaveSession`, `ScriptResource.axd`. (README list looks complete; confirm against `waf-proposal-v2-with-cache-config.md` + the deployed dist.)
 2. **Logged-in capture** to surface authenticated dynamic paths (`/f2svc` Favorites, `SavedSessions`, `AutosaveSession`, vault, and the `/l2svc` auth POSTs same-origin on public).
 3. **Max-household body-size check** (8KB `_BODY` window).
