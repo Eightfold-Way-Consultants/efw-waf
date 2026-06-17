@@ -1,0 +1,12 @@
+{"commands": [
+"Import-Module WebAdministration",
+"'=== is the IP Restrictions module/feature installed? ==='",
+"(Get-WindowsFeature -Name Web-IP-Security -ErrorAction SilentlyContinue | Select-Object -Expand Installed)",
+"'=== dynamicIpSecurity at server (applicationHost) level ==='",
+"$f='system.webServer/security/dynamicIpSecurity'",
+"try { $c = Get-WebConfiguration -Filter $f -PSPath 'MACHINE/WEBROOT/APPHOST'; \"denyByConcurrentRequests.enabled=$($c.denyByConcurrentRequests.enabled) max=$($c.denyByConcurrentRequests.maxConcurrentRequests)\"; \"denyByRequestRate.enabled=$($c.denyByRequestRate.enabled) max=$($c.denyByRequestRate.maxRequests) intervalMs=$($c.denyByRequestRate.requestIntervalInMilliseconds)\"; \"denyAction=$($c.denyAction)\" } catch { \"no dynamicIpSecurity at apphost: $($_.Exception.Message.Split([Environment]::NewLine)[0])\" }",
+"'=== dynamicIpSecurity on preview2-il.db101.org site ==='",
+"try { $s = Get-WebConfiguration -Filter $f -PSPath 'IIS:\\Sites\\preview2-il.db101.org'; \"site denyByConcurrentRequests.enabled=$($s.denyByConcurrentRequests.enabled); denyByRequestRate.enabled=$($s.denyByRequestRate.enabled)\" } catch { 'no site-level override' }",
+"'=== static ipSecurity allowUnlisted (true=allow by default) ==='",
+"try { (Get-WebConfigurationProperty -Filter 'system.webServer/security/ipSecurity' -Name allowUnlisted -PSPath 'MACHINE/WEBROOT/APPHOST').Value } catch { 'n/a' }"
+]}

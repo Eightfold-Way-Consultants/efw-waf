@@ -11,6 +11,19 @@ Goal: before flipping `WafRuleAction=Count→Block`, prove on the live `preview2
   3. CloudWatch `CountedRequests` per rule (`AWS/WAFV2`, dims WebACL+Rule+Region) — aggregate trend.
 - **Caution:** rate-limit tests send 500+ reqs that (Count mode) all hit origin — a deliberate mini-load-test; fine on low-traffic preview2-il, run last and time-boxed.
 
+## Safety / blacklist-avoidance (verified 2026-06-17)
+No automatic persistent-blacklist vector — safe to send attack probes from our own IP:
+- **WAF Count mode** can't block; rate-based rules are transient (5-min window, auto-forgotten); WAF never self-persists a blocklist.
+- **`AmazonIpReputationList`** is AWS-managed threat intel, not fed by matches on our own distribution; modest volume is safe.
+- **IIS Dynamic IP Restrictions on web-04**: `Web-IP-Security` not installed, deny-by-rate/concurrency disabled → origin won't auto-ban the rate burst.
+- **`ScannerIpSet`**: empty, and **OpenClaw is report-only** (nightly /planning bot-scan → human-reviewed recommendations; does NOT write the IP set).
+- **Do NOT use the priority-0 `AllowIpSet`** to shield the test — a terminating Allow skips the rules we want to COUNT.
+- **Footprint:** OpenClaw scans *public* (web-06) logs; `preview2-il` is a *preview* site on web-04, so these tests likely won't even appear in its report. (Tag traffic `EFW-WAFTEST-20260617` regardless, for WAF/IIS log attribution.)
+- **Post-test:** re-check `ScannerIpSet` is still empty before any Count→Block flip.
+
+## Public-phase add-on — OpenClaw cross-check (do when testing a PUBLIC canary)
+Because OpenClaw only sees public logs, run a tagged repeat of the bot/attack probes against a **public** canary, then read OpenClaw's next nightly /planning report. Two wins: (1) **validate OpenClaw's detector** — does it flag our synthetic bot-walking? (2) confirm our test traffic is recognized (tagged) so a reviewer doesn't manually action our IP into `ScannerIpSet`. Compare OpenClaw's verdict against what the WAF actually COUNTed for the same traffic.
+
 ## Track A — deliberately trigger (each should COUNT; would Block when flipped)
 | # | Rule (pri) | Probe | Expected match | Negative control |
 |---|---|---|---|---|
@@ -39,6 +52,7 @@ The high-value risks given this ruleset are **OWASP body/query rules on free tex
 | B7 | **Shared-NAT burst**: mixed legit traffic from one IP approaching the measured 185/5min gov reality | rate limits | confirm legit office volume stays < 300/500 |
 | B8 | Browser asset fan-out (HTTP/2/3 parallel CSS/JS/img) | RateLimit | counts toward 500 |
 | B9 | public-url-checker UA (non-browser GET) on homepage/API | managed/bot | confirm not flagged (doesn't hit /planning) |
+| B10 | **Search-crawler simulation we WANT to allow**: GET `/`, content pages, `/sitemap.xml`, `/robots.txt` with UA `Googlebot/2.1 (+http://www.google.com/bot.html)` and `Bingbot/2.0` | Challenge / managed / BotControl | Expect 200, **no Challenge, no COUNT** (content is not `/planning`-scoped) → crawlers index freely, SEO safe. Controls: (a) confirm `robots.txt` Disallows `/planning/` so compliant crawlers never reach the Challenge; (b) a *spoofed* Googlebot-UA hit to `/planning/` SHOULD Challenge-COUNT — correct, not an FP (we don't trust UA; no verified-bot allowlist by design). Note: UA-only test (no IP/rDNS verification exists). |
 
 ## Capture & decision
 - Per Track-A row: confirm the expected rule COUNTed (sampled-requests/log). A rule that does NOT fire when it should = a **gap** to fix.
