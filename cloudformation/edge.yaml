@@ -70,6 +70,12 @@ Parameters:
     Description: >
       Per-IP request cap (5-min) scoped to /planning/* — estimator backstop
       behind the Challenge. Generous (Challenge does the heavy lifting); tune in Count.
+      A12a measurement (2026-06-17, preview2-il): ONE full estimator walk to results =
+      57 /planning requests (every one Challenge-COUNTed). So 300 = only ~5 concurrent
+      full walks/IP, and real gov-NAT peaks were ~185/5min (~3 walks) => ~1.6x margin over
+      observed reality. Margin is tighter than it looks: prefer RAISING this (or trusting
+      Challenge per-browser to carry load) over tightening — a shared gov NAT is exactly
+      where per-IP limiting hurts real users and per-browser Challenge does not.
   WafRuleAction:
     Type: String
     AllowedValues: [Count, Block]
@@ -218,6 +224,26 @@ Resources:
         # terminated at rules 0/1, so they skip this. Count -> Challenge via the IsBlock
         # toggle (observe in Count, enforce on activation). Scope can later expand to
         # /api/*, /ajax/* if bots hit those compute paths.
+        #
+        # A12a findings (2026-06-17, preview2-il, real-browser Playwright walk):
+        #  - COVERAGE PROVEN COMPLETE: a full 18-screen walk = 57 /planning requests and
+        #    Challenge-Estimator COUNTed exactly 57 — every entry/screen/postback/results-
+        #    compute hit passes the gate; nothing in the estimator flow escapes /planning/*.
+        #  - IMMUNITY TUNING (action item): default Challenge ImmunityTime is 300s, but a real
+        #    session easily exceeds 5 min (a counselor-assisted walk took ~8.5 min) -> token
+        #    expires MID-session -> repeated (silent) re-challenges. Set a generous immunity so
+        #    long/assisted sessions aren't re-challenged, e.g. add to this WebACL:
+        #        ChallengeConfig: { ImmunityTimeProperty: { ImmunityTime: 1800 } }   # 30 min
+        #    (web-ACL-level default; applies to all Challenge actions). Not yet set = 300s.
+        #  - STOP IS UNPROVEN: Count mode makes Challenge a no-op, so A12a measured footprint +
+        #    coverage only. The actual bot-STOP (non-JS bot Challenged at entry -> no session ->
+        #    can't walk) must be verified in a SUPERVISED Block window on preview2-il before
+        #    trusting Count->Block.
+        #  - RESIDUAL GAP (A12c): a sophisticated DISTRIBUTED headless-with-JS scraper solves the
+        #    PoW (like the threat-report credential-stuffing fleet) AND stays under per-IP rate
+        #    -> evades both this rule and RateLimit-Estimator. Challenge kills commodity/no-JS
+        #    scraping (the bulk), not a determined distributed fleet. Don't treat Challenge as a
+        #    silver bullet; revisit BotControl/ATP if post-launch data shows such a fleet.
         - Name: Challenge-Estimator
           Priority: 9
           Action: !If [IsBlock, { Challenge: {} }, { Count: {} }]
