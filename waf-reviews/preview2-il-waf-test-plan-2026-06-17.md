@@ -68,7 +68,17 @@ Stack updated: `efw-waf-edge-preview2` now carries `AWS-SQLi`(pri6), `AWS-Window
    - **If zero / only genuine probes →** promote AdminProtection from pinned `Count` to the `IsBlock` toggle (`OverrideAction: !If [IsBlock,{None:{}},{Count:{}}]`) so it enforces with the others.
    - **If it flags legit paths →** keep it pinned `Count`, or add per-rule `RuleActionOverride`/scope-down exclusions for those paths, then re-review.
 5. **Per-rule Count monitoring:** watch CloudWatch `CountedRequests` for AWS-SQLi / AWS-Windows / AWS-AdminProtection across the Count window for legit-traffic hits before any Block flip.
-6. **Go/no-go update:** Count→Block requires — SQLi/Windows confirmed firing + no new FPs (steps 2–3); AdminProtection either promoted (passed review) or left pinned-Count; plus the original gates (rate tests ✓ A9/A10, browser fast-session). **New A12a-derived gates:** (a) **supervised Block-window test on preview2-il** proving the estimator-bot STOP (Challenge actually denies a non-JS walk while a real browser passes) — the STOP is unproven in Count; (b) **set Challenge `ImmunityTime` ≥ 1800s** before Block so real multi-minute sessions aren't re-challenged mid-walk.
+6. **Go/no-go update:** Count→Block requires — SQLi/Windows confirmed firing + no new FPs (steps 2–3); AdminProtection either promoted (passed review) or left pinned-Count; plus the original gates (rate tests ✓ A9/A10, browser fast-session). **A12a-derived gates:** (a) **supervised Block-window STOP test — DONE ✓** (see below); (b) **set Challenge `ImmunityTime` ≥ 1800s** — still TODO (soak follow-up).
+
+## Block-mode STOP test — DONE ✓ + preview2 LEFT IN BLOCK (2026-06-17 ~00:13Z)
+Flipped `efw-waf-edge-preview2` `WafRuleAction`→**Block** (param-only, `--use-previous-template`; all 28 preview2 aliases). Validated full Block behavior, then **left it in Block as the canary soak** (not reverted — preview2 is the low-stakes preview tier; this IS the soak the plan called for):
+- **STOP (no-JS bot):** `curl /planning/b2w2_il_index.aspx` → **HTTP 202 `x-amzn-waf-action: challenge`** → no session. Scripted/non-JS clients can't walk the estimator. ✓
+- **PASS (real browser):** Playwright Chromium → solved the Challenge (`aws-waf-token` cookie), reached `b2w2_start` + session in ~12s. Legit users pass silently. ✓ (Note: ~12s first-hit latency includes the PoW solve; subsequent hits within the immunity window are fast → raise `ImmunityTime`.)
+- **Scope:** `/` homepage → 200 (Challenge is `/planning`-only; content browsable). ✓
+- **Managed Block:** `/?q=<script>` → **403** (CommonRuleSet XSS enforces). ✓
+- **Revert lever:** `update-stack WafRuleAction=Count` (~2 min) if an FP surfaces.
+- **Soak monitoring:** watch `AlarmWafBlocked` + WAF S3 block logs for legit-looking blocks; editor/preview reports.
+- **Soak follow-ups:** (1) set `ImmunityTime ≥1800`; (2) verify preview2 PDF/pdfnode renders via loopback (s4 fix) so Block doesn't Challenge the server-side PDF fetch; (3) AdminProtection still pinned-Count (unaffected).
 
 ## Track A — deliberately trigger (each should COUNT; would Block when flipped)
 | # | Rule (pri) | Probe | Expected match | Negative control |
