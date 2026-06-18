@@ -169,10 +169,13 @@ Resources:
               VendorName: AWS
               Name: AWSManagedRulesAmazonIpReputationList
         # 4 — OWASP Core.
-        # MEASURED 2026-06-09: PUBLISHED estimator (b2w2_mn): start __VIEWSTATE 68B / body
-        # ~648B; household-data screen __VIEWSTATE 1812B / body ~3061B. Well under the 8KB
-        # SizeRestrictions_BODY limit → no overrides needed on these tiers. (The 44KB CMS-admin
-        # ViewState that forced a cms-tier override is moot — edit tier isn't fronted.)
+        # MEASURED 2026-06-09 (light walk): PUBLISHED estimator (b2w2_mn) household-data screen
+        # body ~3061B — well under 8KB. BUT a REAL heavy-household walk on preview2-ca (2026-06-18,
+        # Block mode) peaked at a ~8136B body vs the 8192B SizeRestrictions_BODY limit — ~56 bytes
+        # (1%) of headroom. A household one notch heavier = hard 403 mid-walk. So SizeRestrictions_BODY
+        # is pinned to COUNT (always, not on the IsBlock toggle): /planning POSTs are no-cache dynamic,
+        # the body-size cap buys ~nothing there, and legit ViewState legitimately grows. The rest of
+        # CommonRuleSet (SQLi/XSS/traversal/etc.) still Blocks. See memory waf-body-size-8kb-margin.
         - Name: AWS-CommonRuleSet
           Priority: 4
           OverrideAction: !If [IsBlock, { None: {} }, { Count: {} }]
@@ -181,6 +184,9 @@ Resources:
             ManagedRuleGroupStatement:
               VendorName: AWS
               Name: AWSManagedRulesCommonRuleSet
+              RuleActionOverrides:
+                - Name: SizeRestrictions_BODY
+                  ActionToUse: { Count: {} }
         # 5 — Known bad inputs
         - Name: AWS-KnownBadInputs
           Priority: 5
@@ -306,6 +312,13 @@ Resources:
       LogDestinationConfigs:
         - !ImportValue
             'Fn::Sub': '${BaseStackName}-WafLogBucketArn'
+      # Don't persist auth material in S3 logs. The Cookie header carries the efw_logon2 auth
+      # JWT + wid_roles; Authorization carries Basic/Bearer creds. RedactedFields replaces the
+      # value with REDACTED in the stored log (matching/metrics still work). Found 2026-06-16
+      # inspecting preview2 WAF logs storing the full Cookie header.
+      RedactedFields:
+        - SingleHeader: { Name: cookie }
+        - SingleHeader: { Name: authorization }
 
   CachePolicyStatic:
     Type: AWS::CloudFront::CachePolicy
