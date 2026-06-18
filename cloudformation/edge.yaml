@@ -107,6 +107,13 @@ Resources:
       Scope: CLOUDFRONT
       DefaultAction:
         Allow: {}
+      # Challenge token immunity = 30 min (default is 300s). A real estimator session
+      # routinely runs >5 min; at the default the silent re-challenge recurs every 5 min
+      # (extra PoW + first-hit latency per window). Applies web-ACL-wide to the
+      # Challenge-Estimator action. (A12a, 2026-06-17.)
+      ChallengeConfig:
+        ImmunityTimeProperty:
+          ImmunityTime: 1800
       VisibilityConfig:
         SampledRequestsEnabled: true
         CloudWatchMetricsEnabled: true
