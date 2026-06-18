@@ -44,5 +44,13 @@ Injected a real session token into `localStorage['efw.logon.token']` (read-only;
 - **Favorites `/api/Favorites?site=` → cross-origin `preview-favorites.db101.org`**; **Organizations / `Account/UserInfo` → cross-origin `preview-logon.db101.org`**. Separate dists/hosts — NOT under the preview2 site WAF.
 - **Public (`_final`) collapses these to same-origin `/f2svc`, `/l2svc`** → on the public dist they ARE in-scope (no-cache via default + the auth-endpoint protection of the Turnstile plan).
 
+## Body-size — TWO limits, checked 2026-06-18 (partial). The binding one is 8 KB.
+1. **`SizeRestrictions_BODY` (CommonRuleSet, ENFORCING in Block) BLOCKS any POST body > 8 KB** → the real **false-positive risk**: a heavy-household `query.aspx` postback over 8 KB gets 403'd and the estimator breaks for that user. This is the A6 "FP watch."
+2. **Body-INSPECTION window** = 16 KB on CloudFront (beyond it, content is invisible to `_BODY` rules). Separate, higher, not the binding concern. (8 KB is the *regional* inspection default — earlier mis-stated as our limit.)
+
+**Measured:** estimator POST bodies **~3.8 KB max** (`query.aspx`, minimal walk to results); a heavy attempt stalled early at 2.6 KB. So the sessions walked are under 8 KB (safe). The auto-walker can't drive a *guaranteed-maximal* household (children/multi-job/scenario branches stall it), so **whether a maximal real session exceeds 8 KB is deferred to the owner's B1 walk** (read the largest `query.aspx` Request size in devtools). README noted CMS admin ViewState hit 44 KB, so a big household/many-scenario estimator session plausibly *could* exceed 8 KB.
+
+**If a legit heavy session exceeds 8 KB:** exclude/scope-down `SizeRestrictions_BODY` for `/planning/*` (managed-rule `RuleActionOverride` → Count, or a scope-down statement) — estimator postbacks are legitimately large, so this rule shouldn't gate them. (And if a postback ever tops 16 KB, separately raise the `AssociationConfig` body-inspection limit.) **This is a Count→Block gate: confirm max-household < 8 KB, or override `SizeRestrictions_BODY` on `/planning`, before relying on Block for heavy users.**
+
 ## TODOs
-1. **Max-household body-size check** (8KB `_BODY` window) — a maximal `query.aspx` postback (many household members/jobs) could exceed WAF's body-inspection window.
+1. ~~Max-household body-size check~~ — above; **B1 must confirm max household < 8 KB or we override `SizeRestrictions_BODY` on /planning** (FP gate for heavy users before Block).
