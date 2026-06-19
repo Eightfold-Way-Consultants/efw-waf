@@ -375,13 +375,15 @@ From the 2026-06-10 IIS-accuracy + test-plan reviews:
 ### Phase 3 — Public-site Canary (lowest-traffic alias) — **only after Phase 2 is clean**
 
 **✅ Pre-req DONE:** the issued ACM cert already covers `db101.org` + `*.db101.org` (and the other 4 zones) — no new cert needed.
-**Gate:** web-06 `s6.eightfoldway.com` 443 binding in place (Phase -1); Puppeteer/print hosts-pin verified on web-06; origin cert validity through the Count window.
+**Gate:** web-06 `s6.eightfoldway.com` 443 binding in place (Phase -1); Puppeteer/print hosts-pin verified on web-06; origin cert validity through the Count window; **estimator IP-pin fix (svn r8968 — XFF-last-token + IPv6-safe `_SameHost` + established-IP migration allow) deployed to web-06** (proven on preview2; gates public so a mobile↔wifi user isn't wedged and an IPv6 flip doesn't 500).
 
 - [ ] Deploy `efw-waf-edge-public` stack (`OriginDomainName=s6.eightfoldway.com`, `RateLimit=500`, `WafRuleAction=Count`, ACM cert ARN, canary-only `AlternateDomainNames` to start)
 - [ ] Pick lowest-traffic public-site alias (e.g. `ak.db101.org`) as canary — needs an explicit alias entry while the wildcards aren't claimed yet
 - [ ] Lower Route53 TTL to 60s
 - [ ] Migrate canary DNS to the stack's CloudFront `Outputs` domain
 - [ ] Smoke test: full estimator flow (login → run → save), static content, API endpoints
+- [ ] **Validate the estimator IP-pin on s6** with the deterministic harness — `bash skills/estimator-logs/scripts/origin-xff-probe.sh <canary-host> 52.8.7.0` (drives the origin with crafted XFF): confirm echo→302 reject, real-user→200, mobile-migration→200, IPv6→no-500, last-XFF-token honored. Run BEFORE the DNS cutover (tests the origin directly) so a deploy regression is caught pre-traffic.
+- [ ] After canary traffic: run the `foreign IP address rejected` sweep (estimator-logs skill recipe) against web-06 (`i-0c82adf476c7c5e32`) — confirm echoes (Safe-Links/scanners) are blocked and NO rich-session real-user false-positives. Remember the LastWriteTime trap: grep content, no mtime filter.
 - [ ] Monitor 2 hours; watch public-url-checker for the canary state
 
 ### Phase 4 — Public-site Full Migration
