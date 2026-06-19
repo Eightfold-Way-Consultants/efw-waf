@@ -1,0 +1,353 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  efw-waf diagnostics — Athena/Glue over the WAF + CloudFront S3 logs. Read-only metadata
+  (no data copied, no origin/runtime impact). Stand up at Phase -1 so WAF/CloudFront logs are
+  SQL-queryable during the preview2 soak and instantly during a cutover incident — not defined
+  under pressure. Deploy in us-east-1 (same region as the log bucket + CLOUDFRONT-scope WAF).
+  Tables for the public ACL / cf-public prefix are defined now but stay empty until Phase 3/4.
+
+Parameters:
+  ProjectionStartDate:
+    Type: String
+    Default: '2026/06/01'
+    Description: Earliest partition date (yyyy/MM/dd) for WAF-log partition projection.
+
+Resources:
+
+  GlueDatabase:
+    Type: AWS::Glue::Database
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      DatabaseInput:
+        Name: efw_waf_logs
+        Description: WAF + CloudFront access logs for the efw-waf rollout.
+
+  # ---------- WAF logs (JSON, partitioned by date via projection) ----------
+  # One table per WebACL. Schema mirrors the AWS WAF log JSON format.
+  WafPreview2Table:
+    Type: AWS::Glue::Table
+    DependsOn: GlueDatabase
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      DatabaseName: efw_waf_logs
+      TableInput:
+        Name: waf_preview2
+        Description: WAF logs for efw-preview2-web-acl.
+        TableType: EXTERNAL_TABLE
+        PartitionKeys:
+          - { Name: date, Type: string }
+        Parameters:
+          EXTERNAL: 'TRUE'
+          classification: json
+          'projection.enabled': 'true'
+          'projection.date.type': date
+          'projection.date.format': 'yyyy/MM/dd'
+          'projection.date.range': !Sub '${ProjectionStartDate},NOW'
+          'projection.date.interval': '1'
+          'projection.date.interval.unit': DAYS
+          'storage.location.template': !Sub 's3://aws-waf-logs-efw-${AWS::AccountId}/AWSLogs/${AWS::AccountId}/WAFLogs/cloudfront/efw-preview2-web-acl/${!date}'
+        StorageDescriptor:
+          Location: !Sub 's3://aws-waf-logs-efw-${AWS::AccountId}/AWSLogs/${AWS::AccountId}/WAFLogs/cloudfront/efw-preview2-web-acl/'
+          InputFormat: org.apache.hadoop.mapred.TextInputFormat
+          OutputFormat: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+          SerdeInfo:
+            SerializationLibrary: org.openx.data.jsonserde.JsonSerDe
+          Columns:
+            - { Name: timestamp, Type: bigint }
+            - { Name: formatversion, Type: int }
+            - { Name: webaclid, Type: string }
+            - { Name: terminatingruleid, Type: string }
+            - { Name: terminatingruletype, Type: string }
+            - { Name: action, Type: string }
+            - { Name: terminatingrulematchdetails, Type: 'array<struct<conditiontype:string,sensitivitylevel:string,location:string,matcheddata:array<string>>>' }
+            - { Name: httpsourcename, Type: string }
+            - { Name: httpsourceid, Type: string }
+            - { Name: rulegrouplist, Type: 'array<struct<rulegroupid:string,terminatingrule:struct<ruleid:string,action:string,rulematchdetails:array<struct<conditiontype:string,sensitivitylevel:string,location:string,matcheddata:array<string>>>>,nonterminatingmatchingrules:array<struct<ruleid:string,action:string,overriddenaction:string,rulematchdetails:array<struct<conditiontype:string,sensitivitylevel:string,location:string,matcheddata:array<string>>>>>,excludedrules:string>>' }
+            - { Name: ratebasedrulelist, Type: 'array<struct<ratebasedruleid:string,limitkey:string,maxrateallowed:int>>' }
+            - { Name: nonterminatingmatchingrules, Type: 'array<struct<ruleid:string,action:string,rulematchdetails:array<struct<conditiontype:string,sensitivitylevel:string,location:string,matcheddata:array<string>>>>>' }
+            - { Name: requestheadersinserted, Type: 'array<struct<name:string,value:string>>' }
+            - { Name: responsecodesent, Type: string }
+            - { Name: httprequest, Type: 'struct<clientip:string,country:string,headers:array<struct<name:string,value:string>>,uri:string,args:string,httpversion:string,httpmethod:string,requestid:string>' }
+            - { Name: labels, Type: 'array<struct<name:string>>' }
+            - { Name: captcharesponse, Type: 'struct<responsecode:string,solvetimestamp:bigint,failurereason:string>' }
+            - { Name: challengeresponse, Type: 'struct<responsecode:string,solvetimestamp:bigint,failurereason:string>' }
+
+  WafPublicTable:
+    Type: AWS::Glue::Table
+    DependsOn: GlueDatabase
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      DatabaseName: efw_waf_logs
+      TableInput:
+        Name: waf_public
+        Description: WAF logs for efw-public-web-acl (empty until Phase 3/4).
+        TableType: EXTERNAL_TABLE
+        PartitionKeys:
+          - { Name: date, Type: string }
+        Parameters:
+          EXTERNAL: 'TRUE'
+          classification: json
+          'projection.enabled': 'true'
+          'projection.date.type': date
+          'projection.date.format': 'yyyy/MM/dd'
+          'projection.date.range': !Sub '${ProjectionStartDate},NOW'
+          'projection.date.interval': '1'
+          'projection.date.interval.unit': DAYS
+          'storage.location.template': !Sub 's3://aws-waf-logs-efw-${AWS::AccountId}/AWSLogs/${AWS::AccountId}/WAFLogs/cloudfront/efw-public-web-acl/${!date}'
+        StorageDescriptor:
+          Location: !Sub 's3://aws-waf-logs-efw-${AWS::AccountId}/AWSLogs/${AWS::AccountId}/WAFLogs/cloudfront/efw-public-web-acl/'
+          InputFormat: org.apache.hadoop.mapred.TextInputFormat
+          OutputFormat: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+          SerdeInfo:
+            SerializationLibrary: org.openx.data.jsonserde.JsonSerDe
+          Columns:
+            - { Name: timestamp, Type: bigint }
+            - { Name: formatversion, Type: int }
+            - { Name: webaclid, Type: string }
+            - { Name: terminatingruleid, Type: string }
+            - { Name: terminatingruletype, Type: string }
+            - { Name: action, Type: string }
+            - { Name: terminatingrulematchdetails, Type: 'array<struct<conditiontype:string,sensitivitylevel:string,location:string,matcheddata:array<string>>>' }
+            - { Name: httpsourcename, Type: string }
+            - { Name: httpsourceid, Type: string }
+            - { Name: rulegrouplist, Type: 'array<struct<rulegroupid:string,terminatingrule:struct<ruleid:string,action:string,rulematchdetails:array<struct<conditiontype:string,sensitivitylevel:string,location:string,matcheddata:array<string>>>>,nonterminatingmatchingrules:array<struct<ruleid:string,action:string,overriddenaction:string,rulematchdetails:array<struct<conditiontype:string,sensitivitylevel:string,location:string,matcheddata:array<string>>>>>,excludedrules:string>>' }
+            - { Name: ratebasedrulelist, Type: 'array<struct<ratebasedruleid:string,limitkey:string,maxrateallowed:int>>' }
+            - { Name: nonterminatingmatchingrules, Type: 'array<struct<ruleid:string,action:string,rulematchdetails:array<struct<conditiontype:string,sensitivitylevel:string,location:string,matcheddata:array<string>>>>>' }
+            - { Name: requestheadersinserted, Type: 'array<struct<name:string,value:string>>' }
+            - { Name: responsecodesent, Type: string }
+            - { Name: httprequest, Type: 'struct<clientip:string,country:string,headers:array<struct<name:string,value:string>>,uri:string,args:string,httpversion:string,httpmethod:string,requestid:string>' }
+            - { Name: labels, Type: 'array<struct<name:string>>' }
+            - { Name: captcharesponse, Type: 'struct<responsecode:string,solvetimestamp:bigint,failurereason:string>' }
+            - { Name: challengeresponse, Type: 'struct<responsecode:string,solvetimestamp:bigint,failurereason:string>' }
+
+  # ---------- CloudFront access logs (tab-delimited W3C, flat prefix, 2 header lines) ----------
+  CfPreview2Table:
+    Type: AWS::Glue::Table
+    DependsOn: GlueDatabase
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      DatabaseName: efw_waf_logs
+      TableInput:
+        Name: cf_preview2
+        Description: CloudFront access logs under cf-preview2/.
+        TableType: EXTERNAL_TABLE
+        Parameters:
+          EXTERNAL: 'TRUE'
+          'skip.header.line.count': '2'
+        StorageDescriptor:
+          Location: !Sub 's3://aws-waf-logs-efw-${AWS::AccountId}/cf-preview2/'
+          InputFormat: org.apache.hadoop.mapred.TextInputFormat
+          OutputFormat: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+          SerdeInfo:
+            SerializationLibrary: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+            Parameters: { 'field.delim': "\t", 'serialization.format': "\t" }
+          Columns:
+            - { Name: date, Type: date }
+            - { Name: time, Type: string }
+            - { Name: x_edge_location, Type: string }
+            - { Name: sc_bytes, Type: bigint }
+            - { Name: c_ip, Type: string }
+            - { Name: cs_method, Type: string }
+            - { Name: cs_host, Type: string }
+            - { Name: cs_uri_stem, Type: string }
+            - { Name: sc_status, Type: int }
+            - { Name: cs_referer, Type: string }
+            - { Name: cs_user_agent, Type: string }
+            - { Name: cs_uri_query, Type: string }
+            - { Name: cs_cookie, Type: string }
+            - { Name: x_edge_result_type, Type: string }
+            - { Name: x_edge_request_id, Type: string }
+            - { Name: x_host_header, Type: string }
+            - { Name: cs_protocol, Type: string }
+            - { Name: cs_bytes, Type: bigint }
+            - { Name: time_taken, Type: float }
+            - { Name: x_forwarded_for, Type: string }
+            - { Name: ssl_protocol, Type: string }
+            - { Name: ssl_cipher, Type: string }
+            - { Name: x_edge_response_result_type, Type: string }
+            - { Name: cs_protocol_version, Type: string }
+            - { Name: fle_status, Type: string }
+            - { Name: fle_encrypted_fields, Type: int }
+            - { Name: c_port, Type: int }
+            - { Name: time_to_first_byte, Type: float }
+            - { Name: x_edge_detailed_result_type, Type: string }
+            - { Name: sc_content_type, Type: string }
+            - { Name: sc_content_len, Type: bigint }
+            - { Name: sc_range_start, Type: bigint }
+            - { Name: sc_range_end, Type: bigint }
+
+  CfPublicTable:
+    Type: AWS::Glue::Table
+    DependsOn: GlueDatabase
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      DatabaseName: efw_waf_logs
+      TableInput:
+        Name: cf_public
+        Description: CloudFront access logs under cf-public/ (empty until Phase 4).
+        TableType: EXTERNAL_TABLE
+        Parameters:
+          EXTERNAL: 'TRUE'
+          'skip.header.line.count': '2'
+        StorageDescriptor:
+          Location: !Sub 's3://aws-waf-logs-efw-${AWS::AccountId}/cf-public/'
+          InputFormat: org.apache.hadoop.mapred.TextInputFormat
+          OutputFormat: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+          SerdeInfo:
+            SerializationLibrary: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+            Parameters: { 'field.delim': "\t", 'serialization.format': "\t" }
+          Columns:
+            - { Name: date, Type: date }
+            - { Name: time, Type: string }
+            - { Name: x_edge_location, Type: string }
+            - { Name: sc_bytes, Type: bigint }
+            - { Name: c_ip, Type: string }
+            - { Name: cs_method, Type: string }
+            - { Name: cs_host, Type: string }
+            - { Name: cs_uri_stem, Type: string }
+            - { Name: sc_status, Type: int }
+            - { Name: cs_referer, Type: string }
+            - { Name: cs_user_agent, Type: string }
+            - { Name: cs_uri_query, Type: string }
+            - { Name: cs_cookie, Type: string }
+            - { Name: x_edge_result_type, Type: string }
+            - { Name: x_edge_request_id, Type: string }
+            - { Name: x_host_header, Type: string }
+            - { Name: cs_protocol, Type: string }
+            - { Name: cs_bytes, Type: bigint }
+            - { Name: time_taken, Type: float }
+            - { Name: x_forwarded_for, Type: string }
+            - { Name: ssl_protocol, Type: string }
+            - { Name: ssl_cipher, Type: string }
+            - { Name: x_edge_response_result_type, Type: string }
+            - { Name: cs_protocol_version, Type: string }
+            - { Name: fle_status, Type: string }
+            - { Name: fle_encrypted_fields, Type: int }
+            - { Name: c_port, Type: int }
+            - { Name: time_to_first_byte, Type: float }
+            - { Name: x_edge_detailed_result_type, Type: string }
+            - { Name: sc_content_type, Type: string }
+            - { Name: sc_content_len, Type: bigint }
+            - { Name: sc_range_start, Type: bigint }
+            - { Name: sc_range_end, Type: bigint }
+
+  # ---------- Athena workgroup (query-results location) ----------
+  AthenaWorkGroup:
+    Type: AWS::Athena::WorkGroup
+    Properties:
+      Name: efw-diagnostics
+      State: ENABLED
+      Description: efw-waf log diagnostics (WAF + CloudFront).
+      WorkGroupConfiguration:
+        EnforceWorkGroupConfiguration: true
+        PublishCloudWatchMetricsEnabled: false
+        ResultConfiguration:
+          OutputLocation: !Sub 's3://aws-waf-logs-efw-${AWS::AccountId}/athena-results/'
+
+  # ---------- Saved diagnostic queries (run via the efw-diagnostics workgroup) ----------
+  NQActionByRule:
+    Type: AWS::Athena::NamedQuery
+    DependsOn: WafPreview2Table
+    Properties:
+      Name: 'waf: action by rule (preview2, 7d)'
+      Database: efw_waf_logs
+      WorkGroup: !Ref AthenaWorkGroup
+      Description: What each terminating rule did (BLOCK/COUNT/CHALLENGE/ALLOW) over the last 7 days.
+      QueryString: |
+        SELECT action, terminatingruleid, count(*) AS hits,
+               count(DISTINCT httprequest.clientip) AS ips
+        FROM efw_waf_logs.waf_preview2
+        WHERE "date" >= date_format(current_date - interval '7' day, '%Y/%m/%d')
+        GROUP BY action, terminatingruleid
+        ORDER BY hits DESC;
+
+  NQBlockedDetail:
+    Type: AWS::Athena::NamedQuery
+    DependsOn: WafPreview2Table
+    Properties:
+      Name: 'waf: blocked requests detail (preview2, today)'
+      Database: efw_waf_logs
+      WorkGroup: !Ref AthenaWorkGroup
+      Description: Every BLOCKed request today with IP, rule, method, URI, UA.
+      QueryString: |
+        SELECT from_unixtime("timestamp"/1000) AS ts, httprequest.clientip AS ip,
+               terminatingruleid AS rule, httprequest.httpmethod AS method, httprequest.uri AS uri,
+               filter(httprequest.headers, h -> lower(h.name)='user-agent')[1].value AS ua
+        FROM efw_waf_logs.waf_preview2
+        WHERE "date" = date_format(current_date, '%Y/%m/%d') AND action = 'BLOCK'
+        ORDER BY ts DESC LIMIT 200;
+
+  NQCountModeTopLevel:
+    Type: AWS::Athena::NamedQuery
+    DependsOn: WafPreview2Table
+    Properties:
+      Name: 'waf: would-block per top-level Count rule (preview2, 7d)'
+      Database: efw_waf_logs
+      WorkGroup: !Ref AthenaWorkGroup
+      Description: Count-mode matches on top-level rules — what would have been blocked. The core Count->Block gate question.
+      QueryString: |
+        SELECT r.ruleid AS rule, count(*) AS hits,
+               count(DISTINCT httprequest.clientip) AS ips
+        FROM efw_waf_logs.waf_preview2
+        CROSS JOIN UNNEST(nonterminatingmatchingrules) AS t(r)
+        WHERE "date" >= date_format(current_date - interval '7' day, '%Y/%m/%d')
+        GROUP BY r.ruleid ORDER BY hits DESC;
+
+  NQCountModeManaged:
+    Type: AWS::Athena::NamedQuery
+    DependsOn: WafPreview2Table
+    Properties:
+      Name: 'waf: would-block per managed sub-rule (preview2, 7d)'
+      Database: efw_waf_logs
+      WorkGroup: !Ref AthenaWorkGroup
+      Description: Count-mode matches inside managed groups (CommonRuleSet etc.) with an example URI — catches FP-prone sub-rules (SizeRestrictions_BODY, SQLi_BODY) before a Block flip.
+      QueryString: |
+        SELECT g.rulegroupid, r.ruleid AS subrule, count(*) AS hits,
+               count(DISTINCT httprequest.clientip) AS ips,
+               arbitrary(httprequest.uri) AS example_uri
+        FROM efw_waf_logs.waf_preview2
+        CROSS JOIN UNNEST(rulegrouplist) AS t(g)
+        CROSS JOIN UNNEST(g.nonterminatingmatchingrules) AS t2(r)
+        WHERE "date" >= date_format(current_date - interval '7' day, '%Y/%m/%d')
+        GROUP BY g.rulegroupid, r.ruleid ORDER BY hits DESC;
+
+  NQRateNearMiss:
+    Type: AWS::Athena::NamedQuery
+    DependsOn: WafPreview2Table
+    Properties:
+      Name: 'waf: rate-limit near-miss on /planning (preview2, 7d)'
+      Database: efw_waf_logs
+      WorkGroup: !Ref AthenaWorkGroup
+      Description: Per-IP 5-minute request buckets on /planning/ — legit IPs approaching the rate limit are future false positives.
+      QueryString: |
+        SELECT httprequest.clientip AS ip,
+               date_trunc('minute', from_unixtime("timestamp"/1000))
+                 - interval '1' minute * (minute(from_unixtime("timestamp"/1000)) % 5) AS bucket5,
+               count(*) AS reqs
+        FROM efw_waf_logs.waf_preview2
+        WHERE "date" >= date_format(current_date - interval '7' day, '%Y/%m/%d')
+          AND httprequest.uri LIKE '%/planning/%'
+        GROUP BY 1,2 HAVING count(*) > 150 ORDER BY reqs DESC LIMIT 100;
+
+  NQCfCacheRatio:
+    Type: AWS::Athena::NamedQuery
+    DependsOn: CfPreview2Table
+    Properties:
+      Name: 'cf: cache result breakdown by host (preview2, today)'
+      Database: efw_waf_logs
+      WorkGroup: !Ref AthenaWorkGroup
+      Description: CloudFront x-edge-result-type per viewer host — confirms static caches (Hit) and dynamic stays uncached (Miss).
+      QueryString: |
+        SELECT x_host_header AS host, x_edge_result_type AS result, count(*) AS reqs
+        FROM efw_waf_logs.cf_preview2
+        WHERE "date" = current_date
+        GROUP BY x_host_header, x_edge_result_type
+        ORDER BY host, reqs DESC;
+
+Outputs:
+  GlueDatabaseName:
+    Value: !Ref GlueDatabase
+    Description: Glue/Athena database name.
+  AthenaWorkGroupName:
+    Value: !Ref AthenaWorkGroup
+    Description: Run saved queries under this workgroup (results land in s3://.../athena-results/).
