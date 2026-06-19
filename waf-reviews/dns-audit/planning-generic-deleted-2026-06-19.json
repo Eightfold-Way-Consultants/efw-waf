@@ -1,0 +1,22 @@
+{
+  "deleted": "2026-06-19",
+  "what": "planning-generic.eightfoldway.com CNAME + web-04 IIS :443 binding",
+  "reason": "Unused public surface on a WebDeploy scaffold. planning-generic is published BY SITE NAME (DeployIisAppPath=planning-generic) via WMSVC to MSDeployServiceURL=preview2-site.eightfoldway.com (bp101-site.pubxml) / web-6b.eightfoldway.com (public-site.pubxml) on :8172 — NOT via this hostname or the :443 binding. The wwwroot C:\\inetpub\\wwwroot\\planning-generic stays (read at runtime by GenericScreenPath.cs / GenericPath.cs s_strGenericScreenRoot); the site object stays (Stopped + serverAutoStart=false) so WebDeploy still targets it by name. Only the unused public CNAME + :443 binding were removed.",
+  "dns": {
+    "zoneId": "Z1KW10MTO4TFYM",
+    "zone": "eightfoldway.com",
+    "record": {
+      "Name": "planning-generic.eightfoldway.com.",
+      "Type": "CNAME",
+      "TTL": 300,
+      "ResourceRecords": [{ "Value": "edit-site.eightfoldway.com" }]
+    },
+    "restore": "aws route53 change-resource-record-sets --hosted-zone-id Z1KW10MTO4TFYM --change-batch '{\"Changes\":[{\"Action\":\"CREATE\",\"ResourceRecordSet\":{\"Name\":\"planning-generic.eightfoldway.com.\",\"Type\":\"CNAME\",\"TTL\":300,\"ResourceRecords\":[{\"Value\":\"edit-site.eightfoldway.com\"}]}}]}'"
+  },
+  "iis_binding_web04": {
+    "removed": "*:443:planning-generic.eightfoldway.com (https, sslFlags=1 SNI)",
+    "site": "planning-generic (web-04 / i-0272763b46610ac1b), left Stopped + serverAutoStart=false, wwwroot retained",
+    "restore": "Import-Module WebAdministration; New-WebBinding -Name 'planning-generic' -Protocol https -Port 443 -HostHeader 'planning-generic.eightfoldway.com' -SslFlags 1"
+  },
+  "web06_twin": "planning-generic site EXISTS on web-06 (i-0c82adf476c7c5e32), already Stopped, binding *:80:planning-generic (bare host). Left as-is — removing its binding would recycle public pools (InProc session loss); defer to a low-traffic window if desired (it is already Stopped, so not serving)."
+}
