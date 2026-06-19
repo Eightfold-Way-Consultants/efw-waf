@@ -272,7 +272,7 @@ Resources:
       QueryString: |
         SELECT from_unixtime("timestamp"/1000) AS ts, httprequest.clientip AS ip,
                terminatingruleid AS rule, httprequest.httpmethod AS method, httprequest.uri AS uri,
-               filter(httprequest.headers, h -> lower(h.name)='user-agent')[1].value AS ua
+               element_at(filter(httprequest.headers, h -> lower(h.name)='user-agent'), 1).value AS ua
         FROM efw_waf_logs.waf_preview2
         WHERE "date" = date_format(current_date, '%Y/%m/%d') AND action = 'BLOCK'
         ORDER BY ts DESC LIMIT 200;
