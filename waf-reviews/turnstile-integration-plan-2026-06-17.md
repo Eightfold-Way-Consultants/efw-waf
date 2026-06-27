@@ -94,8 +94,91 @@ Server-requires-token-before-clients-send = outage. Sequence:
 - **Hub CSP:** none today; give the operator the `challenges.cloudflare.com` directive as a just-in-case. Removing our reCAPTCHA from feedback does not touch the Hub's own reCAPTCHA (separate).
 - **Hostname allowlist completeness:** confirmed against 260616 (one day, web-06). Widen the log window before locking the sitekey, so a dormant embedder isn't missed.
 
+## Key created (2026-06-22)
+
+- CF account `73aee1d5a522fc26fc3c29ef05f54be7`; widget `efw-logon-prod`, mode `managed`, region world.
+- **Sitekey (public):** `0x4AAAAAADpQvSZcQHVTZJYj` — goes in client render.
+- **Secret:** AWS Secrets Manager `turnstile/prod` (us-west-1, acct 874922373146). CF API token in `cloudflare/api`.
+- Domains: db101.org, disabilityhubmn.org, eightfoldway.com, hb101.org, vets101.org.
+- preview2 reuses this key/secret (one-key decision).
+
+## Decisions (settled 2026-06-22)
+
+- **Sitekey: ONE prod key, apex allowlist.** Allowlist `db101.org`, `hb101.org`, `eightfoldway.com`, `vets101.org`, `disabilityhubmn.org`. NOT `housingbenefits101.org` — it's a 301 redirect distribution (lands on hb101 before any form renders), so no widget ever executes there; siteverify `hostname` is always hb101/db101. Domain entries cover subdomains, so all `preview-*` and `preview2-*` hosts (both are subdomains of the prod zones) ride along automatically — no separate preview key. No blast-radius loss (preview = our own subdomains). Prod-vs-preview separation is recovered downstream from the `hostname` field, not from a sitekey split (see Analytics layer).
+- **Widget mode: managed + `appearance: 'interaction-only'`.** CF escalates to an interactive challenge only when a session looks suspicious — the gate the proven headless-browser attacker actually has to pass — while staying invisible/low-friction for the disability-benefits audience.
+- **Login (`/l2svc/Token`): NOT gated this phase.** Defer to ATP or a later Turnstile pass. Cross-origin hb-rts SPA consumes `/Token` directly and would break without also shipping the widget; the current campaign hits Register/ForgotPassword (account creation + email-bomb), not login; login is already per-IP rate-limited.
+
+## Analytics layer (logon server) — design & build
+
+**Decision: do NOT rely on log-scraping alone for Turnstile measurement.** Phase A's siteverify logs (success/hostname/action) are necessary but insufficient — log-grep is fragile (mtime lag, rotation, unstructured), can't drive alarms, and won't survive as the ongoing operational view. Design and build a first-class analytics layer in/around the logon server.
+
+Requirements:
+- **Structured emission, not log lines.** Every verify writes a typed record: timestamp, endpoint/action, `hostname`, `success`, CF error-codes, token-present?, outcome join (200/409/SES-fired), client IP / XFF. Queryable surface (Athena table over structured S3, or a metrics store) — not a `grep` target.
+- **Prod-vs-preview separation downstream.** Recovered from `hostname` (`preview%` filter) + the per-env `action` suffix (`register` vs `register-preview`). This is *why* one sitekey is sufficient — the analytics layer owns the split, the sitekey does not.
+- **Solve-rate + abuse dashboard.** Real solve rate, challenge-escalation rate, failure clustering by IP/ASN/hostname, SES-fire rate per accepted token — to confirm the 200→409→409 burst is broken and to watch for regression.
+- **Alarmable.** Drive CloudWatch alarms (e.g. solve-rate collapse = integration/CSP breakage; failure spike = renewed campaign), unlike the Count-mode alarm-silence gap noted in `test-diagnostics-plan`.
+- Pairs with the broader diagnostics IaC (`cloudformation/diagnostics.yaml`, Athena/Glue over WAF+CloudFront logs) — extend that pattern to logon-server auth events rather than standing up a separate silo.
+
+## Analytics emission — decided 2026-06-22
+
+- **Phase A operational record = CloudWatch metrics** via `PutMetricData` (AWSSDK.CloudWatch already referenced in Logon2.2, zero new deps). Low-cardinality dims `Endpoint` / `Result`(pass|fail|absent) / `Env` → solve-rate + failure-spike alarms immediately. This is the "not log-grep" answer.
+- **Forensics = structured JSON line** (hostname, action, token-present, CF error-codes, outcome, IP/XFF) emitted alongside — carries the per-host detail metrics can't hold.
+- **SKIP SQL** — auth DB is wrong home: write-load spikes during the exact attack window, not natively alarmable, retention/PII next to credentials. `LogonEvents` table stays for durable account events, not bot-scan telemetry.
+- **Durable forensic sink still open** — ship the JSON line to Athena (extend `diagnostics.yaml` Glue pattern) vs add AWSSDK.CloudWatchLogs + PutLogEvents to a dedicated log group. Decided in the broader analytics-layer task; does NOT block Phase A (metrics measure meanwhile).
+
+## Per-site client reporting (efw-analytics) — design 2026-06-22
+
+Paying clients need **per-site** reports, not fleet. The `efw-analytics` repo's per-site pattern (`uptime-site-report.js`) maps `property → check_url` (`PROPERTY_TO_URL`) then filters `WHERE check_url = …`; the hostname join key is stored **per-row** in BigQuery.
+
+**Turnstile analog:** siteverify returns a per-row `hostname` = the document the widget ran on. That is the per-site key. Per-site report = `WHERE hostname IN (<client's host family>)`.
+
+**This decides the durable sink = Athena.** Per-site needs per-row hostname. Low-cardinality CloudWatch metrics (Endpoint/Result only) cannot do per-site; adding `Hostname` as a metric dimension is high-cardinality $$ and still lacks error-code/IP detail. Athena over the forensic JSON line (hostname a typed column) gives per-site + error-codes + IP and reuses `cloudformation/diagnostics.yaml`. Metrics demote to ops-alarms/fleet only. **Prerequisite:** per-site reports produce no data until the forensic `TURNSTILE` line is shipped to S3 + a Glue table exists — sequence after the metrics/Report-A work.
+
+**Attribution catch: `hostname` = where the widget ran, NOT which client owns it.**
+- **Hub embed** renders the widget in disabilityhubmn.org's own page → `hostname = disabilityhubmn.org`, not mn.db101.org. **Resolved (2026-06-22): Hub => db101-mn**, consistent with how the org already attributes the Hub elsewhere (e.g. the Vault activity report). Folded into `mn.db101.org`'s public family; keep a `viaHub` label in the report for transparency, but it counts toward MN.
+- **Edit-site hosts** — editors log into the CMS at `db101-{state}[-es].eightfoldway.com` (and `hb101-mn.eightfoldway.com`); the logon dialog MUST work there, so the widget runs and reports `hostname = db101-ca.eightfoldway.com`. These are **staff/editing** context → `internal` family (excluded from the paid client report, kept for QA), same treatment as preview/preview2. eightfoldway.com is therefore NOT marketing-only.
+- **preview/preview2** hosts are internal rehearsal — excluded from the client-facing report, kept queryable for QA.
+- **Non-client edit hosts** (no paying site behind them) — `db101-master.eightfoldway.com` (national/master template), `db101-eco.eightfoldway.com` (ECONorthwest engine context), `db101-nv[-es].eightfoldway.com` (Nevada, not published) — excluded entirely; no client report.
+- **vets101.org** — moribund / not supported (2026-06-22). Stays in the sitekey allowlist (widget won't break if hit) but gets **no per-site report**.
+- **`-es` siblings** (az-es, ca-es, co-es, il-es, nj-es) are the same client — folded into the state's public family (with a language split available in the report).
+
+So the map is **site → host *family* (1:many)**, richer than uptime's 1:1.
+
+### Draft site → host-family map (Turnstile equivalent of PROPERTY_TO_URL)
+
+Bare hostnames as siteverify returns them. `public` = rolls into the paid report; `internal` = preview/edit, QA-only, excluded; `viaHub` = third-party embedder attributed as a separate line.
+
+**Derivation rule for `internal`** (so the arrays below stay short): each state's `internal` family = `preview-{state}[-es].db101.org` + `preview2-{state}[-es].db101.org` + **`db101-{state}[-es].eightfoldway.com`** (the edit-site host editors log into). `hb101-mn.eightfoldway.com` for the hb101 family. Excluded non-client edit hosts: `db101-master`, `db101-eco`, `db101-nv[-es]`.
+
+```js
+const SITE_HOST_FAMILY = {
+  // internal arrays show the eightfoldway edit host explicitly for mn/ca as worked examples; the rest follow the derivation rule above.
+  'mn.db101.org': { public:['mn.db101.org','disabilityhubmn.org'], internal:['preview-mn.db101.org','preview2-mn.db101.org','db101-mn.eightfoldway.com'], viaHub:['disabilityhubmn.org'] },  // Hub => db101-mn (matches Vault activity report); viaHub kept as a report label, counts toward MN
+  'az.db101.org': { public:['az.db101.org','az-es.db101.org'], internal:['preview-az.db101.org','preview-az-es.db101.org','preview2-az.db101.org','preview2-az-es.db101.org'] },
+  'ca.db101.org': { public:['ca.db101.org','ca-es.db101.org'], internal:['preview-ca.db101.org','preview-ca-es.db101.org','preview2-ca.db101.org','preview2-ca-es.db101.org','db101-ca.eightfoldway.com','db101-ca-es.eightfoldway.com'] },
+  'co.db101.org': { public:['co.db101.org','co-es.db101.org'], internal:['preview-co.db101.org','preview-co-es.db101.org','preview2-co.db101.org','preview2-co-es.db101.org'] },  // CO not actively maintained (per estimator census) — keep mapped, may be zero-traffic
+  'il.db101.org': { public:['il.db101.org','il-es.db101.org'], internal:['preview-il.db101.org','preview-il-es.db101.org','preview2-il.db101.org','preview2-il-es.db101.org'] },
+  'nj.db101.org': { public:['nj.db101.org','nj-es.db101.org'], internal:['preview-nj.db101.org','preview-nj-es.db101.org','preview2-nj.db101.org','preview2-nj-es.db101.org'] },
+  'ak.db101.org': { public:['ak.db101.org'], internal:['preview-ak.db101.org','preview2-ak.db101.org'] },
+  'ga.db101.org': { public:['ga.db101.org'], internal:['preview-ga.db101.org','preview2-ga.db101.org'] },
+  'ia.db101.org': { public:['ia.db101.org'], internal:['preview-ia.db101.org','preview2-ia.db101.org'] },
+  'ky.db101.org': { public:['ky.db101.org'], internal:['preview-ky.db101.org','preview2-ky.db101.org'] },
+  'mi.db101.org': { public:['mi.db101.org'], internal:['preview-mi.db101.org','preview2-mi.db101.org'] },
+  'mo.db101.org': { public:['mo.db101.org'], internal:['preview-mo.db101.org','preview2-mo.db101.org'] },
+  'nc.db101.org': { public:['nc.db101.org'], internal:['preview-nc.db101.org','preview2-nc.db101.org'] },
+  'oh.db101.org': { public:['oh.db101.org'], internal:['preview-oh.db101.org','preview2-oh.db101.org'] },
+  'www.db101.org':{ public:['www.db101.org','db101.org'], internal:['preview-www.db101.org'] },
+  'mn.hb101.org': { public:['mn.hb101.org'], internal:['preview-mn.hb101.org','preview2-mn.hb101.org'] },  // hb101 family grows as states launch
+};
+```
+
+Open on the map:
+- ~~Hub attribution~~ — RESOLVED: Hub => db101-mn (folded into MN public, `viaHub` label retained), matching the Vault activity report.
+- ~~eightfoldway.com / vets101.org marketing-only?~~ — RESOLVED: `eightfoldway.com` = edit-site hosts (`db101-{state}.eightfoldway.com`), mapped to each state's `internal` family (must work, excluded from paid report). `vets101.org` = moribund/unsupported, no report.
+- `-es`: folded into the state public family with an in-report language split (recommended) vs separate sites.
+- Validate every host against real `hostname` values once Phase A logging runs (widen the window so a dormant embedder isn't missed) before locking the map.
+
 ## Open decisions
 
-- One sitekey (all hosts incl. preview) vs separate prod/preview sitekeys.
-- Turnstile widget mode: managed vs non-interactive vs invisible (lean: managed/interaction-only).
-- Whether to also gate `/l2svc/Token` later via ATP rather than Turnstile (cross-origin SPA constraint).
+- Durable forensic sink for the structured line — **leaning Athena** (per-site reporting forces it; reuses `diagnostics.yaml`). Confirm + build the S3 ship + Glue table.
+- Map opens above (Hub line, eightfoldway/vets101 inclusion, -es split).

@@ -9,10 +9,7 @@
         "cloudfront:GetInvalidation",
         "cloudfront:ListInvalidations"
       ],
-      "Resource": [
-        "arn:aws:cloudfront::874922373146:distribution/PREVIEW2_DIST_ID",
-        "arn:aws:cloudfront::874922373146:distribution/PUBLIC_DIST_ID"
-      ]
+      "Resource": "arn:aws:cloudfront::874922373146:distribution/*"
     }
   ]
 }
