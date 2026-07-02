@@ -24,7 +24,7 @@ The **edit-cms tier is deliberately NOT fronted** (Decision B): NTLM breaks behi
 | `OriginDomainName` | `s4.eightfoldway.com` | `s6.eightfoldway.com` (FQDN only — IPs rejected; must never be DNS'd at CloudFront) |
 | `AlternateDomainNames` | explicit `preview2-*` list | wildcards + apexes (`*.db101.org`, apexes, `*.hb101.org`, `*.vets101.org`, `www`/apex eightfoldway, explicit `turtles`/`preview`) |
 | `WafRuleAction` | `Count` → `Block` | `Count` → `Block` |
-| `RateLimit` / `PlanningRateLimit` | `500` / `300` | `500` / `300` |
+| `RateLimit` / `PlanningRateLimit` | `1000` / `1000` | `1000` / `1000` |
 
 ## Deploy order
 1. `aws cloudformation deploy --stack-name efw-waf-base --template-file cloudformation/base.yaml --capabilities CAPABILITY_NAMED_IAM --region us-east-1` → **then confirm the SNS subscription email** (else alarms are silent).

@@ -59,23 +59,25 @@ Parameters:
       edit names (direct tier).
   RateLimit:
     Type: Number
-    Default: 500
+    Default: 1000
     Description: >
-      Site-wide requests/IP/5-min flood backstop. 500 for both tiers: real-traffic data
-      (2026-06-08) shows legit gov-agency NATs peaking ~185/5min, so a low cap false-positives
-      them — this is a flood backstop, NOT a bot tool (IpReputation + Challenge do that).
+      Site-wide requests/IP/5-min flood backstop. RAISED 500->1000 (2026-07-02): the rule now
+      EXCLUDES static assets (see rule 11 ScopeDownStatement) so it counts dynamic load only —
+      WAF-edge data showed a busy tester at 524 total/5min was ~90% asset fetches (66 dynamic).
+      1000 dynamic/IP = ~40x a single human (p99 ~47 total, ~59 dynamic on real-traffic 2026-07-02)
+      and covers a normal/slow instructor-paced ~40-person Estimator lab (~800). Fast/synchronized
+      40-labs (~2600) → ALLOWLIST the training NAT (rule 0) that day. Flood backstop, NOT a bot tool.
   PlanningRateLimit:
     Type: Number
-    Default: 300
+    Default: 1000
     Description: >
-      Per-IP request cap (5-min) scoped to /planning/* — estimator backstop
-      behind the Challenge. Generous (Challenge does the heavy lifting); tune in Count.
-      A12a measurement (2026-06-17, preview2-il): ONE full estimator walk to results =
-      57 /planning requests (every one Challenge-COUNTed). So 300 = only ~5 concurrent
-      full walks/IP, and real gov-NAT peaks were ~185/5min (~3 walks) => ~1.6x margin over
-      observed reality. Margin is tighter than it looks: prefer RAISING this (or trusting
-      Challenge per-browser to carry load) over tightening — a shared gov NAT is exactly
-      where per-IP limiting hurts real users and per-browser Challenge does not.
+      Per-IP request cap (5-min) scoped to /planning/* — estimator backstop behind the Challenge.
+      RAISED 300->1000 (2026-07-02): this is the BINDING limit for an Estimator training lab (all
+      trainees hit /planning/; raising only site-wide RateLimit does not help). A12a (2026-06-17):
+      one full estimator walk = 57 /planning requests; real single-user dynamic p99 ~59 (2026-07-02).
+      1000 covers a normal/slow ~40-person lab; fast/synchronized 40-labs (~2600) → ALLOWLIST the
+      training NAT (rule 0). Prefer RAISING (or trusting per-browser Challenge) over tightening —
+      a shared gov/agency NAT is exactly where per-IP limiting hurts real users and Challenge does not.
   WafRuleAction:
     Type: String
     AllowedValues: [Count, Block]
@@ -283,7 +285,11 @@ Resources:
                   PositionalConstraint: STARTS_WITH
                   SearchString: /planning/
                   TextTransformations: [{ Priority: 0, Type: LOWERCASE }]
-        # 11 — site-wide per-IP rate limit (general probe / flood backstop, all paths)
+        # 11 — site-wide per-IP rate limit (general probe / flood backstop, dynamic paths).
+        #   ScopeDownStatement EXCLUDES static assets (2026-07-02): WAF counts every edge request
+        #   incl. cached assets, so asset-heavy pages inflated the count ~10x and false-403'd busy
+        #   testers/labs. Now counts NOT(asset-ext-regex OR common asset dirs) = dynamic load only.
+        #   Assets vary by site but share these patterns; ext-regex is the site-agnostic workhorse.
         - Name: RateLimit
           Priority: 11
           Action: !If [IsBlock, { Block: {} }, { Count: {} }]
@@ -292,6 +298,35 @@ Resources:
             RateBasedStatement:
               Limit: !Ref RateLimit
               AggregateKeyType: IP
+              ScopeDownStatement:
+                NotStatement:
+                  Statement:
+                    OrStatement:
+                      Statements:
+                        - RegexMatchStatement:
+                            FieldToMatch: { UriPath: {} }
+                            RegexString: '\.(css|js|mjs|map|png|jpe?g|gif|svg|ico|webp|bmp|woff2?|ttf|eot|otf)$'
+                            TextTransformations: [{ Priority: 0, Type: LOWERCASE }]
+                        - ByteMatchStatement:
+                            FieldToMatch: { UriPath: {} }
+                            PositionalConstraint: STARTS_WITH
+                            SearchString: /master_images/
+                            TextTransformations: [{ Priority: 0, Type: LOWERCASE }]
+                        - ByteMatchStatement:
+                            FieldToMatch: { UriPath: {} }
+                            PositionalConstraint: STARTS_WITH
+                            SearchString: /images/
+                            TextTransformations: [{ Priority: 0, Type: LOWERCASE }]
+                        - ByteMatchStatement:
+                            FieldToMatch: { UriPath: {} }
+                            PositionalConstraint: STARTS_WITH
+                            SearchString: /dist/
+                            TextTransformations: [{ Priority: 0, Type: LOWERCASE }]
+                        - ByteMatchStatement:
+                            FieldToMatch: { UriPath: {} }
+                            PositionalConstraint: STARTS_WITH
+                            SearchString: /jss/
+                            TextTransformations: [{ Priority: 0, Type: LOWERCASE }]
         # 12 — Bot Control (optional, paid). Complements the Challenge for browser-emulating bots.
         - !If
           - UseBotControl
