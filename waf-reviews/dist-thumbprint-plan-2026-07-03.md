@@ -148,6 +148,43 @@ Notes:
 - Per-file decision (pin+hash vs vendor vs delete) at implementation time; vendoring preferred
   where licensing allows (jQuery: MIT — allows).
 
+## Related workstream (separate): CSP inline-script lockdown — hashes + nonces
+
+Goal: `script-src` **without `unsafe-inline`** (the CSP hardening that actually moves the
+scorecard). Three-legged stool: SRI on external scripts (this plan) + CSP **hashes** for static
+inline + CSP **nonces** for dynamic inline. Key architectural split:
+
+- **Exported static fleet (.htm behind CloudFront): nonces are MEANINGLESS — do not use.**
+  A nonce baked at export is identical for every visitor and cached at the edge; a known nonce
+  = `unsafe-inline` with extra steps. The static-page tool is the **CSP hash**
+  (`'sha256-…'` per inline block). Inline blocks come from templates → hash set should be small;
+  the export/rewrite pipeline is positioned to collect them into a manifest that efw-csp renders
+  into the header. Feasibility gate: inventory says whether per-page arbitrary inline scripts
+  exist (they'd blow up the hash set).
+- **Dynamic .aspx (estimator /planning, Logon, admin, pdfreport): nonces, correctly.**
+  Per-request inline content (ClientScript.RegisterScript / RegisterStartupScript) can't be
+  hashed → nonce is forced. Must also cover WebForms' OWN inline emissions (__doPostBack, event
+  validation). VERIFY: .NET Framework 4.8.x servicing reportedly added WebForms CSP-nonce
+  support — confirm exact API/patch level on our boxes before designing; else custom Page base +
+  render filter. **Caching trap:** nonce-bearing responses must be Cache-Control private/no-store
+  and confirmed uncached at CloudFront, or the nonce freezes (= case one).
+- **Static (publication-lifetime) nonce — considered, rejected as primary, kept as fallback.**
+  "Better than nothing" = true but thin: it blocks untargeted/scattergun payloads, but any
+  targeted attacker reads the nonce from view-source (valid for the whole publication, all
+  visitors, all pages) — it fails exactly when it matters. Decisive: deploying it requires
+  touching every inline script at export (stamp `nonce=`), which is the SAME machinery as
+  hashing those blocks (compute sha256 → CSP source) — equal cost, and hashes are content-bound
+  (view-source gives the attacker nothing). Hash wins at the same price. FALLBACK: if Report-Only
+  inventory shows a huge/churning inline set (header-size blowout — ~50B/hash vs IIS/CloudFront
+  header limits), fall back to the static nonce accepting the untargeted-only protection.
+- **Rollout = house pattern:** `Content-Security-Policy-Report-Only` with the candidate policy
+  first; violation reports ARE the inline-script inventory. Then enforce. (Observe→Enforce.)
+- **Known blocker to size early:** inline event handlers (`onclick=` — WebForms + legacy content)
+  are not nonce-coverable; need `'unsafe-hashes'` or refactor. Report-Only phase sizes this free.
+
+Owner repo: efw-csp (header source of truth); export-side hash collection would land in this
+plan's pipeline as a later increment.
+
 ## Documentation updates (ship with the change, same commit set)
 
 **`c:\git\f8-system-documentation`** (primary):
