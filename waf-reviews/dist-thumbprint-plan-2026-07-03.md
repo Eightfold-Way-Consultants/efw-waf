@@ -129,6 +129,25 @@ Every page lands on a rung; every rung serves.
 - SRI lands as a bonus on all rewritten refs.
 - Dual copy fleet-wide (disk is cheap); only db101-mn is contractual (Hub).
 
+## Extension: SRI for third-party statics (scorecard-driven, separate phase)
+
+SecurityScorecard flags missing SRI on external scripts. Policy splits on **mutability**, not
+ownership (inventoried 2026-07-03):
+
+| Class | Examples found | SRI? | Action |
+|---|---|---|---|
+| Version-pinned, immutable | jQuery 1.10.x / jQuery-UI 1.10.x from code.jquery.com + ajax.googleapis.com — incl. **public** estimator pages (bp101-sites/planning-*) | **Yes** | Hash is a constant → bake `integrity=` + `crossorigin` into scaffolding source directly (publisher-supplied hashes; **no gulp/manifest needed**). Better: **vendor into /dist** → automatic thumbprint+SRI via this plan's pipeline + removes third-party availability dependency. |
+| Rolling/evergreen | Turnstile `api.js`, Facebook SDK, JW Player player scripts, gtag-style loaders | **Never** | Provider redeploys freely → hash mismatch = browser refuses execution = their deploy breaks us. **Worst case: SRI'd Turnstile api.js under Enforce = fleet-wide login lockout on a Cloudflare deploy.** Documented exception; residual scorecard ding accepted or eliminated by removal. |
+| Dead refs | Twitter `count.js` (API long gone), `jquery-ui.googlecode.com` (host shut down) | n/a | Delete, don't hash. |
+
+Notes:
+- Gulp manifest stays scoped to **our** /dist assets; third-party mutability never enters the
+  sentinel region.
+- Scorecard sees only public pages → prioritize bp101-sites/planning-* + exported site pages;
+  EditSites refs are not exposed.
+- Per-file decision (pin+hash vs vendor vs delete) at implementation time; vendoring preferred
+  where licensing allows (jQuery: MIT — allows).
+
 ## Documentation updates (ship with the change, same commit set)
 
 **`c:\git\f8-system-documentation`** (primary):
