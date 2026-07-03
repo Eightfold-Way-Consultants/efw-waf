@@ -129,6 +129,36 @@ Every page lands on a rung; every rung serves.
 - SRI lands as a bonus on all rewritten refs.
 - Dual copy fleet-wide (disk is cheap); only db101-mn is contractual (Hub).
 
+## Documentation updates (ship with the change, same commit set)
+
+**`c:\git\f8-system-documentation`** (primary):
+- **`2.d.f8 Bundle.md`** — new gulp manifest task: `dist/<bundle>/manifest.json` format
+  (thumbprint derivation = 12-hex sha256 over sorted per-file sha384s; determinism guarantee),
+  and that the manifest is a publish-time contract consumed by PubBot — not served content.
+- **`3.Editing and Publishing Process.md`** — the big one: `pb:upload-dist` job (dual copy,
+  rewrite, prune, write ordering), the tier matrix (edit=literal / preview2=rewritten /
+  preview+final=inherit via upload-site), keep-3 pruning + the additive-copy rationale, and the
+  three quick-turnaround cases incl. the virgin single-doc export fixup (tier-local manifest).
+- **`2.a.f8 Template Structure.md`** — the `beginHead_01` landmark contract:
+  `<!--efw:dist-->…<!--/efw:dist-->` sentinels, what rewrites them, and an explicit **do not
+  "clean up" these comments** warning (they look like cruft in view-source; removing them
+  silently degrades that page to pattern-fallback/literal).
+- **`How To/Publish a Public Website.md`** — operator verification: how to confirm the
+  thumbprint landed (view-source shows `/dist/<tp>/…` + `integrity=`), how to read
+  `dist/manifest.json` on a tier, stale-bundle troubleshooting decision tree (literal vs
+  thumbprinted ref = which cache story applies).
+- **`How To/Clone an Estimator.md`** — one line: estimator `twm.aspx` `/dist` refs are literal
+  **by design** (VS-deployed, outside PubBot rewrite); do not hand-thumbprint them.
+
+**Other repos:**
+- **`f8-visualstudio-templates`** — beginHead twins get the landmarks (standing patch-the-template
+  rule); note the sentinel contract in the template comment itself.
+- **`efw.bundle`** — gulpfile header comment on the manifest task (what consumes it, determinism).
+- **`PubBotWinService/PubBotJobs.xml`** — inline XML comment at the `pb:upload-dist` swap
+  explaining why preview2 lines differ from staging lines.
+- **`efw-waf/waf-reviews/turnstile-integration-plan-2026-06-17.md`** — cross-ref: #12 design
+  landed here; Enforce gate satisfied by this mechanism.
+
 ## Implementation order
 1. gulp manifest task (inert everywhere).
 2. beginHead_01 landmarks per family + template twins (inert — comments).
