@@ -1,11 +1,43 @@
 # /dist Thumbprinting — Cache-Busting + SRI Plan (task #12)
 
 **Date:** 2026-07-03
-**Status:** DESIGN — agreed in discussion, not yet implemented
+**Status:** IMPLEMENTED 2026-07-03 (uncommitted at time of writing; built clean, 37/37 tests). The body
+below is the original design; **five decisions changed during implementation + code review — see the
+AMENDMENTS block immediately below, which supersedes the body wherever they conflict.**
 **Why:** `/dist` bundle URLs are stable across builds, so client fixes ride behind two caches
 (CloudFront + browser). Invalidation is skippable (proven live: wrong-PubBot-button served a stale
 bundle during the Turnstile debug) and never touches browser cache. Under Turnstile **Enforce**, a
 stale bundle = users hard-blocked on an already-fixed client bug → **#12 gates #18**.
+
+## AMENDMENTS 2026-07-03 (post-implementation — SUPERSEDE the body)
+
+1. **Fallback/pattern mode DELETED — rewriter is sentinel-only.** The anchored-literal pattern tier (and
+   its `?v=` tolerance) is gone. A file either has `<!--efw:dist-->…<!--/efw:dist-->` sentinels (region
+   regenerated) or is left byte-untouched (serves literal `/dist`, un-cache-busted, fine). So there is
+   **no transition tier and no "retire after one cycle" step** (old §"Robustness ladder", §"Fallback",
+   Implementation-order step 7): rollout = deploy the sentinel-emitting `beginHead_01` dll + do ONE full
+   fleet export → sentinels land everywhere they'll ever be, in one shot.
+2. **Estimator `.aspx` DO get sentinels.** Verified on web-04: `query.aspx`-class estimator pages are f8
+   CMS exports whose `<head>` is rendered by `beginHead_01` (chrome baked to static HTML wrapping a live
+   `bp101.session.ui.ScreenPage` fragment) → they receive sentinels on re-export like any page. Only
+   **standalone hand-authored `twm.aspx`-class files** (ship with the estimator app, no CMS counterpart)
+   and the **Hub's cross-origin `hub-vault` ref** stay permanently literal. (Corrects the tier-matrix
+   "estimator literal by design" row and the Clone-an-Estimator doc note.)
+3. **Thumbprint is a BUILD-ID, not a content address:** `sha256(sorted per-file sha384 lines + build
+   timestamp)`, 12 hex; manifest gains a `built` field. Same content rebuilt ⇒ NEW thumbprint (fresh dir,
+   fresh mtime) — this is what makes keep-3-by-mtime prune correct across reverts, and content-addressing
+   was unsound anyway (sourcemaps embed machine paths). Supersedes every "deterministic / same content ⇒
+   same thumbprint" claim in the body.
+4. **Region emit-set is a fixed pair, NOT the whole manifest.** The rewriter emits exactly
+   `js/master.bundle.min.js` then `css/master.min.css` (SRI hashes drawn from the manifest); a manifest
+   lacking either fails the publish loudly. (The manifest still hashes every dist file — hub-vault,
+   unminified twins, `.map` — those just never enter the region.)
+5. **Hardening added by review:** skip-copy is now **manifest-sha384-verified** (not blind dir-exists —
+   closes crash/partial-dir trust + success-gates SafeFile's swallowed failures); missing/invalid manifest
+   **degrades to a literal copy** (not a hard fail — first-publish-before-gulp-manifest safe); a page `/*`
+   invalidation fires when the rewrite changed ≥1 file; the current thumbprint is **prune-exempt**; and
+   the single-doc-export `bDistFixup` flag was **removed in favour of running fixup unconditionally in the
+   `ExportForPreview` sink** (memoized rewriter) so no export path can forget it.
 
 ## Design in one paragraph
 
