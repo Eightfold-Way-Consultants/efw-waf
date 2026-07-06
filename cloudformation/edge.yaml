@@ -264,11 +264,40 @@ Resources:
           Action: !If [IsBlock, { Challenge: {} }, { Count: {} }]
           VisibilityConfig: { SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: Challenge-Estimator }
           Statement:
-            ByteMatchStatement:
-              FieldToMatch: { UriPath: {} }
-              PositionalConstraint: STARTS_WITH
-              SearchString: /planning/
-              TextTransformations: [{ Priority: 0, Type: LOWERCASE }]
+            AndStatement:
+              Statements:
+                - ByteMatchStatement:
+                    FieldToMatch: { UriPath: {} }
+                    PositionalConstraint: STARTS_WITH
+                    SearchString: /planning/
+                    TextTransformations: [{ Priority: 0, Type: LOWERCASE }]
+                # Exempt endpoints that CANNOT solve a JS interstitial (background XHR / machine
+                # callers). A WAF Challenge = 202 + JS proof-of-work; only a top-level browser nav
+                # runs it — a background fetch just gets 202+empty and fails silently (the "Recent
+                # Sessions shows nothing until you start an estimator" bug; see planning-challenge-
+                # findings.md 2026-07-06). These stay covered by RateLimit-Estimator (1000/300s/IP,
+                # pri 10) + app JWT auth, so the security loss is minimal. UriPath excludes the query
+                # string, so the ?max=&_= cache-buster is irrelevant. NOT holed: BP101Banner.ashx
+                # (<img> always loads inside an already-solved page) and UserData.ashx (orphaned
+                # cross-origin POST, no caller — retire it, don't hole it).
+                - NotStatement:
+                    Statement:
+                      OrStatement:
+                        Statements:
+                          # Vault "Recent Sessions" widget XHR (GET list / DELETE / OPTIONS preflight),
+                          # extensionless handler → STARTS_WITH. The real victim: fired from root pages
+                          # that never solved the challenge, so 202'd until an estimator nav seeded the token.
+                          - ByteMatchStatement:
+                              FieldToMatch: { UriPath: {} }
+                              PositionalConstraint: STARTS_WITH
+                              SearchString: /planning/savedsessions
+                              TextTransformations: [{ Priority: 0, Type: LOWERCASE }]
+                          # Flow-diagram viz XHR (FlowNode.ashx, 15 states) → text/xml feeding flow.htm.
+                          - ByteMatchStatement:
+                              FieldToMatch: { UriPath: {} }
+                              PositionalConstraint: STARTS_WITH
+                              SearchString: /planning/flownode.ashx
+                              TextTransformations: [{ Priority: 0, Type: LOWERCASE }]
         # 10 — Estimator rate-limit backstop: per-IP cap scoped to /planning/*,
         # for bots that solve the challenge or flood from a few IPs.
         - Name: RateLimit-Estimator
