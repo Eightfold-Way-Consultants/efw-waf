@@ -1,0 +1,453 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Logon telemetry lake (B+C, one-shot). Hot = CloudWatch Logs /logon/events + Insights queries + alarms.
+  Cold = subscription filter -> Firehose (native CWL decompress+extract, no Lambda) -> S3 (JSON+gzip,
+  date-partitioned) -> Glue (partition projection) -> Athena. Deploy us-west-1 / acct 874922373146 (Logon
+  box), separate from the us-east-1 WAF diagnostics.yaml. Deploy CF FIRST, then wire the CW agent + app
+  LogEventWriter. See waf-reviews/logon-logging-plan-2026-07-10.md.
+
+Parameters:
+  EventsLogGroupName:
+    Type: String
+    Default: /logon/events
+    Description: CloudWatch Logs group for PRODUCTION structured events (hot tier; tapped to the lake).
+  PreviewEventsLogGroupName:
+    Type: String
+    Default: /logon-preview/events
+    Description: CloudWatch Logs group for PREVIEW structured events (hot-only validation; NOT tapped to S3).
+  HotRetentionDays:
+    Type: Number
+    Default: 14
+    AllowedValues: [1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365]
+    Description: >
+      Production hot-tier retention. 14d is correct because S3 (cold tier) is the durable archive from
+      day one. Raise only if you want a longer no-Athena hot window.
+  PreviewRetentionDays:
+    Type: Number
+    Default: 7
+    AllowedValues: [1, 3, 5, 7, 14, 30]
+    Description: Preview hot retention. Short -- validation only, never archived.
+  ArchiveBucketName:
+    Type: String
+    Default: ''
+    Description: S3 bucket name for the cold archive. Empty = auto-name (efw-logon-telemetry-<acct>-<region>).
+  GlacierTransitionDays:
+    Type: Number
+    Default: 90
+    Description: Days before archived objects transition to Glacier Instant Retrieval.
+  GlueDatabaseName:
+    Type: String
+    Default: logon_telemetry
+  ProjectionStartDate:
+    Type: String
+    Default: '2026/07/01'
+    Description: Earliest partition date (yyyy/MM/dd) for Athena partition projection.
+  AlarmEmail:
+    Type: String
+    Default: ''
+    Description: >
+      Email address to subscribe to the in-stack alarm SNS topic. Empty = topic + alarms are still
+      created, but nobody is subscribed (wire subscriptions later, e.g. Slack/Chatbot). If set, AWS
+      sends a confirmation email that must be accepted before notifications flow.
+  FirehoseBufferSeconds:
+    Type: Number
+    Default: 60
+  FirehoseBufferMB:
+    Type: Number
+    Default: 5
+
+Conditions:
+  AutoBucketName: !Equals [!Ref ArchiveBucketName, '']
+  HasAlarmEmail: !Not [!Equals [!Ref AlarmEmail, '']]
+
+Resources:
+
+  # ---------------- HOT TIER: CloudWatch Logs (B) ----------------
+  # Preview + production run on the SAME box (web-03b) but split into SEPARATE groups by filename glob.
+  # Convention: YYYY_MM-logon-<env>-<plane>.txt  (env in {prod,preview}, plane in {events,trace}) -- env is
+  # ALWAYS an explicit segment so globs never nest. Agent routing:
+  #   *-logon-prod-events.txt    -> /logon/events
+  #   *-logon-preview-events.txt -> /logon-preview/events
+  # The lake tap lives ONLY on the prod group, so preview isolation is STRUCTURAL (plumbing), not dependent
+  # on the per-record env field being stamped correctly.
+  EventsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Ref EventsLogGroupName
+      RetentionInDays: !Ref HotRetentionDays
+
+  PreviewEventsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Ref PreviewEventsLogGroupName
+      RetentionInDays: !Ref PreviewRetentionDays
+
+  # Logs-Insights saved queries. Fields are auto-discovered because each event is pure JSON.
+  QSolveRate:
+    Type: AWS::Logs::QueryDefinition
+    Properties:
+      Name: logon-events/widget-solve-rate
+      LogGroupNames: [!Ref EventsLogGroupName]
+      QueryString: |
+        filter type = "widget"
+        | stats count(*) as n by event, bin(1h) as hour
+        | sort hour desc
+
+  QFailReasons:
+    Type: AWS::Logs::QueryDefinition
+    Properties:
+      Name: logon-events/widget-failure-reasons
+      LogGroupNames: [!Ref EventsLogGroupName]
+      QueryString: |
+        fields @timestamp
+        | filter type = "widget" and event = "failed"
+        | stats count() as fails by reason, hostname, action
+        | sort fails desc
+
+  QTokenless:
+    Type: AWS::Logs::QueryDefinition
+    Properties:
+      Name: logon-events/tokenless-attempts
+      LogGroupNames: [!Ref EventsLogGroupName]
+      QueryString: |
+        fields @timestamp, endpoint, ip, hostname
+        | filter type = "turnstile" and outcome = "absent"
+        | sort @timestamp desc
+
+  QRateLimited:
+    Type: AWS::Logs::QueryDefinition
+    Properties:
+      Name: logon-events/ratelimited-and-fails
+      LogGroupNames: [!Ref EventsLogGroupName]
+      QueryString: |
+        fields @timestamp, endpoint, outcome, hostname, ip, ua
+        | filter type = "turnstile" and (outcome = "fail" or outcome = "pass-ratelimited")
+        | sort @timestamp desc
+
+  # ---------------- COLD TIER: S3 + Firehose + Glue (C) ----------------
+  ArchiveBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !If
+        - AutoBucketName
+        - !Sub 'efw-logon-telemetry-${AWS::AccountId}-${AWS::Region}'
+        - !Ref ArchiveBucketName
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 }
+      LifecycleConfiguration:
+        Rules:
+          - Id: to-glacier
+            Status: Enabled
+            Prefix: events/
+            Transitions:
+              - StorageClass: GLACIER_IR
+                TransitionInDays: !Ref GlacierTransitionDays
+
+  FirehoseRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: firehose.amazonaws.com }
+            Action: sts:AssumeRole
+            Condition: { StringEquals: { 'sts:ExternalId': !Ref AWS::AccountId } }
+      Policies:
+        - PolicyName: firehose-s3-write
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: [s3:AbortMultipartUpload, s3:GetBucketLocation, s3:GetObject, s3:ListBucket, s3:ListBucketMultipartUploads, s3:PutObject]
+                Resource:
+                  - !GetAtt ArchiveBucket.Arn
+                  - !Sub '${ArchiveBucket.Arn}/*'
+              - Effect: Allow
+                Action: [logs:PutLogEvents]
+                Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/kinesisfirehose/*:*'
+
+  FirehoseErrorLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/kinesisfirehose/logon-events
+      RetentionInDays: 14
+
+  FirehoseErrorLogStream:
+    Type: AWS::Logs::LogStream
+    Properties:
+      LogGroupName: !Ref FirehoseErrorLogGroup
+      LogStreamName: S3Delivery
+
+  EventsFirehose:
+    Type: AWS::KinesisFirehose::DeliveryStream
+    Properties:
+      DeliveryStreamName: logon-events
+      DeliveryStreamType: DirectPut
+      ExtendedS3DestinationConfiguration:
+        BucketARN: !GetAtt ArchiveBucket.Arn
+        RoleARN: !GetAtt FirehoseRole.Arn
+        # Arrival-date partitioning via the built-in timestamp namespace (no dynamic-partitioning config).
+        Prefix: 'events/dt=!{timestamp:yyyy/MM/dd}/'
+        ErrorOutputPrefix: 'errors/!{firehose:error-output-type}/dt=!{timestamp:yyyy/MM/dd}/'
+        BufferingHints:
+          IntervalInSeconds: !Ref FirehoseBufferSeconds
+          SizeInMBs: !Ref FirehoseBufferMB
+        CompressionFormat: GZIP
+        CloudWatchLoggingOptions:
+          Enabled: true
+          LogGroupName: !Ref FirehoseErrorLogGroup
+          LogStreamName: !Ref FirehoseErrorLogStream
+        # Native CWL unwrap: decompress the subscription gzip, extract each logEvent's message
+        # (drops the CWL owner/logGroup wrapper), then newline-delimit for Athena. No Lambda.
+        # NOTE: verify these Processor/Parameter names against the current Firehose API before deploy.
+        ProcessingConfiguration:
+          Enabled: true
+          Processors:
+            - Type: Decompression
+              Parameters:
+                - { ParameterName: CompressionFormat, ParameterValue: GZIP }
+            - Type: CloudWatchLogProcessing
+              Parameters:
+                - { ParameterName: DataMessageExtraction, ParameterValue: 'true' }
+            - Type: AppendDelimiterToRecord
+              Parameters:
+                # MUST stay single-quoted: this is the 2-char escape "\n", which Firehose interprets as a
+                # newline. Double-quoting ("\n" = a real linefeed) fails validation. Without this delimiter
+                # CloudWatch's habit of combining several log events into ONE Firehose record concatenates
+                # multiple JSON objects onto one S3 line -> JsonSerDe parse failure. Do not "clean up".
+                - { ParameterName: Delimiter, ParameterValue: '\n' }
+
+  # CloudWatch Logs assumes this to push /logon/events into Firehose.
+  SubscriptionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: !Sub 'logs.${AWS::Region}.amazonaws.com' }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: put-to-firehose
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: [firehose:PutRecord, firehose:PutRecordBatch]
+                Resource: !GetAtt EventsFirehose.Arn
+
+  # Tap lives ONLY on the production group -> preview physically cannot reach S3. No env FilterPattern
+  # needed (isolation is structural). Empty pattern = every record in the prod-only group.
+  EventsSubscriptionFilter:
+    Type: AWS::Logs::SubscriptionFilter
+    # DependsOn documents intent; it does NOT fix IAM propagation lag. CloudWatch Logs does a synchronous
+    # test-PutRecord to Firehose at CREATE using SubscriptionRole; if the role's policy hasn't propagated
+    # you may get "Could not deliver test message ... check ... permission". It's transient -- just re-run
+    # the stack. See the deploy runbook note.
+    DependsOn: [SubscriptionRole, EventsFirehose]
+    Properties:
+      LogGroupName: !Ref EventsLogGroup
+      FilterPattern: ''
+      DestinationArn: !GetAtt EventsFirehose.Arn
+      RoleArn: !GetAtt SubscriptionRole.Arn
+
+  LogonGlueDatabase:
+    Type: AWS::Glue::Database
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      DatabaseInput:
+        Name: !Ref GlueDatabaseName
+        Description: Logon Turnstile/widget/ratelimit telemetry events.
+
+  EventsTable:
+    Type: AWS::Glue::Table
+    DependsOn: LogonGlueDatabase
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      DatabaseName: !Ref GlueDatabaseName
+      TableInput:
+        Name: events
+        Description: Structured Logon events (turnstile | widget | ratelimit | exception).
+        TableType: EXTERNAL_TABLE
+        PartitionKeys:
+          - { Name: dt, Type: string }
+        Parameters:
+          EXTERNAL: 'TRUE'
+          classification: json
+          'projection.enabled': 'true'
+          'projection.dt.type': date
+          'projection.dt.format': 'yyyy/MM/dd'
+          'projection.dt.range': !Sub '${ProjectionStartDate},NOW'
+          'projection.dt.interval': '1'
+          'projection.dt.interval.unit': DAYS
+          'storage.location.template': !Sub 's3://${ArchiveBucket}/events/dt=${!dt}'
+        StorageDescriptor:
+          Location: !Sub 's3://${ArchiveBucket}/events/'
+          InputFormat: org.apache.hadoop.mapred.TextInputFormat
+          OutputFormat: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+          SerdeInfo:
+            SerializationLibrary: org.openx.data.jsonserde.JsonSerDe
+            # Our own app is the producer, so a stray non-JSON line is plausible. Skip bad rows instead
+            # of failing the whole partition's Athena scan (HIVE_CURSOR_ERROR). Keep case.insensitive
+            # default TRUE -- app emits camelCase keys (tokenPresent/errorCodes) vs lowercase columns.
+            Parameters:
+              'ignore.malformed.json': 'true'
+          Columns:
+            - { Name: ts, Type: string }
+            - { Name: type, Type: string }
+            - { Name: env, Type: string }
+            - { Name: rid, Type: string }
+            - { Name: endpoint, Type: string }
+            - { Name: outcome, Type: string }
+            - { Name: event, Type: string }
+            - { Name: action, Type: string }
+            - { Name: reason, Type: string }
+            - { Name: hostname, Type: string }
+            - { Name: ip, Type: string }
+            - { Name: ua, Type: string }
+            - { Name: mode, Type: string }
+            - { Name: allowed, Type: boolean }
+            - { Name: tokenpresent, Type: boolean }
+            - { Name: errorcodes, Type: 'array<string>' }
+            # CF metadata.ratelimited is a STRING ("global" | null), NOT a bool -- keep it string so
+            # the ratelimited:global weaponization signal is queryable (WHERE ratelimited = 'global').
+            - { Name: ratelimited, Type: string }
+            # ratelimit-event payload (429 burst magnitude). count/max are legal Athena identifiers.
+            - { Name: count, Type: int }
+            - { Name: max, Type: int }
+            - { Name: windowseconds, Type: int }
+
+  AthenaWorkGroup:
+    Type: AWS::Athena::WorkGroup
+    Properties:
+      Name: logon-telemetry
+      State: ENABLED
+      WorkGroupConfiguration:
+        EnforceWorkGroupConfiguration: true
+        PublishCloudWatchMetricsEnabled: false
+        ResultConfiguration:
+          OutputLocation: !Sub 's3://${ArchiveBucket}/athena-results/'
+
+  NQSolveRateDaily:
+    Type: AWS::Athena::NamedQuery
+    Properties:
+      Database: !Ref GlueDatabaseName
+      WorkGroup: !Ref AthenaWorkGroup
+      Name: widget-solve-rate-by-day
+      QueryString: !Sub |
+        SELECT dt,
+               SUM(CASE WHEN event='solved' THEN 1 ELSE 0 END) AS solved,
+               SUM(CASE WHEN event='failed' THEN 1 ELSE 0 END) AS failed
+        FROM ${GlueDatabaseName}.events
+        WHERE type='widget'
+        GROUP BY dt ORDER BY dt DESC;
+
+  NQPerSite:
+    Type: AWS::Athena::NamedQuery
+    Properties:
+      Database: !Ref GlueDatabaseName
+      WorkGroup: !Ref AthenaWorkGroup
+      Name: per-site-outcomes-template
+      QueryString: !Sub |
+        -- Per-site client report: fill the hostname IN (...) list with the client's host family.
+        SELECT hostname, outcome, COUNT(*) AS n
+        FROM ${GlueDatabaseName}.events
+        WHERE type='turnstile'
+          AND dt >= date_format(current_date - interval '30' day, '%Y/%m/%d')
+          AND hostname IN ('mn.hb101.org')
+        GROUP BY hostname, outcome ORDER BY hostname, n DESC;
+
+  # ---------------- ALARM TOPIC + METRICS + ALARMS ----------------
+  AlarmTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: logon-telemetry-alarms
+      DisplayName: Logon telemetry alarms
+
+  AlarmEmailSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasAlarmEmail
+    Properties:
+      TopicArn: !Ref AlarmTopic
+      Protocol: email
+      Endpoint: !Ref AlarmEmail
+
+  # Alarm off metric FILTERS on the log JSON, NOT off the app's PutMetricData metrics. The app publishes
+  # TurnstileWidget/TurnstileVerify with BOTH Event+Action / Endpoint+Result dimensions; a CloudWatch alarm
+  # matches dimensions EXACTLY, so an alarm on a partial dimension set (e.g. Event=failed alone) never sees
+  # the per-action datapoints and sits silent-OK forever. Deriving from the log stream is self-contained,
+  # dimension-proof, and naturally prod-only (this group is the prod tap). DefaultValue 0 = no missing-data.
+  WidgetFailedMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref EventsLogGroup
+      FilterPattern: '{ $.type = "widget" && $.event = "failed" }'
+      MetricTransformations:
+        - MetricNamespace: Logon-Events
+          MetricName: WidgetFailed
+          MetricValue: '1'
+          DefaultValue: 0
+
+  VerifyAbsentMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref EventsLogGroup
+      FilterPattern: '{ $.type = "turnstile" && $.outcome = "absent" }'
+      MetricTransformations:
+        - MetricNamespace: Logon-Events
+          MetricName: VerifyAbsent
+          MetricValue: '1'
+          DefaultValue: 0
+
+  AlarmWidgetFailSpike:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: logon-widget-failed-spike
+      AlarmDescription: Turnstile widget failures spiking (client solve-rate regression).
+      Namespace: Logon-Events
+      MetricName: WidgetFailed
+      Statistic: Sum
+      Period: 3600
+      EvaluationPeriods: 1
+      Threshold: 25
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlarmTopic]
+
+  AlarmVerifyAbsentSpike:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: logon-verify-absent-spike
+      AlarmDescription: Tokenless (absent) verifies spiking -- renewed bot campaign / widget not shipping.
+      Namespace: Logon-Events
+      MetricName: VerifyAbsent
+      Statistic: Sum
+      Period: 3600
+      EvaluationPeriods: 1
+      Threshold: 20
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlarmTopic]
+
+Outputs:
+  EventsLogGroup:
+    Value: !Ref EventsLogGroup
+  ArchiveBucket:
+    Value: !Ref ArchiveBucket
+  FirehoseName:
+    Value: !Ref EventsFirehose
+  GlueDatabase:
+    Value: !Ref GlueDatabaseName
+  AthenaWorkGroup:
+    Value: !Ref AthenaWorkGroup
+  AlarmTopicArn:
+    Value: !Ref AlarmTopic
