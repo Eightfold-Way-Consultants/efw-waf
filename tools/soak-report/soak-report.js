@@ -10,14 +10,19 @@
  * joined on the form/action. Two gates: the client widget blocks page-loading bots that can't solve; the
  * server turnstile gate blocks DIRECT-API bots that skip the page (tokenless/invalid POST) — Enforce only.
  *
- * Sources (all API): CF GraphQL turnstileAdaptiveGroups (issuance) + Insights /logon(-preview)/events
- * (type=widget beacon, type=turnstile siteverify) + CloudWatch alarms. "Organic" = ua~/curl/ excluded.
- * NOTE: pdfshare verifies on the ESTIMATOR, feedback on TWPROXY — their server stage is not in /logon/events.
+ * Sources (all API, no SSM in core): CF GraphQL turnstileAdaptiveGroups (issuance) + Insights /logon(-preview)/events
+ * (type=widget beacon, type=turnstile siteverify) + twproxy-logs/* (feedback proxy, plain-text) + CloudWatch alarms.
+ * "Organic" = ua~/curl/ excluded. NOTE: pdfshare verifies on the ESTIMATOR (still not covered); feedback on TWPROXY
+ * IS now covered via its own CloudWatch group as a dedicated attack-surface panel.
  * Deps: none (shells out to `aws` CLI + `curl`).
  */
 'use strict';
 const { execFileSync } = require('child_process');
 const fs = require('fs');
+// aws CLI is Python; on Windows it renders JSON to cp1252 stdout and throws on non-latin1 bytes
+// (e.g. SQLi payloads in twproxy logs), corrupting the JSON we parse. Force UTF-8 for all subprocesses.
+process.env.PYTHONUTF8 = '1';
+process.env.PYTHONIOENCODING = 'utf-8';
 
 const args = process.argv.slice(2);
 const opt = (n, d) => { const i = args.indexOf('--' + n); return i >= 0 && args[i + 1] ? args[i + 1] : d; };
@@ -27,20 +32,25 @@ const HOURS = parseInt(opt('hours', '72'), 10);
 const OUT = opt('out', `soak-report-${ENV}.html`);
 const REGION = 'us-west-1';
 const CFG = { prod: { group: '/logon/events', label: 'production' }, preview: { group: '/logon-preview/events', label: 'preview' } }[ENV];
+// twproxy (Teamwork feedback proxy) plain-text CloudWatch group, per env box (web-06=public, web-04=preview2).
+// Feedback verifies on twproxy, NOT /logon/events — this is the surface the Logon lake structurally can't see.
+const TWGROUP = { prod: 'twproxy-logs/ip-10-3-0-63.us-west-1.compute.internal', preview: 'twproxy-logs/ip-10-3-0-122.us-west-1.compute.internal' }[ENV];
+const TW_HOURS = 24 * 14;   // twproxy files are month-accumulating + bulk re-shipped on rotation deploy — read the full retained window, labeled as such (not the Logon HOURS window)
 const SERVER_OF = { register: 'logon', forgot: 'logon', resend: 'logon', pdfshare: 'estimator', share: 'estimator', feedback: 'twproxy' };
 const FORM_ORDER = ['register', 'forgot', 'resend', 'pdfshare', 'share', 'feedback'];
 const TH = { failRed: 10, absentYellow: 40, ratelimitedRed: 1 };
 const BLOT = 'not (ua like /curl/)';
 
 const now = Date.now(), startMs = now - HOURS * 3600 * 1000;
+const twStartMs = now - TW_HOURS * 3600 * 1000;
 const aws = (a) => JSON.parse(execFileSync('aws', a.concat(['--region', REGION, '--output', 'json']), { encoding: 'utf8', maxBuffer: 64 << 20 }));
 const iso = (ms) => new Date(ms).toISOString();
 const sleep = (ms) => execFileSync(process.execPath, ['-e', `setTimeout(()=>{},${ms})`]);
 const warn = [];
 const tryd = (label, fn, d) => { try { return fn(); } catch (e) { warn.push(label + ': ' + e.message); return d; } };
 
-function insights(q) {
-  const s = aws(['logs', 'start-query', '--log-group-name', CFG.group, '--start-time', String(Math.floor(startMs / 1000)), '--end-time', String(Math.floor(now / 1000)), '--query-string', q]);
+function insights(q, group = CFG.group, s0 = startMs, e0 = now) {
+  const s = aws(['logs', 'start-query', '--log-group-name', group, '--start-time', String(Math.floor(s0 / 1000)), '--end-time', String(Math.floor(e0 / 1000)), '--query-string', q]);
   for (let i = 0; i < 40; i++) {
     const r = aws(['logs', 'get-query-results', '--query-id', s.queryId]);
     if (r.status === 'Complete') return r.results.map(row => Object.fromEntries(row.map(f => [f.field, f.value])));
@@ -64,6 +74,28 @@ const cfRowsRaw = tryd('CF issuance', () => {
   const j = JSON.parse(body); if (j.errors) throw new Error(JSON.stringify(j.errors).slice(0, 120));
   return ((((j.data || {}).viewer || {}).accounts || [])[0] || { turnstileAdaptiveGroups: [] }).turnstileAdaptiveGroups;
 }, []);
+
+// ---- twproxy (feedback surface) — plain-text log group, full retained window ----
+const twG = (label, q) => tryd('twproxy ' + label, () => insights(q, TWGROUP, twStartMs, now), []);
+const twStartRows = twG('start', `filter @message like /Start request/ | stats count() as n`);
+const twOutcomeRows = twG('outcome', `parse @message /Turnstile outcome: (?<oc>[A-Za-z]+)/ | filter ispresent(oc) | stats count() as n by oc | sort n desc`);
+const twExitRows = twG('exits', `parse @message /Exit: (?<ex>[A-Za-z][A-Za-z ]*\\([^)]*\\)|[A-Za-z]+)/ | filter ispresent(ex) | stats count() as n by ex | sort n desc | limit 20`);
+const twSqliRows = twG('sqli', `parse @message /Exit: Invalid validationType (?<vt>.+)$/ | filter ispresent(vt) | stats count() as n by vt | sort n desc | limit 12`);
+const twModeRows = twG('mode', `parse @message /valid=(?<v>True|False) observe=(?<obs>True|False)/ | filter ispresent(obs) | stats count() as n by v, obs`);
+
+const twTotal = +((twStartRows[0] || {}).n || 0);
+const twExits = twExitRows.map(r => ({ ex: r.ex, n: +r.n }));
+const twExitTotal = twExits.reduce((a, e) => a + e.n, 0);
+const twRobot = twExits.filter(e => /robot/i.test(e.ex)).reduce((a, e) => a + e.n, 0);
+const twReached = twOutcomeRows.reduce((a, r) => a + (+r.n), 0);               // reached siteverify (past all pre-checks)
+const twPass = twOutcomeRows.filter(r => /pass/i.test(r.oc)).reduce((a, r) => a + (+r.n), 0);
+const twSqli = twSqliRows.map(r => ({ vt: r.vt, n: +r.n })).filter(r => /select|union|sleep|if\(|now\(|sysdate|char\(|concat|--|;|'|\bor\b|\band\b|=/i.test(r.vt));
+const twSqliTotal = twSqli.reduce((a, r) => a + r.n, 0);
+const twHostile = Math.max(0, twTotal - twReached);                            // everything that never reached siteverify
+const twHostilePct = twTotal ? Math.round(twHostile * 100 / twTotal) : null;
+const twMode = { observe: 0, require: 0 };
+for (const r of twModeRows) { if (r.obs === 'True') twMode.observe += +r.n; else twMode.require += +r.n; }
+const twModeLive = (twMode.observe && twMode.require) ? 'mixed' : twMode.observe ? 'Observe' : twMode.require ? 'Require' : 'unknown';
 
 // ---- shape ----
 const cf = {}; for (const r of cfRowsRaw) cf[r.dimensions.action] = (cf[r.dimensions.action] || 0) + r.count;
@@ -221,6 +253,38 @@ function prevBar() {
   return `<div class="pbar">${segs.some(s => s.n) ? segs.filter(s => s.n).map(s => `<div style="flex:${s.n};background:${s.color}" title="${esc(s.label)}: ${s.n}"></div>`).join('') : '<div class="empty" style="flex:1"></div>'}</div>
     <div class="legend">${segs.map(s => `<span class="lg"><i style="background:${s.color}"></i>${esc(s.label)} <b>${s.n}</b></span>`).join('')}</div>`;
 }
+function twproxySection() {
+  if (!twTotal && !twExitTotal) return `<h2>Feedback proxy <span class="muted">(twproxy)</span></h2><div class="card"><p class="muted">No twproxy events in <code>${esc(TWGROUP)}</code> for the retained window.${warn.filter(w => w.startsWith('twproxy')).length ? ' See data warnings.' : ''}</p></div>`;
+  const funnel = [
+    { n: twReached, color: 'var(--s2)', label: 'reached siteverify' },
+    { n: twRobot, color: 'var(--s6)', label: 'Turnstile-blocked (robot)' },
+    { n: Math.max(0, twHostile - twRobot), color: 'var(--s3)', label: 'rejected pre-gate (method/tags/payload)' },
+  ];
+  const modeCls = twModeLive === 'Observe' ? 'warning' : twModeLive === 'Require' ? 'good' : '';
+  return `<h2>Feedback proxy <span class="muted">(twproxy · ${esc(ENV === 'prod' ? 'web-06 public' : 'web-04 preview2')} · retained ${TW_HOURS / 24}d)</span></h2>
+  <p class="sub">The feedback → Teamwork-task proxy. Its telemetry is plain-text in <code>${esc(TWGROUP)}</code>, a separate CloudWatch group from the Logon lake — <b>this surface is invisible to the funnel above</b>. Requests that fail method/tag/payload/token checks exit before siteverify; only survivors reach the Turnstile gate.</p>
+  <div class="card">
+    <div class="tiles">
+      ${tile('total requests', fmt(twTotal), 'retained window', twHostilePct >= 80 ? 'critical' : twHostilePct >= 50 ? 'warning' : '')}
+      ${tile('hostile / non-legit', twHostilePct != null ? twHostilePct + '%' : '—', `${fmt(twHostile)} never reached siteverify`, twHostilePct >= 80 ? 'critical' : 'warning')}
+      ${tile('Turnstile robot-blocks', fmt(twRobot), twRobot ? 'gate denied (Require mode)' : 'none in window', twRobot ? 'good' : '')}
+      ${tile('SQLi probes', fmt(twSqliTotal), twSqliTotal ? 'in validationType field' : 'none', twSqliTotal ? 'critical' : 'good')}
+      ${tile('reached siteverify', fmt(twReached), `${fmt(twPass)} passed`, 'good')}
+      ${tile('live mode (inferred)', twModeLive, twMode.observe || twMode.require ? `${fmt(twMode.require)} Require · ${fmt(twMode.observe)} Observe lines` : 'no scheme lines', modeCls)}
+    </div>
+    <div class="pbar">${funnel.some(s => s.n) ? funnel.filter(s => s.n).map(s => `<div style="flex:${s.n};background:${s.color}" title="${esc(s.label)}: ${s.n}"></div>`).join('') : '<div class="empty" style="flex:1"></div>'}</div>
+    <div class="legend">${funnel.map(s => `<span class="lg"><i style="background:${s.color}"></i>${esc(s.label)} <b>${fmt(s.n)}</b></span>`).join('')}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:16px">
+      <div><div class="lc-k" style="margin-bottom:5px">Exit reasons</div><table><tbody>
+        ${twExits.length ? twExits.map(e => `<tr><td>${esc(e.ex)}</td><td class="n">${fmt(e.n)}</td></tr>`).join('') : '<tr><td class="muted">none</td></tr>'}
+      </tbody></table></div>
+      <div><div class="lc-k" style="margin-bottom:5px">SQL-injection probes <span class="muted">(validationType)</span></div><table><tbody>
+        ${twSqli.length ? twSqli.map(r => `<tr><td><code>${esc(r.vt.slice(0, 48))}</code></td><td class="n">${fmt(r.n)}</td></tr>`).join('') : '<tr><td class="muted">none detected</td></tr>'}
+      </tbody></table></div>
+    </div>
+    <p class="muted" style="margin-top:12px">${twModeLive === 'Observe' ? '<b style="color:var(--warning)">Live mode reads Observe</b> — Turnstile-only bot failures are NOT blocked here today; they proceed toward task creation. Flip to Require to close it.' : twModeLive === 'Require' ? '<b style="color:var(--good)">Live mode reads Require</b> — the gate is actively denying bots.' : 'Mode not inferable from this window (no <code>valid=/observe=</code> scheme lines).'} "Robot-block" lines only emit under Require, so their presence dates Require-mode traffic. Window is the twproxy group\'s full retention (bulk re-shipped on the rotation deploy), not the ${HOURS}h Logon window.</p>
+  </div>`;
+}
 const bTotAll = pipe.reduce((a, p) => a + p.bTot, 0), bSolvedAll = pipe.reduce((a, p) => a + p.bSolved, 0);
 
 const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -265,7 +329,7 @@ table{width:100%;border-collapse:collapse;font-size:.82em;margin-top:8px}th,td{t
 </style></head><body><div class="wrap">
 <h1>Turnstile soak report</h1>
 <div class="meta"><span class="pill">${esc(CFG.label)}</span> &middot; last ${HOURS}h &middot; ${esc(iso(startMs))} → ${esc(iso(now))} &middot; generated ${esc(iso(now))}<br>
-CF GraphQL issuance + Insights <code>${esc(CFG.group)}</code> (beacon + siteverify) + CloudWatch alarms &middot; organic (ua~curl excluded)</div>
+CF GraphQL issuance + Insights <code>${esc(CFG.group)}</code> (beacon + siteverify) + <code>twproxy-logs</code> (feedback) + CloudWatch alarms &middot; organic (ua~curl excluded)</div>
 <div class="banner ${verdict}"><span class="dot">${verdict === 'good' ? '●' : verdict === 'warning' ? '▲' : '■'}</span><span>${esc(verdictText)}</span></div>
 
 <div class="tiles">
@@ -291,6 +355,8 @@ ${flags.length ? `<ul class="flags">${flags.map(f => `<li class="${f.sev}"><b>${
   ${prevBar()}
   <p class="muted" style="margin-top:11px">Widget-gate friction across <b>all</b> forms (incl estimator/twproxy): <b>${fmt(preventClientAll)}</b> failed beacons blocked before any server. Caveat: "client-gate blocked" includes real users who couldn't load the widget (iOS ratelimited, slow networks, blockers) — it is <i>bot-like</i>, not certified bots (the beacon carries no IP).</p>
 </div>
+
+${twproxySection()}
 
 <h2>Full form lifecycle</h2>
 <p class="sub">Cloudflare issuance → client gate (widget) → server gate (siteverify), per form. % under the first arrow = issued→beacon conversion.</p>
@@ -322,4 +388,4 @@ Regenerate: <code>node soak-report.js --env ${ENV} --hours ${HOURS}</code>
 </div></body></html>`;
 
 fs.writeFileSync(OUT, html);
-console.log(`wrote ${OUT}  verdict=${verdict}  auth pass=${vPass} fail=${vFail} absent=${vAbsent} rl=${vRl}  prevented=${preventedTotal} (client ${preventClient}/server ${preventServer})  forms=${forms.length}  warnings=${warn.length}`);
+console.log(`wrote ${OUT}  verdict=${verdict}  auth pass=${vPass} fail=${vFail} absent=${vAbsent} rl=${vRl}  prevented=${preventedTotal} (client ${preventClient}/server ${preventServer})  forms=${forms.length}  twproxy=${twTotal}req/${twHostilePct}%hostile/robot${twRobot}/sqli${twSqliTotal}/mode=${twModeLive}  warnings=${warn.length}`);
