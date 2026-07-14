@@ -16,9 +16,10 @@ try {
   $H = 'C:\cowork\env\.gog'
   $out = Join-Path $dir 'soak-report-prod.html'
 
-  Log "generating report (node soak-report.js --env prod --hours 24)..."
+  # --email = inline-styled, table-based HTML that survives Gmail (no <style>/var()/grid/flex/media).
+  Log "generating email report (node soak-report.js --env prod --hours 24 --email)..."
   Push-Location $dir
-  & node soak-report.js --env prod --hours 24 --out $out 2>&1 | ForEach-Object { Log "  node: $_" }
+  & node soak-report.js --env prod --hours 24 --email --out $out 2>&1 | ForEach-Object { Log "  node: $_" }
   Pop-Location
   if (-not (Test-Path $out)) { throw "report HTML not generated: $out" }
 

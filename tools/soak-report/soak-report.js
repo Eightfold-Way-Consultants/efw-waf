@@ -28,6 +28,7 @@ const args = process.argv.slice(2);
 const opt = (n, d) => { const i = args.indexOf('--' + n); return i >= 0 && args[i + 1] ? args[i + 1] : d; };
 const ENV = (opt('env', 'prod') === 'preview') ? 'preview' : 'prod';
 const ACCOUNTS = args.includes('--accounts');   // opt-in: query logon2.AspNetUsers via SSM/DB (breaks all-API purity)
+const EMAIL = args.includes('--email');          // emit email-safe HTML (inline styles + tables; no <style>/var()/grid — survives Gmail)
 const HOURS = parseInt(opt('hours', '72'), 10);
 const OUT = opt('out', `soak-report-${ENV}.html`);
 const REGION = 'us-west-1';
@@ -393,5 +394,86 @@ Regenerate: <code>node soak-report.js --env ${ENV} --hours ${HOURS}</code>
 </div>
 </div></body></html>`;
 
-fs.writeFileSync(OUT, html);
+// ---- email-safe render (inline styles + tables; no <style>/var()/grid/flex/media — survives Gmail) ----
+function emailHtml_() {
+  const C = { s1: '#2a78d6', s2: '#1baf7a', s3: '#c07d00', s5: '#4a3aa7', s6: '#d63a39', good: '#0ca30c', warn: '#c47000', crit: '#c8322f', ink: '#111', ink2: '#4a4a47', mut: '#7a7873', line: '#dedcd4', card: '#ffffff', plane: '#f3f3f1' };
+  const vC = verdict === 'good' ? C.good : verdict === 'warning' ? C.warn : C.crit;
+  const et = (val, lbl, sub, col) => `<td width="50%" style="padding:5px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${C.line};border-radius:8px;background:${C.card}"><tr><td style="padding:9px 12px">
+    <div style="font-size:21px;font-weight:700;color:${col || C.ink};line-height:1.15">${val}</div>
+    <div style="font-size:12px;color:${C.ink2};margin-top:2px">${esc(lbl)}</div>
+    ${sub ? `<div style="font-size:11px;color:${C.mut};margin-top:3px">${esc(sub)}</div>` : ''}</td></tr></table></td>`;
+  const rows2 = (cells) => { let o = ''; for (let i = 0; i < cells.length; i += 2) o += `<tr>${cells[i]}${cells[i + 1] || '<td width="50%"></td>'}</tr>`; return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${o}</table>`; };
+  const bar = (segs) => { const t = segs.reduce((a, s) => a + s.n, 0) || 1; const on = segs.filter(s => s.n); return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="table-layout:fixed;border-collapse:separate;border-spacing:2px 0"><tr>${on.length ? on.map(s => `<td style="background:${s.color};height:15px;border-radius:3px;width:${Math.max(2, Math.round(s.n / t * 100))}%;font-size:0;line-height:0">&nbsp;</td>`).join('') : `<td style="background:${C.line};height:15px">&nbsp;</td>`}</tr></table>`; };
+  const legend = (segs) => `<div style="font-size:11px;color:${C.ink2};margin-top:6px">${segs.map(s => `<span style="white-space:nowrap"><span style="color:${s.color};font-size:13px">&#9632;</span> ${esc(s.label)} <b>${fmt(s.n)}</b></span>`).join('&nbsp;&nbsp;&nbsp;')}</div>`;
+  const h2 = (t) => `<div style="font-size:15px;font-weight:700;color:${C.ink};margin:22px 0 8px">${t}</div>`;
+
+  const kpis = rows2([
+    et(fmt(vPass), 'server pass', 'register+forgot, organic', C.good),
+    et(fmt(vFail), 'server fail', 'invalid token', vFail ? C.crit : C.ink),
+    et(fmt(vAbsent), 'direct-API tokenless', 'absent → 403 under Enforce', vAbsent ? C.warn : C.ink),
+    et(fmt(vBlocked), 'server 403s served', vBlocked ? 'actual blocks' : 'none this window', vBlocked ? C.warn : C.ink),
+    et(fmt(vRl), 'ratelimited softpass', 'allowed through', vRl ? C.crit : C.ink),
+    et(bTotAll ? Math.round(bSolvedAll * 100 / bTotAll) + '%' : '—', 'beacon solve-rate', `${fmt(bSolvedAll)}/${fmt(bTotAll)} all forms`),
+    et(alarmFiring ? 'FIRING' : 'OK', 'alarms', alarms.map(a => a.name.replace('logon-', '')).join(', ') || 'n/a', alarmFiring ? C.crit : C.good),
+    et(fmt(preventedTotal), 'bot-like prevented', preventRate != null ? preventRate + '% of attempts' : '', C.good),
+  ]);
+
+  const prevSegs = [{ n: allowedHuman, color: C.s2, label: 'human verified' }, { n: preventClient, color: C.s6, label: 'client-gate blocked' }, { n: preventServer, color: C.s3, label: 'server-gate (Enforce)' }];
+
+  const twSegs = [{ n: twReached, color: C.s2, label: 'reached siteverify' }, { n: twRobot, color: C.s6, label: 'Turnstile-blocked' }, { n: Math.max(0, twHostile - twRobot), color: C.s3, label: 'rejected pre-gate' }];
+  const twTiles = rows2([
+    et(fmt(twTotal), 'total requests', 'retained window', twHostilePct >= 80 ? C.crit : C.ink),
+    et(twHostilePct != null ? twHostilePct + '%' : '—', 'hostile / non-legit', `${fmt(twHostile)} never reached siteverify`, twHostilePct >= 80 ? C.crit : C.warn),
+    et(fmt(twRobot), 'Turnstile robot-blocks', twRobot ? 'gate denied (Require)' : 'none', twRobot ? C.good : C.ink),
+    et(fmt(twSqliTotal), 'SQLi probes', 'in validationType field', twSqliTotal ? C.crit : C.good),
+    et(twModeLive, 'live mode (inferred)', 'newest signal', twModeLive === 'Require' ? C.good : twModeLive === 'Observe' ? C.warn : C.ink),
+    et(fmt(twReached), 'reached siteverify', `${fmt(twPass)} passed`, C.good),
+  ]);
+  const twoCol = (title, rowsHtml) => `<td width="50%" valign="top" style="padding:0 6px"><div style="font-size:11px;color:${C.mut};text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px">${title}</div><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:12px">${rowsHtml}</table></td>`;
+  const exitRows = twExits.map(e => `<tr><td style="padding:3px 0;border-bottom:1px solid ${C.line}">${esc(e.ex)}</td><td style="padding:3px 0;border-bottom:1px solid ${C.line};text-align:right">${fmt(e.n)}</td></tr>`).join('') || `<tr><td style="color:${C.mut}">none</td></tr>`;
+  const sqliRows = (twSqli.length ? twSqli : []).map(r => `<tr><td style="padding:3px 0;border-bottom:1px solid ${C.line};font-family:Consolas,monospace;font-size:11px">${esc(r.vt.slice(0, 42))}</td><td style="padding:3px 0;border-bottom:1px solid ${C.line};text-align:right">${fmt(r.n)}</td></tr>`).join('') || `<tr><td style="color:${C.mut}">none detected</td></tr>`;
+
+  const lc = pipe.map(p => {
+    const s = p.server;
+    const sv = s ? `pass ${s.pass}${s.absent ? `, absent ${s.absent}` : ''}${s.fail ? `, fail ${s.fail}` : ''}${s.blocked ? `, <b style="color:${C.crit}">${s.blocked} 403</b>` : ''}` : `<span style="color:${C.mut}">n/a · ${esc(p.serverSystem || '')}</span>`;
+    return `<tr><td style="padding:6px 8px;border-bottom:1px solid ${C.line};font-weight:600">${esc(p.form)}</td><td style="padding:6px 8px;border-bottom:1px solid ${C.line};text-align:right">${fmt(p.cf)}</td><td style="padding:6px 8px;border-bottom:1px solid ${C.line};text-align:right">${p.bTot ? `${p.bSolved}/${p.bTot}` : '—'}</td><td style="padding:6px 8px;border-bottom:1px solid ${C.line}">${sv}</td></tr>`;
+  }).join('');
+
+  const dayRows = days.map(d => { const o = {}; for (const r of serverDay.filter(x => (x.day || '').slice(0, 10) === d)) o[r.outcome] = +r.n; return `<tr><td style="padding:4px 8px;border-bottom:1px solid ${C.line}">${d.slice(5)}</td>${OUTCOMES.map(oc => `<td style="padding:4px 8px;border-bottom:1px solid ${C.line};text-align:right;color:${o[oc] ? C.ink : C.mut}">${o[oc] || '·'}</td>`).join('')}</tr>`; }).join('');
+
+  return `<!doctype html><html><body style="margin:0;padding:0;background:${C.plane};font-family:-apple-system,'Segoe UI',Arial,sans-serif;color:${C.ink}">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${C.plane}"><tr><td align="center" style="padding:16px">
+<table role="presentation" width="640" cellpadding="0" cellspacing="0" style="width:640px;max-width:100%;background:${C.card};border:1px solid ${C.line};border-radius:10px"><tr><td style="padding:22px 22px 26px">
+  <div style="font-size:20px;font-weight:700">Turnstile soak report</div>
+  <div style="font-size:12px;color:${C.mut};margin:3px 0 14px">${esc(CFG.label)} &middot; last ${HOURS}h &middot; ${esc(iso(startMs).slice(0, 16))}Z → ${esc(iso(now).slice(0, 16))}Z</div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${vC};border-radius:8px"><tr><td style="padding:12px 16px;color:#fff;font-weight:700;font-size:15px">${esc(verdictText)}</td></tr></table>
+  <div style="height:12px"></div>
+  ${kpis}
+  ${flags.length ? `<div style="margin-top:10px">${flags.map(f => `<div style="padding:8px 12px;border-left:3px solid ${f.sev === 'critical' ? C.crit : C.warn};background:${C.plane};border-radius:4px;font-size:12px;margin-bottom:5px"><b>${f.sev.toUpperCase()}</b> — ${esc(f.msg)}</div>`).join('')}</div>` : `<div style="color:${C.mut};font-size:12px;margin-top:8px">No threshold flags — all watch signals nominal.</div>`}
+
+  ${h2('Bot / non-human prevention <span style="font-weight:400;color:' + C.mut + '">(auth forms)</span>')}
+  ${bar(prevSegs)}${legend(prevSegs)}
+
+  ${h2('Feedback proxy <span style="font-weight:400;color:' + C.mut + '">(twproxy &middot; ' + esc(ENV === 'prod' ? 'web-06 public' : 'web-04 preview2') + ' &middot; retained ' + (TW_HOURS / 24) + 'd)</span>')}
+  ${twTiles}
+  <div style="height:8px"></div>
+  ${bar(twSegs)}${legend(twSegs)}
+  <div style="height:12px"></div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>${twoCol('Exit reasons', exitRows)}${twoCol('SQL-injection probes', sqliRows)}</tr></table>
+  <div style="font-size:11px;color:${C.mut};margin-top:8px">${twModeLive === 'Require' ? '<b style="color:' + C.good + '">Live mode Require</b> — the gate is actively denying bots.' : twModeLive === 'Observe' ? '<b style="color:' + C.warn + '">Live mode Observe</b> — turnstile-only failures not blocked here.' : 'Mode not inferable this window.'} Retained window (bulk re-shipped on rotation deploy), not the ${HOURS}h Logon window.</div>
+
+  ${h2('Full form lifecycle')}
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:12px"><tr style="color:${C.mut}"><td style="padding:4px 8px">form</td><td style="padding:4px 8px;text-align:right">CF issued</td><td style="padding:4px 8px;text-align:right">client solved</td><td style="padding:4px 8px">server gate</td></tr>${lc}</table>
+
+  ${days.length ? h2('Server verify — outcomes by day') + `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:12px"><tr style="color:${C.mut}"><td style="padding:4px 8px">day</td>${OUTCOMES.map(oc => `<td style="padding:4px 8px;text-align:right">${oc}</td>`).join('')}</tr>${dayRows}</table>` : ''}
+
+  <div style="font-size:11px;color:${C.mut};margin-top:22px;border-top:1px solid ${C.line};padding-top:12px">
+  Two gates: the <b>client gate</b> (widget) blocks page-loading bots (mode-independent); the <b>server gate</b> (siteverify) blocks direct-API tokenless/invalid under Enforce. pass / pass-ratelimited / bypassed-auth allowed in both modes; fail / absent are the Enforce delta. Full interactive report: <code>tools/soak-report/soak-report-prod.html</code> (open in a browser). Generated ${esc(iso(now).slice(0, 16))}Z.
+  </div>
+</td></tr></table>
+</td></tr></table>
+</body></html>`;
+}
+
+fs.writeFileSync(OUT, EMAIL ? emailHtml_() : html);
 console.log(`wrote ${OUT}  verdict=${verdict}  auth pass=${vPass} fail=${vFail} absent=${vAbsent} rl=${vRl}  prevented=${preventedTotal} (client ${preventClient}/server ${preventServer})  forms=${forms.length}  twproxy=${twTotal}req/${twHostilePct}%hostile/robot${twRobot}/sqli${twSqliTotal}/mode=${twModeLive}  warnings=${warn.length}`);
