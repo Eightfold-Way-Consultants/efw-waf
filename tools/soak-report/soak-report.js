@@ -81,7 +81,8 @@ const twStartRows = twG('start', `filter @message like /Start request/ | stats c
 const twOutcomeRows = twG('outcome', `parse @message /Turnstile outcome: (?<oc>[A-Za-z]+)/ | filter ispresent(oc) | stats count() as n by oc | sort n desc`);
 const twExitRows = twG('exits', `parse @message /Exit: (?<ex>[A-Za-z][A-Za-z ]*\\([^)]*\\)|[A-Za-z]+)/ | filter ispresent(ex) | stats count() as n by ex | sort n desc | limit 20`);
 const twSqliRows = twG('sqli', `parse @message /Exit: Invalid validationType (?<vt>.+)$/ | filter ispresent(vt) | stats count() as n by vt | sort n desc | limit 12`);
-const twModeRows = twG('mode', `parse @message /valid=(?<v>True|False) observe=(?<obs>True|False)/ | filter ispresent(obs) | stats count() as n by v, obs`);
+const twModeRows = twG('mode', `parse @message /observe=(?<obs>True|False)/ | filter ispresent(obs) | stats count() as n, latest(@timestamp) as t by obs`);
+const twRobotLatest = twG('robot-latest', `filter @message like /think you.re a robot/ | stats latest(@timestamp) as t`);
 
 const twTotal = +((twStartRows[0] || {}).n || 0);
 const twExits = twExitRows.map(r => ({ ex: r.ex, n: +r.n }));
@@ -93,9 +94,14 @@ const twSqli = twSqliRows.map(r => ({ vt: r.vt, n: +r.n })).filter(r => /select|
 const twSqliTotal = twSqli.reduce((a, r) => a + r.n, 0);
 const twHostile = Math.max(0, twTotal - twReached);                            // everything that never reached siteverify
 const twHostilePct = twTotal ? Math.round(twHostile * 100 / twTotal) : null;
+// Infer live mode by RECENCY: observe=True => Observe-era; observe=False OR a robot-block (fires only
+// under !bObserve) => Require-era. Whichever signal is newest wins. Counts kept for the subtitle.
 const twMode = { observe: 0, require: 0 };
-for (const r of twModeRows) { if (r.obs === 'True') twMode.observe += +r.n; else twMode.require += +r.n; }
-const twModeLive = (twMode.observe && twMode.require) ? 'mixed' : twMode.observe ? 'Observe' : twMode.require ? 'Require' : 'unknown';
+let tObsTrue = 0, tObsFalse = 0;
+for (const r of twModeRows) { if (r.obs === 'True') { twMode.observe += +r.n; tObsTrue = +r.t || 0; } else { twMode.require += +r.n; tObsFalse = +r.t || 0; } }
+const tRobot = (twRobotLatest[0] && +twRobotLatest[0].t) || 0;
+const tRequireSig = Math.max(tObsFalse, tRobot);
+const twModeLive = (!tObsTrue && !tRequireSig) ? 'unknown' : (tRequireSig >= tObsTrue ? 'Require' : 'Observe');
 
 // ---- shape ----
 const cf = {}; for (const r of cfRowsRaw) cf[r.dimensions.action] = (cf[r.dimensions.action] || 0) + r.count;
@@ -270,7 +276,7 @@ function twproxySection() {
       ${tile('Turnstile robot-blocks', fmt(twRobot), twRobot ? 'gate denied (Require mode)' : 'none in window', twRobot ? 'good' : '')}
       ${tile('SQLi probes', fmt(twSqliTotal), twSqliTotal ? 'in validationType field' : 'none', twSqliTotal ? 'critical' : 'good')}
       ${tile('reached siteverify', fmt(twReached), `${fmt(twPass)} passed`, 'good')}
-      ${tile('live mode (inferred)', twModeLive, twMode.observe || twMode.require ? `${fmt(twMode.require)} Require · ${fmt(twMode.observe)} Observe lines` : 'no scheme lines', modeCls)}
+      ${tile('live mode (inferred)', twModeLive, twModeLive === 'unknown' ? 'no signal in window' : `newest signal: ${tRequireSig >= tObsTrue ? 'robot-block/observe=False' : 'observe=True'}`, modeCls)}
     </div>
     <div class="pbar">${funnel.some(s => s.n) ? funnel.filter(s => s.n).map(s => `<div style="flex:${s.n};background:${s.color}" title="${esc(s.label)}: ${s.n}"></div>`).join('') : '<div class="empty" style="flex:1"></div>'}</div>
     <div class="legend">${funnel.map(s => `<span class="lg"><i style="background:${s.color}"></i>${esc(s.label)} <b>${fmt(s.n)}</b></span>`).join('')}</div>
