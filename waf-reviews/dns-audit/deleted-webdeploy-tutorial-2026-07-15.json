@@ -1,0 +1,16 @@
+{
+  "_comment": "BACKUP of webdeploy-tutorial.eightfoldway.com (zone Z1KW10MTO4TFYM), deleted 2026-07-15 as a dangling MSDeploy target: CNAME -> logon00.eightfoldway.com, which has NO record in the zone (NXDOMAIN). Not externally capturable (target is in-zone). To RESTORE, run: aws route53 change-resource-record-sets --hosted-zone-id Z1KW10MTO4TFYM --change-batch file://this-file.json",
+  "Changes": [
+    {
+      "Action": "UPSERT",
+      "ResourceRecordSet": {
+        "Name": "webdeploy-tutorial.eightfoldway.com.",
+        "Type": "CNAME",
+        "TTL": 300,
+        "ResourceRecords": [
+          { "Value": "logon00.eightfoldway.com" }
+        ]
+      }
+    }
+  ]
+}
