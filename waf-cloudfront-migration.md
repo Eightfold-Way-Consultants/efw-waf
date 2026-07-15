@@ -39,7 +39,7 @@ Deploy AWS WAF + CloudFront to block automated scanner traffic (28+ malicious IP
   - **Parked** (registered, NS at NameFind/GoDaddy, not Route53): `njdb101.org` — zone dead.
   - **Live but out of scope:** `disabilitybenefits101.org` (owned + Route53 but unused — leave alone); `maybeckstudio.org` (separate origin).
 - **`hb101.org` renewal — VERIFIED OK 2026-06-11** via GoDaddy API: `renewAuto=True`, expires 2026-06-23 (all 11 domains in the account auto-renew). One-time check of the payment method in the GoDaddy UI is the only residual.
-- **`housingbenefits101.org` → redirect to `hb101.org`, not fronted content.** Verified 2026-06-08: the zone has no apex/www records and only `mn.`/`preview-mn.`/`preview2-mn.housingbenefits101.org` content hosts (a parallel HB101-MN brand on the same origins). Decision: collapse the whole domain to a 301 redirect to `hb101.org` — retire/redirect the `mn.*` content hosts rather than add them to the content distributions. Implement as a small **redirect distribution** — scaffolded at [`cloudformation/redirect.yaml`](cloudformation/redirect.yaml) (CloudFront Function returning `301` to `https://hb101.org` + path/query; cfn-lint clean), using the existing cert (`housingbenefits101.org` + `*.housingbenefits101.org` SANs already on it; verified present). Aliases `housingbenefits101.org` + `*.housingbenefits101.org`. Route53: apex `housingbenefits101.org` ALIAS + `www` + the `mn.*`/`preview*.*` hosts all point at the redirect distribution. This keeps it out of the content-caching stacks entirely.
+- **`housingbenefits101.org` → redirect, not fronted content.** *(Superseded 2026-07-15: target is now `mn.hb101.org` directly (not `hb101.org` → avoids a double-hop), and this folds into ONE generalized redirect stack that also bounces the `db101.org`/`hb101.org`/`vets101.org`/`eightfoldway.com` apexes — see the "SUPERSEDED 2026-07-15" block under Alias strategy.)* Verified 2026-06-08: the zone has no apex/www records and only `mn.`/`preview-mn.`/`preview2-mn.housingbenefits101.org` content hosts (a parallel HB101-MN brand on the same origins). Decision: collapse the whole domain to a 301 redirect to `hb101.org` — retire/redirect the `mn.*` content hosts rather than add them to the content distributions. Implement as a small **redirect distribution** — scaffolded at [`cloudformation/redirect.yaml`](cloudformation/redirect.yaml) (CloudFront Function returning `301` to `https://hb101.org` + path/query; cfn-lint clean), using the existing cert (`housingbenefits101.org` + `*.housingbenefits101.org` SANs already on it; verified present). Aliases `housingbenefits101.org` + `*.housingbenefits101.org`. Route53: apex `housingbenefits101.org` ALIAS + `www` + the `mn.*`/`preview*.*` hosts all point at the redirect distribution. This keeps it out of the content-caching stacks entirely.
 - **One ACM cert covers all 5 zones** (10 SANs: apex + wildcard each) — well under the 30-SAN limit. The 2-cert concern in review 04 no longer applies. **Status: ISSUED 2026-06-08** — `arn:aws:acm:us-east-1:874922373146:certificate/d25dc33a-a3fa-4273-a14c-2b8b04ed7507`.
 - **HTTP→HTTPS redirect moves to the front end (CloudFront).** `edge.yaml` sets `ViewerProtocolPolicy: redirect-to-https` on all behaviors → CloudFront 301s at the edge (no origin round-trip). The existing **on-IIS http→https redirect becomes redundant for fronted traffic** (CloudFront connects to origin HTTPS-only, so IIS never sees viewer HTTP) — keep it as defense-in-depth for direct-origin access until Phase 5 SG lockdown, then it's moot. *Host*-level www canonicalization (www.<state>.db101.org → bare host) is **out of scope** — those 2-level www hosts don't work today anyway (and aren't covered by the `*.db101.org` cert), so they're not being migrated or redirected. Content www's (`www.db101.org`, `www.eightfoldway.com`) stay as content on the public dist; `www.hb101.org`/`www.db101.org` are CNAMEs handled normally.
 - **All AWS objects built as CloudFormation (IaC)** — no click-ops. WAF, CloudFront, policies, logging, alarms are version-controlled, peer-reviewable, and rollback-able as stacks. DNS cutover stays manual/staged (canary + TTL + one-click revert) and is the *only* out-of-stack step. See "Infrastructure as Code" below.
@@ -104,6 +104,26 @@ Deployed **twice**, same template, different parameters (HB101 follows the same 
 - **Edit-cms names are NOT in any alias list** — `db101-*`/`hb101-*`.eightfoldway.com, `vets101.eightfoldway.com`, `edit-site`, `brk-site`, and **`q.db101.org`** stay DNS'd direct to web-04. **DNS wrinkle for `q.db101.org`:** today it CNAMEs through the `preview2-site` chain; at preview2 cutover that chain head repoints to CloudFront, so `q` must first be **decoupled — re-point it directly at `s4.eightfoldway.com`** so it keeps bypassing the cache/WAF entirely.
 
 ### ⚠️ Alternate domain name (CNAME) strategy (decided 2026-06-10)
+
+> **⚠️ SUPERSEDED 2026-07-15 — converged edge/redirect division of labor (READ THIS FIRST).** The 2026-06-10 "wildcards **+ apexes** on the public dist" below is revised: **the apexes come OFF the edge and become external 301 redirects on a single generalized redirect stack.** Guiding principle (Jack): **`edge` = real infrastructure for real sites; `redirect` = all apex/legacy bounce work.**
+>
+> - **`edge-public` aliases = wildcards only, NO apexes:** `*.db101.org`, `*.hb101.org`, `*.vets101.org`, `www.eightfoldway.com` (+ the explicit `turtles.eightfoldway.com` outlier, unchanged). The wildcards serve every real subdomain — per-state `mn/az/…` **and** the canonical redirect *targets* `www.db101.org` / `mn.hb101.org` / `www.vets101.org`. `www.eightfoldway.com` stays explicit (NOT `*.eightfoldway.com` — a wildcard there would capture the `s4`/`s6` origin FQDNs + the edit hosts). Staging `preview-*` rides the wildcards.
+> - **`redirect` = ONE generalized stack, not per-domain.** Generalize `redirect.yaml` from a single `TargetHost` to a **source→canonical MAP inside the CloudFront Function**, so one distribution + one function + one alias list does ALL apex/legacy 301 bounces:
+>
+>   | Source | 301 → |
+>   |---|---|
+>   | `db101.org` | `www.db101.org` |
+>   | `hb101.org` | `mn.hb101.org` |
+>   | `vets101.org` | `www.vets101.org` |
+>   | `eightfoldway.com` | `www.eightfoldway.com` |
+>   | `housingbenefits101.org` (+ `*.housingbenefits101.org`) | `mn.hb101.org` |
+>
+>   `housingbenefits101.org` now targets **`mn.hb101.org` directly**, not `hb101.org` — the old `redirect.yaml` default (→`hb101.org`) would **double-hop**, since `hb101.org` itself now bounces to `mn.hb101.org`. Apexes **ALIAS** at the redirect dist (apexes can't CNAME); the redirect function 301s at the edge before any cache/origin. The canonical targets themselves (`www.db101.org`, `mn.hb101.org`, …) are real content served by `edge-public` via the wildcards.
+> - **Zero-config onboarding (Jack's requirement).** A new state `wa.db101.org` (public) + `preview-wa.db101.org` (staging) both ride `*.db101.org` on `edge-public` → **ZERO efw-waf config**. Only `preview2-wa.db101.org` needs one explicit alias on the preview2 dist (still enumerated, web-04). New state = DNS + its web-06 IIS site, nothing in efw-waf.
+> - **Catchall / anchoring.** The wildcard alias + ACM cert anchor every `*.db101.org` at our edge/origin (nobody can stand up a rival distribution claiming `*.zone` without proving domain control). A wildcard-matched-but-unbound Host → origin IIS http.sys **404** (verified 2026-07-15, [[dns-dangling-audit]]) — response hygiene, not a takeover control.
+>
+> **Stale artifacts to correct when the yaml is built (NOT yet done — Phase 3/4):** `edge.yaml`'s `AlternateDomainNames` param `Description` still lists apexes + `housingbenefits101` in the public set; `redirect.yaml` is still single-`TargetHost` housingbenefits-only. `params/edge-public.json` scaffolds `AlternateDomainNames` with a `REPLACE_WITH_` placeholder (the `deploy-stack.ps1` guard blocks it) — real value = the 4 wildcards above. The 2026-06-10 detail below is retained for the alias-mechanics reasoning, but where it says "apexes on the public dist," this block wins.
+
 CloudFront alias mechanics that drive the lists: wildcards replace the **whole leftmost label only** (`*.db101.org` valid, `preview2-*.db101.org` invalid); aliases are **globally unique across all CloudFront accounts**; a **specific alias overrides a wildcard** (and can move/coexist within our own account); the edge routes by SNI/Host lookup, not by distribution IP.
 
 - **Public dist gets the wildcards + apexes:** `*.db101.org`, `db101.org`, `*.hb101.org`, `hb101.org`, `*.vets101.org`, `vets101.org`, plus explicit `www.eightfoldway.com`, `eightfoldway.com`. Staging `preview-*` names ride the wildcards automatically. (No `*.eightfoldway.com` — that zone is mostly edit/infra names that stay direct, and `analytics.eightfoldway.com` lives on a separate existing distribution.)
@@ -156,7 +176,7 @@ Two distinct concerns, both handled in one ACL (default action Allow; rules in p
 |---|---|---|
 | `OriginDomainName` | `s4.eightfoldway.com` | `s6.eightfoldway.com` |
 | `AcmCertificateArn` | (shared cert ARN) | (same) |
-| `AlternateDomainNames` (see alias strategy) | explicit: `preview2-<state>.db101.org`, `preview2-mn.hb101.org`, `preview2.vets101.org` | wildcards + apexes: `*.db101.org`, `db101.org`, `*.hb101.org`, `hb101.org`, `*.vets101.org`, `vets101.org`, `www.eightfoldway.com`, `eightfoldway.com` (staging `preview-*` rides the wildcards) |
+| `AlternateDomainNames` (see alias strategy; **apexes moved to redirect dist 2026-07-15**) | explicit: `preview2-<state>.db101.org`, `preview2-mn.hb101.org`, `preview2.vets101.org` | wildcards only: `*.db101.org`, `*.hb101.org`, `*.vets101.org`, `www.eightfoldway.com`, `turtles.eightfoldway.com` (staging `preview-*` rides the wildcards; apexes → generalized redirect dist) |
 | `RateLimit` (site-wide /IP/5min) | `500` | `500` |
 | `PlanningRateLimit` (`/planning/*` /IP/5min) | `300` | `300` |
 | `WafRuleAction` | `Count` → `Block` | `Count` → `Block` |
@@ -392,14 +412,14 @@ From the 2026-06-10 IIS-accuracy + test-plan reviews:
 
 **⚠️ DNS scope (WHOIS-verified 2026-06-08):** Public-site zones in scope: `db101.org`, `hb101.org`, `vets101.org`, `eightfoldway.com`, `housingbenefits101.org` (**5 zones**). All other zones review 04 flagged are out of scope — 7 are **unregistered** at the registry and 1 is **parked at NameFind** (`njdb101.org`). Their Route53 A-records to the origin are orphans that resolve for nobody. Do not migrate or recreate them.
 
-**⚠️ Apex A records:** **4 real apexes** need ALIAS conversion (`db101.org`, `hb101.org`, `eightfoldway.com`, `vets101.org`). `housingbenefits101.org` apex goes to the **redirect** distribution. Apex A records pointing directly at the origin need ALIAS conversion before CloudFront can front them:
-1. Change A → ALIAS (Route53 auto-converts when target is CloudFront)
+**⚠️ Apex A records** *(revised 2026-07-15 — see the "SUPERSEDED" block under Alias strategy)*: all **5 apexes** (`db101.org`, `hb101.org`, `vets101.org`, `eightfoldway.com`, `housingbenefits101.org`) now ALIAS at the **single generalized redirect distribution** (301 to their canonical host), NOT the content dist. Apex A records pointing directly at the origin need ALIAS conversion:
+1. Change A → ALIAS at the redirect dist (Route53 auto-converts when target is CloudFront)
 2. Delete the old A record
 3. Safe at 60s TTL.
 
-- [ ] Update the public stack's `AlternateDomainNames` to the wildcard strategy (`*.db101.org`, apexes, …) — the canary's explicit entry can then be dropped
-- [ ] Repoint chain heads (`s6.db101.org` etc. — but NEVER `s6.eightfoldway.com` itself, that's the origin) + convert apexes → ALIAS → CloudFront domain
-- [ ] Deploy the `redirect.yaml` stack for `housingbenefits101.org` + `*.housingbenefits101.org` → 301 `hb101.org`
+- [ ] Update the public stack's `AlternateDomainNames` to the **wildcards only** (`*.db101.org`, `*.hb101.org`, `*.vets101.org`, `www.eightfoldway.com`, + `turtles`) — **no apexes** (2026-07-15 revision) — the canary's explicit entry can then be dropped
+- [ ] Repoint chain heads (`s6.db101.org` etc. — but NEVER `s6.eightfoldway.com` itself, that's the origin) → CloudFront domain
+- [ ] Deploy the **generalized `redirect.yaml`** stack (source→canonical MAP): all 5 apexes + `*.housingbenefits101.org` → 301 to their canonical hosts (`db101.org`→`www.db101.org`, `hb101.org`/`housingbenefits101.org`→`mn.hb101.org`, `vets101.org`→`www.vets101.org`, `eightfoldway.com`→`www.eightfoldway.com`); convert each apex A → ALIAS at this dist
 - [ ] **Verify PubBot invalidation** end-to-end on the public tier: publish a change, confirm invalidation + fresh content
 - [ ] Run 72h Count mode on public-site (watch gov-NAT IPs vs the rate limits in Athena)
 - [ ] Flip `WafRuleAction=Block` and `cloudformation deploy` the public stack
