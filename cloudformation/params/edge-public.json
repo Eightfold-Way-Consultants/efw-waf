@@ -1,0 +1,42 @@
+[
+  {
+    "ParameterKey": "AcmCertificateArn",
+    "ParameterValue": "arn:aws:acm:us-east-1:874922373146:certificate/d25dc33a-a3fa-4273-a14c-2b8b04ed7507"
+  },
+  {
+    "ParameterKey": "AlternateDomainNames",
+    "ParameterValue": "REPLACE_WITH_PUBLIC_DOMAIN_LIST_BEFORE_DEPLOY"
+  },
+  {
+    "ParameterKey": "BaseStackName",
+    "ParameterValue": "efw-waf-base"
+  },
+  {
+    "ParameterKey": "EnableBotControl",
+    "ParameterValue": "false"
+  },
+  {
+    "ParameterKey": "EnvName",
+    "ParameterValue": "public"
+  },
+  {
+    "ParameterKey": "MinimumOriginSslProtocol",
+    "ParameterValue": "TLSv1.2"
+  },
+  {
+    "ParameterKey": "OriginDomainName",
+    "ParameterValue": "s6.eightfoldway.com"
+  },
+  {
+    "ParameterKey": "PlanningRateLimit",
+    "ParameterValue": "1000"
+  },
+  {
+    "ParameterKey": "RateLimit",
+    "ParameterValue": "1000"
+  },
+  {
+    "ParameterKey": "WafRuleAction",
+    "ParameterValue": "Count"
+  }
+]

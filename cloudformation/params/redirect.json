@@ -1,0 +1,18 @@
+[
+  {
+    "ParameterKey": "AcmCertificateArn",
+    "ParameterValue": "arn:aws:acm:us-east-1:874922373146:certificate/d25dc33a-a3fa-4273-a14c-2b8b04ed7507"
+  },
+  {
+    "ParameterKey": "AlternateDomainNames",
+    "ParameterValue": "housingbenefits101.org,*.housingbenefits101.org"
+  },
+  {
+    "ParameterKey": "Comment",
+    "ParameterValue": "housingbenefits101.org -> hb101.org 301 redirect"
+  },
+  {
+    "ParameterKey": "TargetHost",
+    "ParameterValue": "hb101.org"
+  }
+]

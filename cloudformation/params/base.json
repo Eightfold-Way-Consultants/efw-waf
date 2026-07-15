@@ -1,0 +1,10 @@
+[
+  {
+    "ParameterKey": "AlarmEmail",
+    "ParameterValue": "jeastman@eightfoldway.com"
+  },
+  {
+    "ParameterKey": "LogRetentionDays",
+    "ParameterValue": "90"
+  }
+]

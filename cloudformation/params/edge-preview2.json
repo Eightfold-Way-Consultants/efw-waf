@@ -1,0 +1,42 @@
+[
+  {
+    "ParameterKey": "AcmCertificateArn",
+    "ParameterValue": "arn:aws:acm:us-east-1:874922373146:certificate/d25dc33a-a3fa-4273-a14c-2b8b04ed7507"
+  },
+  {
+    "ParameterKey": "AlternateDomainNames",
+    "ParameterValue": "preview2.db101.org,preview2.eightfoldway.com,preview2.vets101.org,preview2-ak.db101.org,preview2-az.db101.org,preview2-az-es.db101.org,preview2-ca.db101.org,preview2-ca-es.db101.org,preview2-co.db101.org,preview2-co-es.db101.org,preview2-ga.db101.org,preview2-ia.db101.org,preview2-ia-es.db101.org,preview2-il.db101.org,preview2-il-es.db101.org,preview2-ky.db101.org,preview2-master.db101.org,preview2-mi.db101.org,preview2-mn.db101.org,preview2-mn.hb101.org,preview2-mo.db101.org,preview2-nc.db101.org,preview2-nc-es.db101.org,preview2-nj.db101.org,preview2-nj-es.db101.org,preview2-nv.db101.org,preview2-nv-es.db101.org,preview2-oh.db101.org"
+  },
+  {
+    "ParameterKey": "BaseStackName",
+    "ParameterValue": "efw-waf-base"
+  },
+  {
+    "ParameterKey": "EnableBotControl",
+    "ParameterValue": "false"
+  },
+  {
+    "ParameterKey": "EnvName",
+    "ParameterValue": "preview2"
+  },
+  {
+    "ParameterKey": "MinimumOriginSslProtocol",
+    "ParameterValue": "TLSv1.2"
+  },
+  {
+    "ParameterKey": "OriginDomainName",
+    "ParameterValue": "s4.eightfoldway.com"
+  },
+  {
+    "ParameterKey": "PlanningRateLimit",
+    "ParameterValue": "1000"
+  },
+  {
+    "ParameterKey": "RateLimit",
+    "ParameterValue": "1000"
+  },
+  {
+    "ParameterKey": "WafRuleAction",
+    "ParameterValue": "Block"
+  }
+]

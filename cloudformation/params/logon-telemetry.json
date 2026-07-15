@@ -1,0 +1,46 @@
+[
+  {
+    "ParameterKey": "AlarmEmail",
+    "ParameterValue": "jeastman@eightfoldway.com"
+  },
+  {
+    "ParameterKey": "ArchiveBucketName",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "EventsLogGroupName",
+    "ParameterValue": "/logon/events"
+  },
+  {
+    "ParameterKey": "FirehoseBufferMB",
+    "ParameterValue": "5"
+  },
+  {
+    "ParameterKey": "FirehoseBufferSeconds",
+    "ParameterValue": "60"
+  },
+  {
+    "ParameterKey": "GlacierTransitionDays",
+    "ParameterValue": "90"
+  },
+  {
+    "ParameterKey": "GlueDatabaseName",
+    "ParameterValue": "logon_telemetry"
+  },
+  {
+    "ParameterKey": "HotRetentionDays",
+    "ParameterValue": "14"
+  },
+  {
+    "ParameterKey": "PreviewEventsLogGroupName",
+    "ParameterValue": "/logon-preview/events"
+  },
+  {
+    "ParameterKey": "PreviewRetentionDays",
+    "ParameterValue": "7"
+  },
+  {
+    "ParameterKey": "ProjectionStartDate",
+    "ParameterValue": "2026/07/01"
+  }
+]
