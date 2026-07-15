@@ -20,8 +20,9 @@
  * every drop-off, with the tokenless/`absent` bypass entering directly at the server stage.
  *
  * Sources (all API): CF GraphQL turnstileAdaptiveGroups + Logs Insights over /logon/events,
- * twproxy-events/{hostname}, estimator-events/{hostname}, pdfreport-events/{hostname} (prod=web-06
- * ip-10-3-0-63, preview=web-04 ip-10-3-0-122) + twproxy-logs/* (pre-gate
+ * /twproxy/events, /estimator/events, /pdfreport/events (prod, lake-tapped) or their
+ * /{surface}-preview/events counterparts (env split by the emitter's {surface}-{env}-events
+ * filename, NOT by box) + twproxy-logs/* (pre-gate
  * plain text) + CloudWatch alarms. The new groups do not exist until their apps deploy; queries
  * against a missing group are swallowed and the surface renders "awaiting data" (never n/a, never
  * an error). The combined Athena `events` table (logon-telemetry.yaml) is the durable cross-surface
@@ -55,22 +56,22 @@ const CFG = { prod: { label: 'production' }, preview: { label: 'preview' } }[ENV
 const SOURCES = ENV === 'prod'
   ? [
     { group: '/logon/events', system: 'logon', primary: true },
-    { group: 'twproxy-events/ip-10-3-0-63.us-west-1.compute.internal', system: 'twproxy' },
-    { group: 'estimator-events/ip-10-3-0-63.us-west-1.compute.internal', system: 'estimator' },
-    { group: 'pdfreport-events/ip-10-3-0-63.us-west-1.compute.internal', system: 'estimator' },
+    { group: '/twproxy/events', system: 'twproxy' },
+    { group: '/estimator/events', system: 'estimator' },
+    { group: '/pdfreport/events', system: 'estimator' },
   ]
   : [
     { group: '/logon-preview/events', system: 'logon', primary: true },
-    { group: 'twproxy-events/ip-10-3-0-122.us-west-1.compute.internal', system: 'twproxy' },
-    { group: 'estimator-events/ip-10-3-0-122.us-west-1.compute.internal', system: 'estimator' },
-    { group: 'pdfreport-events/ip-10-3-0-122.us-west-1.compute.internal', system: 'estimator' },
+    { group: '/twproxy-preview/events', system: 'twproxy' },
+    { group: '/estimator-preview/events', system: 'estimator' },
+    { group: '/pdfreport-preview/events', system: 'estimator' },
   ];
 const PRIMARY = SOURCES.find(s => s.primary).group;
 const SYSTEMS_CONFIGURED = [...new Set(SOURCES.map(s => s.system))];
 
 // twproxy (feedback proxy) PRE-GATE plain-text group, per env box (web-06=public, web-04=preview2).
 // This carries the attack detail that exits BEFORE the verify point (method/tags/SQLi) — the
-// structured twproxy-events/{hostname} group (above) will carry the verify-decision events once deployed.
+// structured /twproxy/events group (above) will carry the verify-decision events once deployed.
 const TWGROUP = { prod: 'twproxy-logs/ip-10-3-0-63.us-west-1.compute.internal', preview: 'twproxy-logs/ip-10-3-0-122.us-west-1.compute.internal' }[ENV];
 const TW_HOURS = 24 * 14;   // twproxy files are month-accumulating + bulk re-shipped on rotation deploy — read the full retained window
 
@@ -543,7 +544,7 @@ function twproxySection() {
   ];
   const modeCls = twModeLive === 'Observe' ? 'warning' : twModeLive === 'Require' ? 'good' : '';
   return `<h2>Feedback proxy — pre-gate detail <span class="muted">(twproxy · ${esc(ENV === 'prod' ? 'web-06 public' : 'web-04 preview2')} · retained ${TW_HOURS / 24}d plain-text)</span></h2>
-  <p class="sub">The pre-gate attack detail that exits <b>before</b> the verify point (method/tag/payload/SQLi) — not visible to the structured funnel above. Once <code>twproxy-events/{hostname}</code> deploys, the verify-decision (pass/absent/fail) joins the unified funnel; this panel remains the source for pre-gate floods.</p>
+  <p class="sub">The pre-gate attack detail that exits <b>before</b> the verify point (method/tag/payload/SQLi) — not visible to the structured funnel above. Once <code>/twproxy/events</code> deploys, the verify-decision (pass/absent/fail) joins the unified funnel; this panel remains the source for pre-gate floods.</p>
   <div class="card">
     <div class="tiles">
       ${tile('total requests', fmt(twTotal), 'retained window', twHostilePct >= 80 ? 'critical' : twHostilePct >= 50 ? 'warning' : '')}

@@ -261,48 +261,52 @@ Resources:
       RoleArn: !GetAtt SubscriptionRole.Arn
 
   # ---------------- ADDITIONAL PRODUCERS: twproxy / estimator / pdfreport ----------------
-  # Same lake, same Firehose/Glue table. prod/preview split is by HOSTNAME (like twproxy-logs/{hostname}):
-  # the emitter writes env-less filenames (C:\temp\{yyyy_MM}-{base}.txt) and the CloudWatch agent's
-  # {hostname} interpolation routes web-06 (ip-10-3-0-63) -> the prod group and web-04 (ip-10-3-0-122)
-  # -> the preview group. Each PROD producer group is tapped identically to /logon/events (empty pattern
-  # = every record); preview groups are hot-only (NOT tapped). The events table gained system/config/
-  # targetstate columns to carry these producers' extra fields alongside Logon's.
+  # Same lake, same Firehose/Glue table. prod/preview split is by FILENAME (exactly like /logon/events),
+  # NOT by hostname: every surface's prod and preview tiers are CO-HOSTED on one box (web-06 answers both
+  # mn.db101.org AND preview-mn.db101.org), so a {hostname} box split cannot separate them and would tap
+  # preview into the lake. Instead F8TelemetryEmitter resolves env per-request -- an explicit TelemetryEnv
+  # appSetting (estimator + pdfreport per-tier configs; web-04 twproxy Web.Debug) wins, else the request
+  # Host is classified (web-06 twproxy fallback) -- and writes C:\temp\{yyyy_MM}-{surface}-{prod|preview}-
+  # events.txt. The agent globs each surface's prod file -> the tapped group below, preview file -> the
+  # untapped preview group. Each PROD group is tapped identically to /logon/events (empty pattern = every
+  # record); preview groups are hot-only (NOT tapped) -- isolation is STRUCTURAL. The events table gained
+  # system/config/targetstate columns to carry these producers' extra fields alongside Logon's.
   TwproxyEventsLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: twproxy-events/ip-10-3-0-63.us-west-1.compute.internal
+      LogGroupName: /twproxy/events
       RetentionInDays: 14
 
   EstimatorEventsLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: estimator-events/ip-10-3-0-63.us-west-1.compute.internal
+      LogGroupName: /estimator/events
       RetentionInDays: 14
 
   PdfreportEventsLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: pdfreport-events/ip-10-3-0-63.us-west-1.compute.internal
+      LogGroupName: /pdfreport/events
       RetentionInDays: 14
 
-  # Preview producer groups (web-04 = ip-10-3-0-122). Hot-only validation, NOT tapped to S3 -- preview
-  # isolation is STRUCTURAL (no subscription filter here), same as /logon-preview/events.
+  # Preview producer groups. Hot-only validation, NOT tapped to S3 -- preview isolation is STRUCTURAL
+  # (no subscription filter here), same as /logon-preview/events.
   TwproxyPreviewEventsLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: twproxy-events/ip-10-3-0-122.us-west-1.compute.internal
+      LogGroupName: /twproxy-preview/events
       RetentionInDays: 14
 
   EstimatorPreviewEventsLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: estimator-events/ip-10-3-0-122.us-west-1.compute.internal
+      LogGroupName: /estimator-preview/events
       RetentionInDays: 14
 
   PdfreportPreviewEventsLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: pdfreport-events/ip-10-3-0-122.us-west-1.compute.internal
+      LogGroupName: /pdfreport-preview/events
       RetentionInDays: 14
 
   TwproxySubscriptionFilter:

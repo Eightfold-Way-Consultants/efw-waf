@@ -7,8 +7,9 @@ Turnstile telemetry event logs (twproxy / estimator / pdfreport) to CloudWatch L
 
 - `AmazonCloudWatch-windows.json` — the full agent config. Mirrors the live SSM
   String parameter **`AmazonCloudWatch-windows`** (region **us-west-1**) verbatim,
-  plus three appended `logs.logs_collected.files.collect_list` entries for the
-  telemetry globs (one per producer; prod/preview split is by `{hostname}`).
+  plus six appended `logs.logs_collected.files.collect_list` entries for the
+  telemetry globs (a prod + a preview glob per producer; env is carried in the
+  **filename**, set by the emitter — see below).
 - `deploy-agent-config.ps1` — put the parameter + fetch-config on the target
   instances. Nothing runs on import; work happens only when the script is invoked.
 
@@ -21,8 +22,9 @@ BOTH:
 - **web-04** — `i-0272763b46610ac1b` — preview2
 
 There is no on-disk json on either instance; both `fetch-config` from this one
-parameter. The config uses `{hostname}` / `{instance_id}` interpolation so one value
-serves both boxes.
+parameter. Env is **not** decided by the box — it is baked into each event's filename
+by the emitter (see below) — so the same six globs serve both boxes: web-06 writes
+prod *and* preview files (it co-hosts both tiers), web-04 writes only preview files.
 
 > The Logon box **web-03b** uses a **separate** parameter
 > (`WindowsAgentConfig-Logon`). It is **not** touched by anything in this folder.
@@ -30,37 +32,49 @@ serves both boxes.
 ## Log groups: who owns them
 
 The emitter writes pure-JSON lines (internal `ts` field) to
-`C:\temp\{yyyy_MM}-{base}.txt` where
-`base ∈ {twproxy-events, estimator-events, pdfreport-events}` — **no env in the
-filename**. The prod/preview split is done by the agent's `{hostname}` interpolation
-(same convention as `twproxy-logs/{hostname}`), so each of the three globs lands in a
-**different log group per box**:
+`C:\temp\{yyyy_MM}-{surface}-{env}-events.txt` where
+`surface ∈ {twproxy, estimator, pdfreport}` and `env ∈ {prod, preview}` — **env is in
+the filename** (exactly like Logon's `logon-prod-events` / `logon-preview-events`). The
+agent globs each surface's prod file into its tapped group and its preview file into an
+untapped group. Fixed group names (no `{hostname}`) because prod and preview are
+**co-hosted on one box** and cannot be split by box identity:
 
-| Glob (`C:\temp\...`)         | Group template            | web-06 (prod) group                                    | web-04 (preview) group                                  |
-|------------------------------|---------------------------|--------------------------------------------------------|---------------------------------------------------------|
-| `*-twproxy-events.txt`       | `twproxy-events/{hostname}`   | `twproxy-events/ip-10-3-0-63.us-west-1.compute.internal`   | `twproxy-events/ip-10-3-0-122.us-west-1.compute.internal`   |
-| `*-estimator-events.txt`     | `estimator-events/{hostname}` | `estimator-events/ip-10-3-0-63.us-west-1.compute.internal` | `estimator-events/ip-10-3-0-122.us-west-1.compute.internal` |
-| `*-pdfreport-events.txt`     | `pdfreport-events/{hostname}` | `pdfreport-events/ip-10-3-0-63.us-west-1.compute.internal` | `pdfreport-events/ip-10-3-0-122.us-west-1.compute.internal` |
+| Glob (`C:\temp\...`)                 | Log group (fixed)          | Tapped to lake? |
+|--------------------------------------|----------------------------|-----------------|
+| `*-twproxy-prod-events.txt`          | `/twproxy/events`          | **yes**         |
+| `*-twproxy-preview-events.txt`       | `/twproxy-preview/events`  | no              |
+| `*-estimator-prod-events.txt`        | `/estimator/events`        | **yes**         |
+| `*-estimator-preview-events.txt`     | `/estimator-preview/events`| no              |
+| `*-pdfreport-prod-events.txt`        | `/pdfreport/events`        | **yes**         |
+| `*-pdfreport-preview-events.txt`     | `/pdfreport-preview/events`| no              |
 
 **All six groups are CFN-owned** (the logon-telemetry.yaml stack creates each group
 and sets retention), so these agent entries deliberately **omit `retention_in_days`**
 to avoid the agent fighting CloudFormation over the retention policy. Only the three
-**prod** (`ip-10-3-0-63`) groups are lake-tapped by a subscription filter; the three
-**preview** (`ip-10-3-0-122`) groups are hot-only. That isolation is **structural**
-(hostname routing + prod-only taps), not dependent on any per-record or per-deploy env
-field being set correctly.
+**prod** groups are lake-tapped by a subscription filter; the three **preview** groups
+are hot-only. Isolation is **structural** (prod-only taps + the emitter never writing a
+`*-prod-events.txt` file for preview traffic).
 
 No `timestamp_format` on the telemetry globs — the lines are pure JSON with an
 internal `ts`, mirroring the existing `/logon/events` glob.
 
-## prod/preview split is automatic — nothing to set on deploy
+## How env is decided — `TelemetryEnv` appSetting, else request Host
 
-The emitter writes **env-less** filenames on every box. Which lake a box's telemetry
-reaches is decided entirely by **which box it is**: the agent's `{hostname}` routes
-**web-06 → the prod group** (lake-tapped) and **web-04 → the preview group** (hot-only).
-There is **no `TelemetryEnv` appSetting** and **no per-app / per-deploy configuration** —
-prod and preview deploys ship the identical app config, and a preview box physically
-cannot write into a prod group. Nothing to remember, nothing to get wrong.
+The emitter (`F8TelemetryEmitter.ClassifyEnv`) resolves `env` per request:
+
+1. **explicit `TelemetryEnv` appSetting wins** — estimator + pdfreport carry it per-tier
+   in their deployed config (estimator `_final`/`_preview` + top-level preview2 config;
+   pdfreport base=`preview` + `web.pdfreport-final.config`→`prod`); web-04 twproxy pins
+   `preview` in `Web.Debug.config`.
+2. **else classify the client-facing request Host** — the web-06 twproxy fallback (its
+   `/tw` shares one physical config across `mn` + `preview-mn` and cannot carry a per-tier
+   value): `prod` iff the host has no `preview` **and** ends with `.db101.org` /
+   `.hb101.org` / `.vets101.org`; else `preview`.
+3. **default `preview`** when neither fires (unknown / off-request) — so nothing
+   un-attributable ever writes a prod file / taps the lake.
+
+Env is a **per-tier deploy property**, not a per-box one (every surface co-hosts prod +
+preview on one box). This is why box/`{hostname}` routing was wrong and was reverted.
 
 ## Deploy
 
