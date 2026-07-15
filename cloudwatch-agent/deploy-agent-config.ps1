@@ -126,16 +126,26 @@ function Invoke-DeployAgentConfig {
     foreach ($id in $InstanceIds) {
         Write-Host "`n[fetch-config] $id : sending AWS-RunPowerShellScript ..."
 
-        # SSM SendCommand wants the commands as a JSON array of strings.
+        # SSM SendCommand wants the commands as a JSON array of strings. Write it to a
+        # temp file and pass file://; an inline --parameters value word-splits under
+        # Windows PowerShell 5.1 on the space in "C:\Program Files\...\...-ctl.ps1"
+        # (aws sees "Unknown options: Files\Amazon..."). BOM-free so aws parses it.
         $paramsJson = @{ commands = @($remoteCmd) } | ConvertTo-Json -Compress
+        $paramsFile = Join-Path $env:TEMP ("ssm-fetch-config-{0}.json" -f $id)
+        [System.IO.File]::WriteAllText($paramsFile, $paramsJson)
+        $paramsUri  = 'file://' + ($paramsFile -replace '\\', '/')
 
-        $sendJson = aws ssm send-command `
-            --instance-ids $id `
-            --document-name 'AWS-RunPowerShellScript' `
-            --comment 'CloudWatch agent fetch-config (deploy-agent-config.ps1)' `
-            --parameters $paramsJson `
-            --region $Region `
-            --output json
+        try {
+            $sendJson = aws ssm send-command `
+                --instance-ids $id `
+                --document-name 'AWS-RunPowerShellScript' `
+                --comment 'CloudWatch agent fetch-config (deploy-agent-config.ps1)' `
+                --parameters $paramsUri `
+                --region $Region `
+                --output json
+        } finally {
+            Remove-Item -LiteralPath $paramsFile -ErrorAction SilentlyContinue
+        }
         if ($LASTEXITCODE -ne 0) { throw "send-command failed for $id (exit $LASTEXITCODE)." }
 
         $commandId = ($sendJson | ConvertFrom-Json).Command.CommandId
