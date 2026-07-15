@@ -260,26 +260,49 @@ Resources:
       DestinationArn: !GetAtt EventsFirehose.Arn
       RoleArn: !GetAtt SubscriptionRole.Arn
 
-  # ---------------- ADDITIONAL PROD PRODUCERS: twproxy / estimator / pdfreport ----------------
-  # Same lake, same Firehose/Glue table. Each prod producer group is tapped identically to /logon/events
-  # (empty pattern = every record). The events table gained system/config/targetstate columns to carry
-  # these producers' extra fields alongside Logon's. No preview groups here (prod-only taps).
+  # ---------------- ADDITIONAL PRODUCERS: twproxy / estimator / pdfreport ----------------
+  # Same lake, same Firehose/Glue table. prod/preview split is by HOSTNAME (like twproxy-logs/{hostname}):
+  # the emitter writes env-less filenames (C:\temp\{yyyy_MM}-{base}.txt) and the CloudWatch agent's
+  # {hostname} interpolation routes web-06 (ip-10-3-0-63) -> the prod group and web-04 (ip-10-3-0-122)
+  # -> the preview group. Each PROD producer group is tapped identically to /logon/events (empty pattern
+  # = every record); preview groups are hot-only (NOT tapped). The events table gained system/config/
+  # targetstate columns to carry these producers' extra fields alongside Logon's.
   TwproxyEventsLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: /twproxy/events
+      LogGroupName: twproxy-events/ip-10-3-0-63.us-west-1.compute.internal
       RetentionInDays: 14
 
   EstimatorEventsLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: /estimator/events
+      LogGroupName: estimator-events/ip-10-3-0-63.us-west-1.compute.internal
       RetentionInDays: 14
 
   PdfreportEventsLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: /pdfreport/events
+      LogGroupName: pdfreport-events/ip-10-3-0-63.us-west-1.compute.internal
+      RetentionInDays: 14
+
+  # Preview producer groups (web-04 = ip-10-3-0-122). Hot-only validation, NOT tapped to S3 -- preview
+  # isolation is STRUCTURAL (no subscription filter here), same as /logon-preview/events.
+  TwproxyPreviewEventsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: twproxy-events/ip-10-3-0-122.us-west-1.compute.internal
+      RetentionInDays: 14
+
+  EstimatorPreviewEventsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: estimator-events/ip-10-3-0-122.us-west-1.compute.internal
+      RetentionInDays: 14
+
+  PdfreportPreviewEventsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: pdfreport-events/ip-10-3-0-122.us-west-1.compute.internal
       RetentionInDays: 14
 
   TwproxySubscriptionFilter:

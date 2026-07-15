@@ -7,8 +7,8 @@ Turnstile telemetry event logs (twproxy / estimator / pdfreport) to CloudWatch L
 
 - `AmazonCloudWatch-windows.json` — the full agent config. Mirrors the live SSM
   String parameter **`AmazonCloudWatch-windows`** (region **us-west-1**) verbatim,
-  plus six appended `logs.logs_collected.files.collect_list` entries for the new
-  telemetry globs.
+  plus three appended `logs.logs_collected.files.collect_list` entries for the
+  telemetry globs (one per producer; prod/preview split is by `{hostname}`).
 - `deploy-agent-config.ps1` — put the parameter + fetch-config on the target
   instances. Nothing runs on import; work happens only when the script is invoked.
 
@@ -30,40 +30,37 @@ serves both boxes.
 ## Log groups: who owns them
 
 The emitter writes pure-JSON lines (internal `ts` field) to
-`C:\temp\{yyyy_MM}-{base}-{env}.txt` where
-`base ∈ {twproxy-events, estimator-events, pdfreport-events}` and
-`env ∈ {production, preview}`.
+`C:\temp\{yyyy_MM}-{base}.txt` where
+`base ∈ {twproxy-events, estimator-events, pdfreport-events}` — **no env in the
+filename**. The prod/preview split is done by the agent's `{hostname}` interpolation
+(same convention as `twproxy-logs/{hostname}`), so each of the three globs lands in a
+**different log group per box**:
 
-| Glob (`C:\temp\...`)                    | Log group                   | Owner / retention |
-|-----------------------------------------|-----------------------------|-------------------|
-| `*-twproxy-events-production.txt`       | `/twproxy/events`           | **CFN** (logon-telemetry.yaml) — retention omitted here |
-| `*-estimator-events-production.txt`     | `/estimator/events`         | **CFN** — retention omitted here |
-| `*-pdfreport-events-production.txt`     | `/pdfreport/events`         | **CFN** — retention omitted here |
-| `*-twproxy-events-preview.txt`          | `/twproxy-preview/events`   | **agent** — `retention_in_days: 14` |
-| `*-estimator-events-preview.txt`        | `/estimator-preview/events` | **agent** — `retention_in_days: 14` |
-| `*-pdfreport-events-preview.txt`        | `/pdfreport-preview/events` | **agent** — `retention_in_days: 14` |
+| Glob (`C:\temp\...`)         | Group template            | web-06 (prod) group                                    | web-04 (preview) group                                  |
+|------------------------------|---------------------------|--------------------------------------------------------|---------------------------------------------------------|
+| `*-twproxy-events.txt`       | `twproxy-events/{hostname}`   | `twproxy-events/ip-10-3-0-63.us-west-1.compute.internal`   | `twproxy-events/ip-10-3-0-122.us-west-1.compute.internal`   |
+| `*-estimator-events.txt`     | `estimator-events/{hostname}` | `estimator-events/ip-10-3-0-63.us-west-1.compute.internal` | `estimator-events/ip-10-3-0-122.us-west-1.compute.internal` |
+| `*-pdfreport-events.txt`     | `pdfreport-events/{hostname}` | `pdfreport-events/ip-10-3-0-63.us-west-1.compute.internal` | `pdfreport-events/ip-10-3-0-122.us-west-1.compute.internal` |
 
-**Prod groups are CFN-owned** (the logon-telemetry.yaml stack creates the group and
-sets retention — same pattern as the existing `/logon/events` glob), so the prod
-entries here deliberately **omit `retention_in_days`** to avoid the agent fighting
-CloudFormation over the retention policy. **Preview groups are agent-owned**: the
-agent auto-creates them and applies the 14-day retention set here.
+**All six groups are CFN-owned** (the logon-telemetry.yaml stack creates each group
+and sets retention), so these agent entries deliberately **omit `retention_in_days`**
+to avoid the agent fighting CloudFormation over the retention policy. Only the three
+**prod** (`ip-10-3-0-63`) groups are lake-tapped by a subscription filter; the three
+**preview** (`ip-10-3-0-122`) groups are hot-only. That isolation is **structural**
+(hostname routing + prod-only taps), not dependent on any per-record or per-deploy env
+field being set correctly.
 
 No `timestamp_format` on the telemetry globs — the lines are pure JSON with an
 internal `ts`, mirroring the existing `/logon/events` glob.
 
-## CRITICAL: preview deploys MUST set `TelemetryEnv=preview`
+## prod/preview split is automatic — nothing to set on deploy
 
-The emitter picks the filename `env` from the app's **`TelemetryEnv`** appSetting,
-which **defaults to `production`**. That default is correct for prod deploys.
-
-But the preview deploys — **web-04 preview2** (estimator / twproxy) and **web-06
-pdfreport4-preview** — **MUST set appSetting `TelemetryEnv=preview`**. Otherwise the
-preview emitter writes `*-production.txt`, which matches the **prod** glob above and
-**leaks preview telemetry into the CFN-tapped production lake**.
-
-- Prod deploys: leave `TelemetryEnv` at the default (`production`).
-- Preview deploys: **explicitly set `TelemetryEnv=preview`.**
+The emitter writes **env-less** filenames on every box. Which lake a box's telemetry
+reaches is decided entirely by **which box it is**: the agent's `{hostname}` routes
+**web-06 → the prod group** (lake-tapped) and **web-04 → the preview group** (hot-only).
+There is **no `TelemetryEnv` appSetting** and **no per-app / per-deploy configuration** —
+prod and preview deploys ship the identical app config, and a preview box physically
+cannot write into a prod group. Nothing to remember, nothing to get wrong.
 
 ## Deploy
 

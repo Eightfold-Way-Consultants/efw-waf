@@ -24,43 +24,22 @@
       "retention_in_days": 14
      },
      {
-      "file_path": "C:\\temp\\*-twproxy-events-production.txt",
-      "log_group_name": "/twproxy/events",
+      "file_path": "C:\\temp\\*-twproxy-events.txt",
+      "log_group_name": "twproxy-events/{hostname}",
       "log_stream_name": "{instance_id}",
       "timezone": "UTC"
      },
      {
-      "file_path": "C:\\temp\\*-estimator-events-production.txt",
-      "log_group_name": "/estimator/events",
+      "file_path": "C:\\temp\\*-estimator-events.txt",
+      "log_group_name": "estimator-events/{hostname}",
       "log_stream_name": "{instance_id}",
       "timezone": "UTC"
      },
      {
-      "file_path": "C:\\temp\\*-pdfreport-events-production.txt",
-      "log_group_name": "/pdfreport/events",
+      "file_path": "C:\\temp\\*-pdfreport-events.txt",
+      "log_group_name": "pdfreport-events/{hostname}",
       "log_stream_name": "{instance_id}",
       "timezone": "UTC"
-     },
-     {
-      "file_path": "C:\\temp\\*-twproxy-events-preview.txt",
-      "log_group_name": "/twproxy-preview/events",
-      "log_stream_name": "{instance_id}",
-      "timezone": "UTC",
-      "retention_in_days": 14
-     },
-     {
-      "file_path": "C:\\temp\\*-estimator-events-preview.txt",
-      "log_group_name": "/estimator-preview/events",
-      "log_stream_name": "{instance_id}",
-      "timezone": "UTC",
-      "retention_in_days": 14
-     },
-     {
-      "file_path": "C:\\temp\\*-pdfreport-events-preview.txt",
-      "log_group_name": "/pdfreport-preview/events",
-      "log_stream_name": "{instance_id}",
-      "timezone": "UTC",
-      "retention_in_days": 14
      }
     ]
    }
