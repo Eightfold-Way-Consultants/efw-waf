@@ -1,0 +1,53 @@
+﻿{
+    "ResourceRecordSets": [
+        {
+            "Name": "njdb101.org.",
+            "Type": "A",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "52.8.7.0"
+                }
+            ]
+        },
+        {
+            "Name": "njdb101.org.",
+            "Type": "NS",
+            "TTL": 172800,
+            "ResourceRecords": [
+                {
+                    "Value": "ns-706.awsdns-24.net."
+                },
+                {
+                    "Value": "ns-388.awsdns-48.com."
+                },
+                {
+                    "Value": "ns-1663.awsdns-15.co.uk."
+                },
+                {
+                    "Value": "ns-1323.awsdns-37.org."
+                }
+            ]
+        },
+        {
+            "Name": "njdb101.org.",
+            "Type": "SOA",
+            "TTL": 900,
+            "ResourceRecords": [
+                {
+                    "Value": "ns-706.awsdns-24.net. awsdns-hostmaster.amazon.com. 1 7200 900 1209600 86400"
+                }
+            ]
+        },
+        {
+            "Name": "www.njdb101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "njdb101.org"
+                }
+            ]
+        }
+    ]
+}

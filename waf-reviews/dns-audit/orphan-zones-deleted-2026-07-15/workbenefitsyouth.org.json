@@ -1,0 +1,73 @@
+﻿{
+    "ResourceRecordSets": [
+        {
+            "Name": "workbenefitsyouth.org.",
+            "Type": "A",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "52.8.7.0"
+                }
+            ]
+        },
+        {
+            "Name": "workbenefitsyouth.org.",
+            "Type": "NS",
+            "TTL": 172800,
+            "ResourceRecords": [
+                {
+                    "Value": "ns-1330.awsdns-38.org."
+                },
+                {
+                    "Value": "ns-968.awsdns-57.net."
+                },
+                {
+                    "Value": "ns-2.awsdns-00.com."
+                },
+                {
+                    "Value": "ns-1743.awsdns-25.co.uk."
+                }
+            ]
+        },
+        {
+            "Name": "workbenefitsyouth.org.",
+            "Type": "SOA",
+            "TTL": 900,
+            "ResourceRecords": [
+                {
+                    "Value": "ns-1330.awsdns-38.org. awsdns-hostmaster.amazon.com. 1 7200 900 1209600 86400"
+                }
+            ]
+        },
+        {
+            "Name": "preview.workbenefitsyouth.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "preview2.workbenefitsyouth.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "preview2-site.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "www.workbenefitsyouth.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "workbenefitsyouth.org"
+                }
+            ]
+        }
+    ]
+}

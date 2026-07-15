@@ -1,0 +1,53 @@
+﻿{
+    "ResourceRecordSets": [
+        {
+            "Name": "njdisabilitybenefits.org.",
+            "Type": "A",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "52.8.7.0"
+                }
+            ]
+        },
+        {
+            "Name": "njdisabilitybenefits.org.",
+            "Type": "NS",
+            "TTL": 172800,
+            "ResourceRecords": [
+                {
+                    "Value": "ns-1110.awsdns-10.org."
+                },
+                {
+                    "Value": "ns-336.awsdns-42.com."
+                },
+                {
+                    "Value": "ns-1763.awsdns-28.co.uk."
+                },
+                {
+                    "Value": "ns-982.awsdns-58.net."
+                }
+            ]
+        },
+        {
+            "Name": "njdisabilitybenefits.org.",
+            "Type": "SOA",
+            "TTL": 900,
+            "ResourceRecords": [
+                {
+                    "Value": "ns-1110.awsdns-10.org. awsdns-hostmaster.amazon.com. 1 7200 900 1209600 86400"
+                }
+            ]
+        },
+        {
+            "Name": "www.njdisabilitybenefits.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "njdisabilitybenefits.org"
+                }
+            ]
+        }
+    ]
+}

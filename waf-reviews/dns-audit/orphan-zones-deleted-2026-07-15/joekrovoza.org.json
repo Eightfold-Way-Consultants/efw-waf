@@ -1,0 +1,53 @@
+﻿{
+    "ResourceRecordSets": [
+        {
+            "Name": "joekrovoza.org.",
+            "Type": "A",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "173.201.98.128"
+                }
+            ]
+        },
+        {
+            "Name": "joekrovoza.org.",
+            "Type": "NS",
+            "TTL": 172800,
+            "ResourceRecords": [
+                {
+                    "Value": "ns-831.awsdns-39.net."
+                },
+                {
+                    "Value": "ns-179.awsdns-22.com."
+                },
+                {
+                    "Value": "ns-2044.awsdns-63.co.uk."
+                },
+                {
+                    "Value": "ns-1040.awsdns-02.org."
+                }
+            ]
+        },
+        {
+            "Name": "joekrovoza.org.",
+            "Type": "SOA",
+            "TTL": 900,
+            "ResourceRecords": [
+                {
+                    "Value": "ns-831.awsdns-39.net. awsdns-hostmaster.amazon.com. 1 7200 900 1209600 86400"
+                }
+            ]
+        },
+        {
+            "Name": "www.joekrovoza.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "joekrovoza.org"
+                }
+            ]
+        }
+    ]
+}

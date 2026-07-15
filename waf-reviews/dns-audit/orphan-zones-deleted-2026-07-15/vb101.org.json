@@ -1,0 +1,158 @@
+﻿{
+    "ResourceRecordSets": [
+        {
+            "Name": "vb101.org.",
+            "Type": "A",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "52.8.7.0"
+                }
+            ]
+        },
+        {
+            "Name": "vb101.org.",
+            "Type": "MX",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "5 alt1.aspmx.l.google.com"
+                },
+                {
+                    "Value": "5 alt2.aspmx.l.google.com"
+                },
+                {
+                    "Value": "10 aspmx2.googlemail.com"
+                },
+                {
+                    "Value": "10 aspmx3.googlemail.com"
+                },
+                {
+                    "Value": "1 aspmx.l.google.com"
+                }
+            ]
+        },
+        {
+            "Name": "vb101.org.",
+            "Type": "NS",
+            "TTL": 172800,
+            "ResourceRecords": [
+                {
+                    "Value": "ns-1838.awsdns-37.co.uk."
+                },
+                {
+                    "Value": "ns-1177.awsdns-19.org."
+                },
+                {
+                    "Value": "ns-42.awsdns-05.com."
+                },
+                {
+                    "Value": "ns-976.awsdns-58.net."
+                }
+            ]
+        },
+        {
+            "Name": "vb101.org.",
+            "Type": "SOA",
+            "TTL": 900,
+            "ResourceRecords": [
+                {
+                    "Value": "ns-1838.awsdns-37.co.uk. awsdns-hostmaster.amazon.com. 1 7200 900 1209600 86400"
+                }
+            ]
+        },
+        {
+            "Name": "dbx.vb101.org.",
+            "Type": "A",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "52.8.7.0"
+                }
+            ]
+        },
+        {
+            "Name": "mail.vb101.org.",
+            "Type": "A",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "52.8.7.0"
+                }
+            ]
+        },
+        {
+            "Name": "mail.vb101.org.",
+            "Type": "TXT",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "\"v=spf1 ip4:173.164.212.89 ?all\""
+                },
+                {
+                    "Value": "\"v=spf1 ip4:69.90.209.69 ?all\""
+                }
+            ]
+        },
+        {
+            "Name": "preview.vb101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "s6a.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "preview2.vb101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "preview2-site.eightfoldway.com"
+                }
+            ]
+        },
+        {
+            "Name": "public-site.vb101.org.",
+            "Type": "A",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "52.8.7.0"
+                }
+            ]
+        },
+        {
+            "Name": "start.vb101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "public-site.vb101.org"
+                }
+            ]
+        },
+        {
+            "Name": "www.start.vb101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "public-site.vb101.org"
+                }
+            ]
+        },
+        {
+            "Name": "www.vb101.org.",
+            "Type": "CNAME",
+            "TTL": 300,
+            "ResourceRecords": [
+                {
+                    "Value": "vb101.org"
+                }
+            ]
+        }
+    ]
+}
