@@ -1,20 +1,35 @@
 #!/usr/bin/env node
 /*
- * Turnstile soak report — reproducible, all-API (no SSM), self-contained HTML.
- *   node soak-report.js [--env prod|preview] [--hours 72] [--out file.html]
+ * Turnstile soak report — reproducible, all-API (no SSM in core), self-contained HTML.
+ *   node soak-report.js [--env prod|preview] [--hours 72] [--out file.html] [--accounts]
  *
- * Visualizes the FULL LIFECYCLE per form, each stage labeled with allow-status today (Observe) vs Enforce:
- *   Cloudflare issuance  ->  CLIENT GATE (widget/beacon: solved->server / failed->blocked now)
- *                        ->  SERVER GATE (turnstile siteverify: pass/pass-ratelimited/bypassed = allowed;
- *                            fail/absent = allow now -> 403 under Enforce; absent = direct-API/tokenless attack)
- * joined on the form/action. Two gates: the client widget blocks page-loading bots that can't solve; the
- * server turnstile gate blocks DIRECT-API bots that skip the page (tokenless/invalid POST) — Enforce only.
+ * ONE unified server-gate telemetry view across every surface that enforces Turnstile:
+ *   Logon (register/forgot/resend) · estimator (share) · twproxy (feedback) · pdfreport (pdfshare).
+ * The report is DATA-DRIVEN: it reads the per-system CloudWatch event groups, derives `system`
+ * from the event field (falling back to the source group) and DISCOVERS endpoints from the data —
+ * there is no hardcoded form→server map, so a new surface/form appears automatically in every panel.
  *
- * Sources (all API, no SSM in core): CF GraphQL turnstileAdaptiveGroups (issuance) + Insights /logon(-preview)/events
- * (type=widget beacon, type=turnstile siteverify) + twproxy-logs/* (feedback proxy, plain-text) + CloudWatch alarms.
- * "Organic" = ua~/curl/ excluded. NOTE: pdfshare verifies on the ESTIMATOR (still not covered); feedback on TWPROXY
- * IS now covered via its own CloudWatch group as a dedicated attack-surface panel.
- * Deps: none (shells out to `aws` CLI + `curl`).
+ * Lifecycle per form (each stage labeled with the OBSERVED disposition):
+ *   [1] Cloudflare issuance (turnstileAdaptiveGroups)
+ *   [2] widget mounted  (type=widget beacon; not-loaded = mount fail)
+ *   [3] challenge solved (beacon solved; each fail `reason` is a separate exit)
+ *   [4] server receipt   (type=turnstile: pass / fail / pass-ratelimited / bypassed = allowed;
+ *                         fail/absent = 403 under Enforce; absent = tokenless direct-to-server bot)
+ *   [4] rate-limit exit  (type=ratelimit: 429 — Logon only)
+ * The centerpiece is a left→right STAGE FLOW DIAGRAM (inline SVG) quantifying flow-through vs
+ * every drop-off, with the tokenless/`absent` bypass entering directly at the server stage.
+ *
+ * Sources (all API): CF GraphQL turnstileAdaptiveGroups + Logs Insights over /logon/events,
+ * /twproxy/events, /estimator/events, /pdfreport/events (+ -preview) + twproxy-logs/* (pre-gate
+ * plain text) + CloudWatch alarms. The new groups do not exist until their apps deploy; queries
+ * against a missing group are swallowed and the surface renders "awaiting data" (never n/a, never
+ * an error). The combined Athena `events` table (logon-telemetry.yaml) is the durable cross-surface
+ * sink; this report uses per-group Insights for the live view. See athenaQueryStub() for the
+ * forward-compat cross-lake path (WAF edge layer).
+ *
+ * "Organic" = ua~/curl/ excluded. Deps: none (shells out to `aws` CLI + `curl`). Output: one rich
+ * self-contained HTML (inline CSS + SVG) that renders identically in a browser and in the PDF that
+ * soak-mail.ps1 produces via headless Chromium. (The old email-safe --email render is retired.)
  */
 'use strict';
 const { execFileSync } = require('child_process');
@@ -28,19 +43,49 @@ const args = process.argv.slice(2);
 const opt = (n, d) => { const i = args.indexOf('--' + n); return i >= 0 && args[i + 1] ? args[i + 1] : d; };
 const ENV = (opt('env', 'prod') === 'preview') ? 'preview' : 'prod';
 const ACCOUNTS = args.includes('--accounts');   // opt-in: query logon2.AspNetUsers via SSM/DB (breaks all-API purity)
-const EMAIL = args.includes('--email');          // emit email-safe HTML (inline styles + tables; no <style>/var()/grid — survives Gmail)
 const HOURS = parseInt(opt('hours', '72'), 10);
 const OUT = opt('out', `soak-report-${ENV}.html`);
 const REGION = 'us-west-1';
-const CFG = { prod: { group: '/logon/events', label: 'production' }, preview: { group: '/logon-preview/events', label: 'preview' } }[ENV];
-// twproxy (Teamwork feedback proxy) plain-text CloudWatch group, per env box (web-06=public, web-04=preview2).
-// Feedback verifies on twproxy, NOT /logon/events — this is the surface the Logon lake structurally can't see.
+const CFG = { prod: { label: 'production' }, preview: { label: 'preview' } }[ENV];
+
+// Per-system event sources. `system` here is the FALLBACK when an event lacks its own `system`
+// field (the field is authoritative once each app deploys it). This is infra config, not a
+// form→server map: endpoints are discovered from the data, so a new form appears automatically.
+const SOURCES = ENV === 'prod'
+  ? [
+    { group: '/logon/events', system: 'logon', primary: true },
+    { group: '/twproxy/events', system: 'twproxy' },
+    { group: '/estimator/events', system: 'estimator' },
+    { group: '/pdfreport/events', system: 'estimator' },
+  ]
+  : [
+    { group: '/logon-preview/events', system: 'logon', primary: true },
+    { group: '/twproxy-preview/events', system: 'twproxy' },
+    { group: '/estimator-preview/events', system: 'estimator' },
+    { group: '/pdfreport-preview/events', system: 'estimator' },
+  ];
+const PRIMARY = SOURCES.find(s => s.primary).group;
+const SYSTEMS_CONFIGURED = [...new Set(SOURCES.map(s => s.system))];
+
+// twproxy (feedback proxy) PRE-GATE plain-text group, per env box (web-06=public, web-04=preview2).
+// This carries the attack detail that exits BEFORE the verify point (method/tags/SQLi) — the
+// structured /twproxy/events group (above) will carry the verify-decision events once deployed.
 const TWGROUP = { prod: 'twproxy-logs/ip-10-3-0-63.us-west-1.compute.internal', preview: 'twproxy-logs/ip-10-3-0-122.us-west-1.compute.internal' }[ENV];
-const TW_HOURS = 24 * 14;   // twproxy files are month-accumulating + bulk re-shipped on rotation deploy — read the full retained window, labeled as such (not the Logon HOURS window)
-const SERVER_OF = { register: 'logon', forgot: 'logon', resend: 'logon', pdfshare: 'estimator', share: 'estimator', feedback: 'twproxy' };
-const FORM_ORDER = ['register', 'forgot', 'resend', 'pdfshare', 'share', 'feedback'];
+const TW_HOURS = 24 * 14;   // twproxy files are month-accumulating + bulk re-shipped on rotation deploy — read the full retained window
+
+// cosmetic sort orders only (NOT a system/endpoint map — anything unlisted still renders, sorted last)
+const SYS_ORDER = ['logon', 'estimator', 'twproxy'];
+const EP_ORDER = ['register', 'forgot', 'resend', 'share', 'pdfshare', 'feedback'];
+const sysSort = (a, b) => (SYS_ORDER.indexOf(a) + 1 || 99) - (SYS_ORDER.indexOf(b) + 1 || 99) || a.localeCompare(b);
+const epSort = (a, b) => (EP_ORDER.indexOf(a) + 1 || 99) - (EP_ORDER.indexOf(b) + 1 || 99) || a.localeCompare(b);
+const MOUNTFAIL = new Set(['not-loaded', 'not-mounted', 'notloaded', 'notmounted']);  // beacon reasons that mean the widget never rendered
+
 const TH = { failRed: 10, absentYellow: 40, ratelimitedRed: 1 };
-const BLOT = 'not (ua like /curl/)';
+const BLOT = args.includes('--allua') ? 'ispresent(type)' : 'not (ua like /curl/)';
+
+// derived `layer` axis (forward-compat for WAF unification): a pure function of `system`, NOT a
+// stored field. Every current surface is the app layer; the WAF edge layer prepends later (§5, Future).
+const layerOf = (_system) => 'app';   // edge=WAF, app=Turnstile; edge added when the WAF lake joins
 
 const now = Date.now(), startMs = now - HOURS * 3600 * 1000;
 const twStartMs = now - TW_HOURS * 3600 * 1000;
@@ -50,7 +95,7 @@ const sleep = (ms) => execFileSync(process.execPath, ['-e', `setTimeout(()=>{},$
 const warn = [];
 const tryd = (label, fn, d) => { try { return fn(); } catch (e) { warn.push(label + ': ' + e.message); return d; } };
 
-function insights(q, group = CFG.group, s0 = startMs, e0 = now) {
+function insights(q, group = PRIMARY, s0 = startMs, e0 = now) {
   const s = aws(['logs', 'start-query', '--log-group-name', group, '--start-time', String(Math.floor(s0 / 1000)), '--end-time', String(Math.floor(e0 / 1000)), '--query-string', q]);
   for (let i = 0; i < 40; i++) {
     const r = aws(['logs', 'get-query-results', '--query-id', s.queryId]);
@@ -60,12 +105,46 @@ function insights(q, group = CFG.group, s0 = startMs, e0 = now) {
   }
   throw new Error('Insights timeout');
 }
+function groupExists(g) {
+  return tryd('probe ' + g, () => {
+    const r = aws(['logs', 'describe-log-groups', '--log-group-name-prefix', g, '--query', 'logGroups[].logGroupName']);
+    return Array.isArray(r) && r.includes(g);
+  }, false);
+}
 
-// ---- gather ----
-const beaconRows = tryd('beacon', () => insights(`filter type="widget" and ${BLOT} | stats count() as n by action, event`), []);
-const beaconFail = tryd('beacon reasons', () => insights(`filter type="widget" and event="failed" and ${BLOT} | stats count() as n by action, reason | sort n desc`), []);
-const serverRows = tryd('server', () => insights(`filter type="turnstile" and ${BLOT} | stats count() as n by endpoint, outcome, allowed`), []);
-const serverDay = tryd('server-by-day', () => insights(`filter type="turnstile" and ${BLOT} | stats count() as n by outcome, bin(1d) as day | sort day asc`), []);
+// Forward-compat stub: the WAF edge lake is Athena-only, so Athena is the common denominator for
+// cross-LAYER (edge+app) reporting. Unification = adding a source here, not a rewrite. Unused today
+// (the live view reads per-group Insights); wired when the public WAF ACL logs flow (§5, Future phase).
+function athenaQueryStub(sql, { database = 'logon_telemetry', workgroup = 'primary', output = 's3://efw-athena-results/soak/' } = {}) {
+  const start = aws(['athena', 'start-query-execution', '--query-string', sql,
+    '--query-execution-context', `Database=${database}`, '--work-group', workgroup,
+    '--result-configuration', `OutputLocation=${output}`]);
+  const id = start.QueryExecutionId;
+  for (let i = 0; i < 60; i++) {
+    const st = aws(['athena', 'get-query-execution', '--query-execution-id', id]).QueryExecution.Status.State;
+    if (st === 'SUCCEEDED') return aws(['athena', 'get-query-results', '--query-execution-id', id]).ResultSet;
+    if (st === 'FAILED' || st === 'CANCELLED') throw new Error('Athena ' + st);
+    sleep(2000);
+  }
+  throw new Error('Athena timeout');
+}
+void athenaQueryStub;  // reserved for the edge-layer (WAF) join; see §5 forward-compat / Future phase
+
+// ---- gather: unified per-system event sources ----
+const serverRows = [], beaconRows = [], beaconFailRows = [], rlRows = [], siteRows = [];
+let serverDayRows = [];
+for (const src of SOURCES) {
+  src.exists = groupExists(src.group);
+  if (!src.exists) continue;
+  const g = src.group, sf = src.system;
+  const tag = rows => { for (const r of rows) if (!r.system) r.system = sf; return rows; };
+  serverRows.push(...tag(tryd(g + ' server', () => insights(`filter type='turnstile' and ${BLOT} | stats count() as n by system, endpoint, outcome, allowed`, g), [])));
+  beaconRows.push(...tag(tryd(g + ' beacon', () => insights(`filter type='widget' and ${BLOT} | stats count() as n by system, action, event`, g), [])));
+  beaconFailRows.push(...tag(tryd(g + ' beacon-fail', () => insights(`filter type='widget' and event='failed' and ${BLOT} | stats count() as n by system, action, reason | sort n desc`, g), [])));
+  rlRows.push(...tag(tryd(g + ' ratelimit', () => insights(`filter type='ratelimit' and ${BLOT} | stats count() as n by system, action`, g), [])));
+  siteRows.push(...tag(tryd(g + ' sites', () => insights(`filter type='turnstile' and ${BLOT} | stats count() as n by system, hostname, config, targetState, outcome | sort n desc | limit 80`, g), [])));
+  if (src.primary) serverDayRows = tag(tryd(g + ' by-day', () => insights(`filter type='turnstile' and ${BLOT} | stats count() as n by outcome, bin(1d) as day | sort day asc`, g), []));
+}
 const alarms = tryd('alarms', () => (aws(['cloudwatch', 'describe-alarms', '--alarm-names', 'logon-widget-failed-spike', 'logon-verify-absent-spike']).MetricAlarms || []).map(a => ({ name: a.AlarmName, state: a.StateValue })), []);
 const cfRowsRaw = tryd('CF issuance', () => {
   const { account_id, api_token } = JSON.parse(aws(['secretsmanager', 'get-secret-value', '--secret-id', 'cloudflare/api', '--query', 'SecretString']));
@@ -76,7 +155,7 @@ const cfRowsRaw = tryd('CF issuance', () => {
   return ((((j.data || {}).viewer || {}).accounts || [])[0] || { turnstileAdaptiveGroups: [] }).turnstileAdaptiveGroups;
 }, []);
 
-// ---- twproxy (feedback surface) — plain-text log group, full retained window ----
+// ---- twproxy PRE-GATE (feedback surface) — plain-text log group, full retained window ----
 const twG = (label, q) => tryd('twproxy ' + label, () => insights(q, TWGROUP, twStartMs, now), []);
 const twStartRows = twG('start', `filter @message like /Start request/ | stats count() as n`);
 const twOutcomeRows = twG('outcome', `parse @message /Turnstile outcome: (?<oc>[A-Za-z]+)/ | filter ispresent(oc) | stats count() as n by oc | sort n desc`);
@@ -89,14 +168,12 @@ const twTotal = +((twStartRows[0] || {}).n || 0);
 const twExits = twExitRows.map(r => ({ ex: r.ex, n: +r.n }));
 const twExitTotal = twExits.reduce((a, e) => a + e.n, 0);
 const twRobot = twExits.filter(e => /robot/i.test(e.ex)).reduce((a, e) => a + e.n, 0);
-const twReached = twOutcomeRows.reduce((a, r) => a + (+r.n), 0);               // reached siteverify (past all pre-checks)
+const twReached = twOutcomeRows.reduce((a, r) => a + (+r.n), 0);
 const twPass = twOutcomeRows.filter(r => /pass/i.test(r.oc)).reduce((a, r) => a + (+r.n), 0);
 const twSqli = twSqliRows.map(r => ({ vt: r.vt, n: +r.n })).filter(r => /select|union|sleep|if\(|now\(|sysdate|char\(|concat|--|;|'|\bor\b|\band\b|=/i.test(r.vt));
 const twSqliTotal = twSqli.reduce((a, r) => a + r.n, 0);
-const twHostile = Math.max(0, twTotal - twReached);                            // everything that never reached siteverify
+const twHostile = Math.max(0, twTotal - twReached);
 const twHostilePct = twTotal ? Math.round(twHostile * 100 / twTotal) : null;
-// Infer live mode by RECENCY: observe=True => Observe-era; observe=False OR a robot-block (fires only
-// under !bObserve) => Require-era. Whichever signal is newest wins. Counts kept for the subtitle.
 const twMode = { observe: 0, require: 0 };
 let tObsTrue = 0, tObsFalse = 0;
 for (const r of twModeRows) { if (r.obs === 'True') { twMode.observe += +r.n; tObsTrue = +r.t || 0; } else { twMode.require += +r.n; tObsFalse = +r.t || 0; } }
@@ -104,104 +181,304 @@ const tRobot = (twRobotLatest[0] && +twRobotLatest[0].t) || 0;
 const tRequireSig = Math.max(tObsFalse, tRobot);
 const twModeLive = (!tObsTrue && !tRequireSig) ? 'unknown' : (tRequireSig >= tObsTrue ? 'Require' : 'Observe');
 
-// ---- shape ----
-const cf = {}; for (const r of cfRowsRaw) cf[r.dimensions.action] = (cf[r.dimensions.action] || 0) + r.count;
-const beacon = {}; for (const r of beaconRows) (beacon[r.action] = beacon[r.action] || {})[r.event] = +r.n;
-const server = {}; for (const r of serverRows) { const ep = (server[r.endpoint] = server[r.endpoint] || {}); const oc = (ep[r.outcome] = ep[r.outcome] || { a: 0, b: 0 }); if (r.allowed === '0') oc.b += +r.n; else oc.a += +r.n; }  // a=allowed, b=blocked(403)
+// ---- shape: unified, data-driven ----
+const cfByEp = {}; for (const r of cfRowsRaw) { const ep = (r.dimensions.action || '').toLowerCase(); cfByEp[ep] = (cfByEp[ep] || 0) + r.count; }
+const beaconByAction = {};   // ep -> {solved,failed}
+for (const r of beaconRows) { const ep = (r.action || 'other'); const b = beaconByAction[ep] = beaconByAction[ep] || { solved: 0, failed: 0 }; b[r.event] = (b[r.event] || 0) + (+r.n); }
+const reasonByAction = {};   // ep -> {reason:n}
+for (const r of beaconFailRows) { const ep = (r.action || 'other'); const m = reasonByAction[ep] = reasonByAction[ep] || {}; const k = r.reason || '(none)'; m[k] = (m[k] || 0) + (+r.n); }
+const serverByKey = {};      // "system|ep" -> {outcome:{a,b}}
+const serverOf = {};         // ep -> system (discovered from whichever group's server events name it)
+for (const r of serverRows) { const ep = r.endpoint || 'other'; const key = r.system + '|' + ep; const s = serverByKey[key] = serverByKey[key] || {}; const oc = s[r.outcome] = s[r.outcome] || { a: 0, b: 0 }; if (r.allowed === '0' || r.allowed === 'false') oc.b += +r.n; else oc.a += +r.n; if (!serverOf[ep]) serverOf[ep] = r.system; }
+const rlByEp = {};           // ep -> 429 count (Logon only today)
+for (const r of rlRows) { const ep = (r.action || 'other').toLowerCase(); rlByEp[ep] = (rlByEp[ep] || 0) + (+r.n); }
 
-const forms = [...new Set([...Object.keys(cf), ...Object.keys(beacon), ...Object.keys(server), 'register', 'forgot'])]
-  .filter(f => f && f !== 'other').sort((a, b) => (FORM_ORDER.indexOf(a) + 1 || 99) - (FORM_ORDER.indexOf(b) + 1 || 99) || a.localeCompare(b));
+const systemsWithServer = [...new Set(serverRows.map(r => r.system))].sort(sysSort);
+// live mode from the authoritative `mode` field on the primary (Logon) plane. The fleet rolls
+// Observe→Enforce per site, so the window is often MIXED — reflect the split, and treat Enforce as
+// "live" (fail/absent actually 403'd) if ANY Enforce verify or any blocked event is present.
+const modeRows = tryd('mode', () => insights(`filter type='turnstile' and ${BLOT} | stats count() as n by mode`, PRIMARY), []);
+const modeCounts = {}; for (const r of modeRows) modeCounts[r.mode || '?'] = (modeCounts[r.mode || '?'] || 0) + (+r.n);
+const enfN = modeCounts.Enforce || 0, obsN = modeCounts.Observe || 0, modeTot = enfN + obsN;
+const anyBlock = serverRows.some(r => (r.allowed === '0' || r.allowed === 'false'));
+const enforceActive = enfN > 0 || anyBlock;
+const modeWord = (enfN && obsN) ? `Observe→Enforce (${Math.round(enfN * 100 / modeTot)}% Enforce)` : enfN ? 'Enforce' : obsN ? 'Observe' : (anyBlock ? 'Enforce' : 'Observe');
 
-const pipe = forms.map(f => {
-  const b = beacon[f] || {}, s = server[f] || {};
-  const bSolved = b.solved || 0, bFailed = b.failed || 0, bTot = bSolved + bFailed;
-  const sys = SERVER_OF[f] || null;
-  const g = (oc) => { const x = s[oc] || { a: 0, b: 0 }; return x.a + x.b; };
-  const srv = (sys === 'logon') ? { pass: g('pass'), fail: g('fail'), absent: g('absent'), rl: g('pass-ratelimited'), byp: g('bypassed-auth'), tokens: g('pass') + g('fail') + g('pass-ratelimited'), blocked: Object.values(s).reduce((a, x) => a + (x.b || 0), 0), raw: s } : null;
-  return { form: f, cf: cf[f] || 0, bSolved, bFailed, bTot, solvePct: bTot ? Math.round(bSolved * 100 / bTot) : null, server: srv, serverSystem: sys, cfToBeacon: (cf[f] && bTot) ? bTot * 100 / cf[f] : null };
-});
+// all endpoints seen anywhere (discovered from data)
+const allEps = [...new Set([...Object.keys(beaconByAction), ...Object.keys(reasonByAction), ...Object.keys(cfByEp), ...serverRows.map(r => r.endpoint || 'other')])]
+  .filter(e => e && e !== 'other').sort(epSort);
 
-// ---- verdict + prevention (auth forms register+forgot) ----
-const authForms = pipe.filter(p => p.serverSystem === 'logon');
-const vSum = (k) => authForms.reduce((a, p) => a + (p.server ? p.server[k] : 0), 0);
-const vPass = vSum('pass'), vFail = vSum('fail'), vAbsent = vSum('absent'), vRl = vSum('rl'), vByp = vSum('byp');
-const vBlocked = authForms.reduce((a, p) => a + (p.server ? p.server.blocked : 0), 0);  // actual server 403s (allowed=false)
+// aggregate a flow model over a set of endpoints
+function collect(eps) {
+  let cf = 0, solved = 0, failed = 0, mountFail = 0, pass = 0, fail = 0, rl = 0, byp = 0, absent = 0, absentBlock = 0, failBlock = 0, block = 0, rl429 = 0;
+  const reasons = {};
+  for (const ep of eps) {
+    cf += cfByEp[ep] || 0;
+    const b = beaconByAction[ep] || {}; solved += b.solved || 0; failed += b.failed || 0;
+    for (const [k, n] of Object.entries(reasonByAction[ep] || {})) { if (MOUNTFAIL.has(k)) mountFail += n; else reasons[k] = (reasons[k] || 0) + n; }
+    const sk = serverOf[ep]; if (sk) {
+      const s = serverByKey[sk + '|' + ep] || {}; const g = oc => s[oc] || { a: 0, b: 0 };
+      pass += g('pass').a + g('pass').b; fail += g('fail').a + g('fail').b; rl += g('pass-ratelimited').a + g('pass-ratelimited').b;
+      byp += g('bypassed-auth').a + g('bypassed-auth').b; absent += g('absent').a + g('absent').b; absentBlock += g('absent').b; failBlock += g('fail').b;
+      for (const oc of Object.keys(s)) block += s[oc].b;
+    }
+    rl429 += rlByEp[ep] || 0;
+  }
+  const beaconTot = solved + failed, mounted = beaconTot - mountFail;
+  const reasonsArr = Object.entries(reasons).map(([reason, n]) => ({ reason, n })).sort((a, b) => b.n - a.n);
+  return { eps, cf, beaconTot, mounted, mountFail, solved, failed, reasons: reasonsArr, pass, fail, rl, byp, absent, absentBlock, failBlock, block, rl429, tokens: pass + fail + rl };
+}
+const epsOf = (sys) => allEps.filter(ep => serverOf[ep] === sys);
+const combined = collect(allEps);
+const perSystemFlows = systemsWithServer.map(sys => ({ sys, m: collect(epsOf(sys)) }));
+
+// ---- verdict + prevention (auth = logon server surface) ----
+const logonEps = epsOf('logon');
+const v = collect(logonEps);
+const vPass = v.pass, vFail = v.fail, vAbsent = v.absent, vRl = v.rl, vByp = v.byp, vBlocked = v.block, vRl429 = v.rl429;
 const alarmFiring = alarms.some(a => a.state === 'ALARM');
 const flags = [];
 if (alarmFiring) flags.push({ sev: 'critical', msg: 'A CloudWatch alarm is in ALARM state.' });
 if (vRl >= TH.ratelimitedRed) flags.push({ sev: 'critical', msg: `ratelimited:global softpass fired (${vRl}) — weaponization signal; consider flipping Turnstile.AllowRateLimited off.` });
 if (vFail > TH.failRed) flags.push({ sev: 'critical', msg: `organic server fail = ${vFail} (> ${TH.failRed}) on auth forms.` });
-if (vAbsent > TH.absentYellow) flags.push({ sev: 'warning', msg: `direct-API tokenless (absent) = ${vAbsent} (> ${TH.absentYellow}) — the server gate would 403 these under Enforce.` });
+if (vAbsent > TH.absentYellow) flags.push({ sev: 'warning', msg: `direct-to-server tokenless (absent) = ${vAbsent} (> ${TH.absentYellow}) — ${enforceActive ? 'the server gate 403s these' : 'the server gate would 403 these under Enforce'}.` });
 const verdict = flags.some(f => f.sev === 'critical') ? 'critical' : flags.some(f => f.sev === 'warning') ? 'warning' : 'good';
 const verdictText = { good: 'GREEN — soak clean', warning: 'YELLOW — watch items', critical: 'RED — action needed' }[verdict];
 
-const preventClient = authForms.reduce((a, p) => a + p.bFailed, 0);
-const preventClientAll = pipe.reduce((a, p) => a + p.bFailed, 0);
-const preventServer = vAbsent + vFail;          // direct-API/tokenless + invalid -> 403 under Enforce
+const preventClient = logonEps.reduce((a, ep) => a + (beaconByAction[ep] ? beaconByAction[ep].failed || 0 : 0), 0);
+const preventClientAll = combined.failed;
+const preventServer = vAbsent + vFail;
 const allowedHuman = vPass + vRl + vByp;
 const preventedTotal = preventClient + preventServer;
 const preventRate = (allowedHuman + preventedTotal) ? Math.round(preventedTotal * 100 / (allowedHuman + preventedTotal)) : null;
 
-// ---- render ----
+// cross-surface tokenless (absent) — per system, from server events (bypass = the obvious bot signal)
+const absentBySystem = systemsWithServer.map(sys => { const m = collect(epsOf(sys)); return { sys, absent: m.absent, block: m.absentBlock }; }).filter(x => x.absent);
+const absentTotal = absentBySystem.reduce((a, x) => a + x.absent, 0);
+
+// per-target-site attribution (§5d): group turnstile events by hostname (+ config / targetState)
+const siteAgg = {};
+for (const r of siteRows) {
+  const host = r.hostname || '(none)';
+  const extra = r.config || r.targetState || '';
+  const key = host + '' + r.system + '' + extra;
+  const a = siteAgg[key] = siteAgg[key] || { host, system: r.system, extra, total: 0, absent: 0, fail: 0, pass: 0 };
+  const n = +r.n; a.total += n;
+  if (r.outcome === 'absent') a.absent += n; else if (r.outcome === 'fail') a.fail += n; else if (/pass/.test(r.outcome || '')) a.pass += n;
+}
+const sites = Object.values(siteAgg).sort((a, b) => (b.absent + b.fail) - (a.absent + a.fail) || b.total - a.total).slice(0, 16);
+
+// ---- render helpers ----
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const fmt = (n) => n == null ? '—' : (+n).toLocaleString('en-US');
-const days = [...new Set(serverDay.map(r => (r.day || '').slice(0, 10)))].sort();
+const pct = (a, b) => b ? Math.round(a * 100 / b) + '%' : '—';
+const days = [...new Set(serverDayRows.map(r => (r.day || '').slice(0, 10)))].sort();
 const OUTCOMES = ['pass', 'absent', 'fail', 'pass-ratelimited', 'bypassed-auth'];
 const OC = { pass: 'var(--s2)', absent: 'var(--s3)', fail: 'var(--s6)', 'pass-ratelimited': 'var(--s5)', 'bypassed-auth': 'var(--s1)' };
-// allow-status disposition per server outcome
-const DISP = {
-  pass: { sym: '●', cls: 'ok', note: 'allowed (now + Enforce)' },
-  'pass-ratelimited': { sym: '●', cls: 'ok', note: 'allowed — softpass (now + Enforce)' },
-  'bypassed-auth': { sym: '●', cls: 'ok', note: 'allowed — trusted caller' },
-  fail: { sym: '◑', cls: 'enf', note: 'allow now · 403 under Enforce' },
-  absent: { sym: '◑', cls: 'enf', note: 'allow now · 403 under Enforce · direct-API tokenless' },
-};
+const tile = (l, val, s, sev) => `<div class="tile ${sev || ''}"><div class="tile-val">${val}</div><div class="tile-lbl">${esc(l)}</div>${s ? `<div class="tile-sub">${esc(s)}</div>` : ''}</div>`;
 
-function stageBar(segs) {
-  const any = segs.some(s => s.n);
-  return `<div class="sbar">${any ? segs.filter(s => s.n).map(s => `<div style="flex:${s.n};background:${s.color}" title="${esc(s.title)}"></div>`).join('') : '<div class="empty"></div>'}</div>`;
+// ===== §5a STAGE FLOW DIAGRAM (inline SVG) =====
+// Fixed small topology, hand-rolled: 4 stage nodes L→R, quantified flow-through arrows, one labeled
+// exit arrow per drop-off (not-loaded at [2]; each beacon reason at [3]; 403 + 429 at [4]), and the
+// tokenless/absent bypass entering DIRECTLY at [4]. Renders identically in browser + PDF (Chromium).
+function flowSvg(title, m, note) {
+  const W = 980;
+  // node geometry — 4 stages L→R, generous inter-node gaps so connector labels never touch a box
+  const NODES = [
+    { x: 14, w: 138, tier: 'CF issued', sub: 'adaptiveGroups', val: m.cf, accent: '#86b6ef' },
+    { x: 244, w: 138, tier: 'widget mounted', sub: 'beacon', val: m.mounted, accent: '#5598e7' },
+    { x: 474, w: 138, tier: 'challenge solved', sub: 'token issued', val: m.solved, accent: '#2a78d6' },
+    { x: 706, w: 160, tier: 'server receipt', sub: 'turnstile verify', val: m.tokens + m.absent, accent: '#184f95' },
+  ];
+  const nh = 60, ntop = 30, ncy = ntop + nh / 2, base = ntop + nh;  // base = node bottom edge
+  const cx = n => n.x + n.w / 2, rt = n => n.x + n.w;
+  const n4 = NODES[3];
+  const maxVal = Math.max(1, ...NODES.map(n => n.val));
+  // vertical bands below the nodes
+  const reasons = m.reasons.slice(0, 5);
+  const listTop = base + 26, rowH = 17;
+  const bottomOfReasons = reasons.length ? listTop + (reasons.length - 1) * rowH : (m.mountFail ? base + 41 : base + 12);
+  const bottomOfServer = base + 8 + 49 + (m.rl429 ? 17 : 0);
+  const H = Math.max(184, Math.ceil(Math.max(bottomOfReasons, bottomOfServer, m.mountFail ? base + 41 : 0, m.absent ? base + 122 : 0)) + 14);
+  let s = `<svg viewBox="0 0 ${W} ${H}" class="flow-svg" role="img" aria-label="${esc(title)} stage flow" preserveAspectRatio="xMidYMid meet">`;
+  s += `<defs><marker id="ah" markerWidth="9" markerHeight="9" refX="6.5" refY="3.2" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L7,3.2 L0,6.4 Z" fill="context-stroke"/></marker></defs>`;
+  // stage-connector arrows (flow-through) — short labels centered in the wide gap
+  const conn = (a, b, count, pctStr) => {
+    const x1 = rt(a) + 3, x2 = b.x - 5, y = ncy, mid = (x1 + x2) / 2;
+    s += `<line x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" stroke="var(--ink2)" stroke-width="2" marker-end="url(#ah)"/>`;
+    s += `<text x="${mid}" y="${y - 7}" text-anchor="middle" class="fl-flow">${esc(count)}</text>`;
+    if (pctStr) s += `<text x="${mid}" y="${y + 14}" text-anchor="middle" class="fl-note">${esc(pctStr)}</text>`;
+  };
+  conn(NODES[0], NODES[1], fmt(m.beaconTot), m.cf ? pct(m.beaconTot, m.cf) + ' issued' : '');
+  conn(NODES[1], NODES[2], fmt(m.solved), 'solved');
+  conn(NODES[2], NODES[3], fmt(m.solved), '→token');
+  // nodes
+  for (const n of NODES) {
+    const bw = Math.max(6, Math.round((n.w - 24) * Math.sqrt(n.val) / Math.sqrt(maxVal)));
+    s += `<rect x="${n.x}" y="${ntop}" width="${n.w}" height="${nh}" rx="9" fill="var(--surface)" stroke="var(--ring)"/>`;
+    s += `<rect x="${n.x}" y="${ntop}" width="${n.w}" height="4" rx="2" fill="${n.accent}"/>`;
+    s += `<text x="${cx(n)}" y="${ntop - 8}" text-anchor="middle" class="fl-tier">${esc(n.tier)}</text>`;
+    s += `<text x="${cx(n)}" y="${ntop + 31}" text-anchor="middle" class="fl-val">${fmt(n.val)}</text>`;
+    s += `<text x="${cx(n)}" y="${ntop + 48}" text-anchor="middle" class="fl-sub">${esc(n.sub)}</text>`;
+    s += `<rect x="${cx(n) - bw / 2}" y="${ntop + nh - 8}" width="${bw}" height="3" rx="1.5" fill="${n.accent}" opacity="0.6"/>`;
+  }
+  // [2] not-loaded (mount-fail) exit — a short down-arrow below node 2 (x well left of the reason list)
+  if (m.mountFail) {
+    const ex = cx(NODES[1]);
+    s += `<line x1="${ex}" y1="${base}" x2="${ex}" y2="${base + 14}" stroke="var(--warning)" stroke-width="2" marker-end="url(#ah)"/>`;
+    s += `<text x="${ex}" y="${base + 29}" text-anchor="middle" class="fl-drop"><tspan fill="var(--warning)">▼</tspan> not-loaded <tspan class="fl-n">${fmt(m.mountFail)}</tspan></text>`;
+    s += `<text x="${ex}" y="${base + 41}" text-anchor="middle" class="fl-note">mount fail</text>`;
+  }
+  // [3] challenge fail reasons — a fan of exit arrows dropping to a left-aligned list directly below node 3
+  if (reasons.length) {
+    const originX = cx(NODES[2]), listX = NODES[2].x;
+    s += `<text x="${listX}" y="${base + 12}" class="fl-caption">challenge exits</text>`;
+    reasons.forEach((r, i) => {
+      const ly = listTop + i * rowH;
+      s += `<line x1="${originX}" y1="${base}" x2="${listX + 3}" y2="${ly - 4}" stroke="var(--s6)" stroke-width="1.4" opacity="0.5" marker-end="url(#ah)"/>`;
+      s += `<text x="${listX + 9}" y="${ly}" class="fl-reason"><tspan fill="var(--s6)">◆</tspan> ${esc(r.reason)} <tspan class="fl-n">${fmt(r.n)}</tspan></text>`;
+    });
+  }
+  // [4] server outcome split + exits (403 block, 429 rate-limit), stacked under node 4
+  const splitY = base + 8, sx = n4.x, sw = n4.w;
+  const segs = [{ n: m.pass, c: 'var(--s2)', t: 'pass' }, { n: m.rl, c: 'var(--s5)', t: 'pass-rl' }, { n: m.byp, c: 'var(--s1)', t: 'bypassed' }, { n: m.fail, c: 'var(--s6)', t: 'fail' }].filter(x => x.n);
+  const stot = segs.reduce((a, x) => a + x.n, 0) || 1;
+  s += `<text x="${sx}" y="${splitY - 1}" class="fl-caption">verify outcomes</text>`;
+  let ox = sx;
+  for (const g of segs) { const gw = Math.max(3, sw * g.n / stot); s += `<rect x="${ox}" y="${splitY + 4}" width="${Math.max(2, gw - 2)}" height="9" rx="2" fill="${g.c}"><title>${g.t}: ${g.n}</title></rect>`; ox += gw; }
+  s += `<text x="${sx}" y="${splitY + 32}" class="fl-outk"><tspan fill="var(--s2)">●</tspan> allowed <tspan class="fl-n">${fmt(m.pass + m.rl + m.byp)}</tspan></text>`;
+  const ex403 = m.block ? `<tspan fill="var(--critical)">■</tspan> 403'd <tspan class="fl-n">${fmt(m.block)}</tspan>` : `<tspan fill="var(--muted)">■</tspan> 0 403'd`;
+  s += `<text x="${sx}" y="${splitY + 49}" class="fl-outk">${ex403}</text>`;
+  if (m.rl429) s += `<text x="${sx}" y="${splitY + 66}" class="fl-outk"><tspan fill="var(--critical)">▼</tspan> 429 rate-limit <tspan class="fl-n">${fmt(m.rl429)}</tspan></text>`;
+  // [4] tokenless / absent bypass — a DISTINCT dashed inbound arrow entering node 4 from below (far
+  // right, clear of the left-aligned outcome stack) — bots that skip [1]-[3] and POST straight to the server
+  if (m.absent) {
+    const ax = n4.x + n4.w - 24, py = base + 102, pw = 116;
+    s += `<line x1="${ax}" y1="${py - 16}" x2="${ax}" y2="${base + 2}" stroke="var(--critical)" stroke-width="2" stroke-dasharray="4 2" marker-end="url(#ah)"/>`;
+    s += `<rect x="${ax - pw / 2}" y="${py - 15}" width="${pw}" height="21" rx="10.5" fill="none" stroke="var(--critical)" stroke-dasharray="3 2"/>`;
+    s += `<text x="${ax}" y="${py - 1}" text-anchor="middle" class="fl-bypass"><tspan fill="var(--critical)">⇧</tspan> absent <tspan class="fl-n">${fmt(m.absent)}</tspan></text>`;
+    s += `<text x="${ax}" y="${py + 16}" text-anchor="middle" class="fl-note">tokenless — skips [1]–[3]${m.absentBlock ? ' · ' + fmt(m.absentBlock) + " 403'd" : ''}</text>`;
+  }
+  if (note) s += `<text x="${W - 6}" y="14" text-anchor="end" class="fl-note">${esc(note)}</text>`;
+  s += `</svg>`;
+  return s;
 }
+
+function flowSection() {
+  const one = systemsWithServer.length <= 1;
+  const modeTag = (enfN && obsN) ? `${Math.round(enfN * 100 / modeTot)}% Enforce` : modeWord;
+  let body = '';
+  if (!allEps.length) {
+    body = `<div class="card"><p class="muted">No Turnstile events in the window across any source group.</p></div>`;
+  } else if (one) {
+    const sys = systemsWithServer[0] || 'logon';
+    body = `<div class="card flow-card"><div class="flow-title">${esc(sys)} <span class="muted">— all active app surfaces (${esc(allEps.length)} forms)</span></div>${flowSvg(sys, combined, modeTag)}</div>`;
+  } else {
+    body = `<div class="card flow-card"><div class="flow-title">combined <span class="muted">— all surfaces</span></div>${flowSvg('combined', combined, modeTag)}</div>`;
+    for (const f of perSystemFlows) body += `<div class="card flow-card"><div class="flow-title">${esc(f.sys)} <span class="muted">(${esc(f.m.eps.length)} forms · layer ${layerOf(f.sys)})</span></div>${flowSvg(f.sys, f.m)}</div>`;
+  }
+  // awaiting-data strips for configured systems with no server telemetry yet
+  const awaiting = SYSTEMS_CONFIGURED.filter(s => !systemsWithServer.includes(s));
+  if (awaiting.length) {
+    body += `<div class="await-wrap">` + awaiting.map(sys => {
+      const srcs = SOURCES.filter(x => x.system === sys);
+      const missing = srcs.filter(x => !x.exists).map(x => x.group);
+      const beaconOnly = allEps.filter(ep => !serverOf[ep] && (beaconByAction[ep] || reasonByAction[ep]));
+      const bnote = (sys === 'estimator' || sys === 'twproxy') && beaconOnly.length ? ` · client-gate already visible via Logon beacon for ${beaconOnly.filter(ep => (sys === 'twproxy' ? ep === 'feedback' : ep === 'share' || ep === 'pdfshare')).join(', ') || 'shared forms'}` : '';
+      return `<div class="await"><b>${esc(sys)}</b> — awaiting server telemetry${missing.length ? ` (${esc(missing.join(', '))} not yet deployed)` : ' (group present, no events in window)'}${bnote}</div>`;
+    }).join('') + `</div>`;
+  }
+  return body;
+}
+
+// ===== §5b lifecycle (data-driven; no hardcoded n/a) =====
+function lifecycleRow(ep) {
+  const b = beaconByAction[ep] || { solved: 0, failed: 0 };
+  const bTot = (b.solved || 0) + (b.failed || 0);
+  const sys = serverOf[ep];
+  const cf = cfByEp[ep] || 0;
+  const cfPct = (cf && bTot) ? (bTot * 100 / cf).toFixed(1) + '%' : '';
+  const clientBar = bTot
+    ? `<div class="sbar">${[{ n: b.solved, color: 'var(--s2)' }, { n: b.failed, color: 'var(--s6)' }].filter(x => x.n).map(x => `<div style="flex:${x.n};background:${x.color}"></div>`).join('') || '<div class="empty"></div>'}</div>`
+    : `<div class="sbar"><div class="empty"></div></div>`;
+  let serverCell;
+  if (sys) {
+    const s = serverByKey[sys + '|' + ep] || {};
+    const g = oc => s[oc] || { a: 0, b: 0 };
+    const tokens = g('pass').a + g('pass').b + g('fail').a + g('fail').b + g('pass-ratelimited').a + g('pass-ratelimited').b;
+    const absent = g('absent').a + g('absent').b, block = Object.keys(s).reduce((a, oc) => a + s[oc].b, 0);
+    const parts = [];
+    for (const k of ['pass', 'pass-ratelimited', 'bypassed-auth']) { const t = g(k).a + g(k).b; if (t || k === 'pass') parts.push(`<span class="o ok" title="allowed"><b>●</b>${esc(k)} <em>${t}</em></span>`); }
+    for (const k of ['fail', 'absent']) { const x = g(k); if (x.b) parts.push(`<span class="o blk" title="403'd"><b>■</b>${esc(k)} <em>${x.b}</em> 403'd</span>`); if (x.a) parts.push(`<span class="o enf" title="${enforceActive ? 'allowed this event' : 'allow now · 403 under Enforce'}${k === 'absent' ? ' · tokenless' : ''}"><b>◑</b>${esc(k)} <em>${x.a}</em></span>`); }
+    const bar = [{ n: g('pass').a + g('pass').b, color: 'var(--s2)' }, { n: g('pass-ratelimited').a + g('pass-ratelimited').b, color: 'var(--s5)' }, { n: g('bypassed-auth').a + g('bypassed-auth').b, color: 'var(--s1)' }, { n: g('fail').a + g('fail').b, color: 'var(--s6)' }, { n: absent, color: 'var(--s3)' }].filter(x => x.n);
+    serverCell = `<div class="lc-v">${fmt(tokens)}</div><div class="lc-s">tokens${absent ? ` · +${absent} tokenless` : ''}${block ? ` · <b style="color:var(--critical)">${block} 403'd</b>` : ''}</div>
+      <div class="sbar">${bar.map(x => `<div style="flex:${x.n};background:${x.color}"></div>`).join('') || '<div class="empty"></div>'}</div>
+      <div class="lc-out">${parts.join('')}</div>`;
+  } else {
+    // beacon-only endpoint (its widget beacons reach Logon, but its server-gate events group hasn't
+    // deployed yet). Don't guess the exact group name from the endpoint — just flag it pending.
+    serverCell = `<div class="lc-v await-v">awaiting</div><div class="lc-s">server telemetry pending — this surface's events group not yet deployed</div>`;
+  }
+  const badge = sys ? (sys === 'logon' ? '' : `<span class="tag">${esc(sys)}</span>`) : `<span class="tag await-tag">pending</span>`;
+  return `<div class="lc">
+    <div class="lc-form">${esc(ep)}${badge}</div>
+    <div class="lc-stage"><div class="lc-k">Cloudflare</div><div class="lc-v">${fmt(cf)}</div><div class="lc-s">issued</div><div class="sbar"><div style="flex:1;background:var(--s1)"></div></div></div>
+    <div class="lc-arr">${cfPct}<span>&rarr;</span></div>
+    <div class="lc-stage"><div class="lc-k">Client gate <i>widget</i></div><div class="lc-v">${fmt(bTot)}</div><div class="lc-s">${bTot ? Math.round((b.solved || 0) * 100 / bTot) + '% solved' : 'no beacons'}</div>
+      ${clientBar}
+      <div class="lc-out"><span class="o ok" title="solved → token → server"><b>✓</b>${b.solved || 0} →server</span><span class="o blk" title="failed → no token → blocked at client"><b>✗</b>${b.failed || 0} blocked</span></div></div>
+    <div class="lc-arr"><span>&rarr;</span></div>
+    <div class="lc-stage"><div class="lc-k">Server gate <i>${esc(sys || '…')}</i></div>${serverCell}</div>
+  </div>`;
+}
+
 function trend() {
   if (!days.length) return '<p class="muted">No server-verify events in window.</p>';
-  const per = days.map(d => { const o = {}; for (const r of serverDay.filter(x => (x.day || '').slice(0, 10) === d)) o[r.outcome] = +r.n; return { d, o, tot: OUTCOMES.reduce((a, oc) => a + (o[oc] || 0), 0) }; });
+  const per = days.map(d => { const o = {}; for (const r of serverDayRows.filter(x => (x.day || '').slice(0, 10) === d)) o[r.outcome] = +r.n; return { d, o, tot: OUTCOMES.reduce((a, oc) => a + (o[oc] || 0), 0) }; });
   return `<div class="days">${per.map(p => `<div class="day-col" title="${p.d}: ${p.tot}"><div class="day-stack" style="height:92px">
     ${OUTCOMES.filter(oc => p.o[oc]).map(oc => `<div style="flex:${p.o[oc]};background:${OC[oc]}" title="${oc}: ${p.o[oc]}"></div>`).join('') || '<div class="empty" style="flex:1"></div>'}
     </div><div class="day-lbl">${p.d.slice(5)}</div></div>`).join('')}</div>
     <div class="legend">${OUTCOMES.map(oc => `<span class="lg"><i style="background:${OC[oc]}"></i>${oc}</span>`).join('')}</div>`;
 }
 
-function lifecycle(p) {
-  const s = p.server;
-  const badges = () => {
-    const R = s.raw, parts = [];
-    for (const k of ['pass', 'pass-ratelimited', 'bypassed-auth']) { const x = R[k] || { a: 0, b: 0 }, t = x.a + x.b; if (t > 0 || k === 'pass') { const d = DISP[k]; parts.push(`<span class="o ${d.cls}" title="${esc(d.note)}"><b>${d.sym}</b>${esc(k)} <em>${t}</em></span>`); } }
-    for (const k of ['fail', 'absent']) {
-      const x = R[k] || { a: 0, b: 0 };
-      if (x.b > 0) parts.push(`<span class="o blk" title="403'd — blocked under Enforce${k === 'absent' ? ' · direct-API tokenless' : ''}"><b>■</b>${esc(k)} <em>${x.b}</em> 403'd</span>`);
-      if (x.a > 0 || (x.b === 0 && k === 'absent')) parts.push(`<span class="o enf" title="allow now · 403 under Enforce${k === 'absent' ? ' · direct-API tokenless' : ''}"><b>◑</b>${esc(k)} <em>${x.a}</em></span>`);
-    }
-    return parts.join('');
-  };
-  const serverCol = s
-    ? `<div class="lc-v">${fmt(s.tokens)}</div><div class="lc-s">tokens${s.absent ? ` · +${s.absent} tokenless` : ''}${s.blocked ? ` · <b style="color:var(--critical)">${s.blocked} 403'd</b>` : ''}</div>
-       ${stageBar([{ n: s.pass, color: 'var(--s2)', title: 'pass ' + s.pass }, { n: s.rl, color: 'var(--s5)', title: 'pass-ratelimited ' + s.rl }, { n: s.byp, color: 'var(--s1)', title: 'bypassed ' + s.byp }, { n: s.fail, color: 'var(--s6)', title: 'fail ' + s.fail }, { n: s.absent, color: 'var(--s3)', title: 'absent ' + s.absent }])}
-       <div class="lc-out">${badges()}</div>`
-    : `<div class="lc-v na">n/a</div><div class="lc-s">verified on ${esc(p.serverSystem || '?')} — not in /logon/events</div>`;
-  return `<div class="lc">
-    <div class="lc-form">${esc(p.form)}${p.serverSystem === 'logon' ? '' : `<span class="tag">${esc(p.serverSystem || '')}</span>`}</div>
-    <div class="lc-stage"><div class="lc-k">Cloudflare</div><div class="lc-v">${fmt(p.cf)}</div><div class="lc-s">issued</div>${stageBar([{ n: p.cf, color: 'var(--s1)', title: 'issued ' + p.cf }])}</div>
-    <div class="lc-arr">${p.cfToBeacon != null ? p.cfToBeacon.toFixed(1) + '%' : ''}<span>&rarr;</span></div>
-    <div class="lc-stage"><div class="lc-k">Client gate <i>widget</i></div><div class="lc-v">${fmt(p.bTot)}</div><div class="lc-s">${p.solvePct != null ? p.solvePct + '% solved' : 'beacon'}</div>
-      ${stageBar([{ n: p.bSolved, color: 'var(--s2)', title: 'solved ' + p.bSolved }, { n: p.bFailed, color: 'var(--s6)', title: 'failed ' + p.bFailed }])}
-      <div class="lc-out"><span class="o ok" title="solved → token → server"><b>✓</b>${p.bSolved} →server</span><span class="o blk" title="failed → no token → blocked at client, never reaches server"><b>✗</b>${p.bFailed} blocked now</span></div></div>
-    <div class="lc-arr"><span>&rarr;</span></div>
-    <div class="lc-stage"><div class="lc-k">Server gate <i>turnstile</i></div>${serverCol}</div>
+function prevBar() {
+  const segs = [{ n: allowedHuman, color: 'var(--s2)', label: 'human verified' }, { n: preventClient, color: 'var(--s6)', label: 'client-gate blocked' }, { n: preventServer, color: 'var(--s3)', label: 'server-gate (tokenless/invalid)' }];
+  return `<div class="pbar">${segs.some(s => s.n) ? segs.filter(s => s.n).map(s => `<div style="flex:${s.n};background:${s.color}" title="${esc(s.label)}: ${s.n}"></div>`).join('') : '<div class="empty" style="flex:1"></div>'}</div>
+    <div class="legend">${segs.map(s => `<span class="lg"><i style="background:${s.color}"></i>${esc(s.label)} <b>${s.n}</b></span>`).join('')}</div>`;
+}
+
+// §5c tokenless panel
+function tokenlessSection() {
+  return `<h2>Tokenless / direct-to-server <span class="muted">(the bot bypass — <code>outcome=absent</code>, all surfaces)</span></h2>
+  <p class="sub">POSTs that carry no Turnstile token skip the widget entirely and hit the server gate directly — the clearest non-human signal. Under ${esc(modeWord)} these ${enforceActive ? "are 403'd" : 'are allowed+recorded today (403 under Enforce)'}.</p>
+  <div class="card"><div class="tiles">
+    ${tile('tokenless total', fmt(absentTotal), 'outcome=absent, organic', absentTotal > TH.absentYellow ? 'warning' : absentTotal ? '' : 'good')}
+    ${absentBySystem.length ? absentBySystem.map(x => tile(esc(x.sys), fmt(x.absent), x.block ? `${x.block} already 403'd` : 'recorded', x.block ? 'warning' : '')).join('') : tile('per-system', '0', 'none in window', 'good')}
+  </div>
+  <p class="muted" style="margin-top:8px">Per-system totals populate as each surface's events group deploys (twproxy/estimator/pdfreport). Today only the Logon server plane is live, so its absent count is the whole cross-surface total.</p>
   </div>`;
 }
 
-const tile = (l, v, s, sev) => `<div class="tile ${sev || ''}"><div class="tile-val">${v}</div><div class="tile-lbl">${esc(l)}</div>${s ? `<div class="tile-sub">${esc(s)}</div>` : ''}</div>`;
+// §5d per-target-site attack breakdown
+function siteSection() {
+  if (!sites.length) return `<h2>Per-target-site attack breakdown</h2><div class="card"><p class="muted">No per-hostname server events in the window.</p></div>`;
+  const max = Math.max(1, ...sites.map(s => s.total));
+  return `<h2>Per-target-site attack breakdown <span class="muted">(who is being attacked — by CF-signed hostname)</span></h2>
+  <div class="card"><table><thead><tr><th>target site</th><th>surface</th><th class="n">verifies</th><th class="n">tokenless</th><th class="n">fail</th><th style="width:34%">volume</th></tr></thead><tbody>
+  ${sites.map(s => `<tr>
+    <td>${esc(s.host)}${s.extra ? ` <span class="pill">${esc(s.extra)}</span>` : ''}</td>
+    <td>${esc(s.system)}</td>
+    <td class="n">${fmt(s.total)}</td>
+    <td class="n">${s.absent ? `<b style="color:var(--warning)">${fmt(s.absent)}</b>` : '·'}</td>
+    <td class="n">${s.fail ? `<b style="color:var(--critical)">${fmt(s.fail)}</b>` : '·'}</td>
+    <td><div class="hbar"><div style="width:${Math.max(2, Math.round(s.total / max * 100))}%;background:var(--s1)"></div></div></td>
+  </tr>`).join('')}
+  </tbody></table>
+  <p class="muted" style="margin-top:8px">Attribution: Logon = CF-signed siteverify hostname; twproxy adds <code>config</code>, estimator adds <code>targetState</code> (shown as a pill) once those groups deploy.</p>
+  </div>`;
+}
 
-// --accounts: ground-truth account creation + garbage indicators from logon2.AspNetUsers (opt-in; SSM/DB, not all-API)
+// --accounts (opt-in): ground-truth account creation from logon2.AspNetUsers via SSM/DB
 function accountsSection() {
   if (!ACCOUNTS) return '';
   const INST = 'i-0997a73b08f6e5862';
@@ -252,24 +529,20 @@ function accountsSection() {
         ${sum ? tile('suspicious TLD', fmt(sum.susptld), '.ru/.xyz/… (30d)', sum.susptld > 3 ? 'warning' : 'good') : ''}
       </div>
       <div class="days">${bars || '<span class="muted">no rows</span>'}</div>
-      <p class="muted" style="margin-top:8px">Ground truth: actual accounts created (not a gate metric). Garbage indicators should stay near-zero post-Turnstile. Needs SSM/DB (opt-in <code>--accounts</code>) — not part of the all-API core.</p>
+      <p class="muted" style="margin-top:8px">Ground truth: actual accounts created (not a gate metric). Garbage indicators should stay near-zero post-Turnstile. Needs SSM/DB (opt-in <code>--accounts</code>).</p>
     </div>`;
 }
-function prevBar() {
-  const segs = [{ n: allowedHuman, color: 'var(--s2)', label: 'human verified' }, { n: preventClient, color: 'var(--s6)', label: 'client-gate blocked' }, { n: preventServer, color: 'var(--s3)', label: 'server-gate (Enforce)' }];
-  return `<div class="pbar">${segs.some(s => s.n) ? segs.filter(s => s.n).map(s => `<div style="flex:${s.n};background:${s.color}" title="${esc(s.label)}: ${s.n}"></div>`).join('') : '<div class="empty" style="flex:1"></div>'}</div>
-    <div class="legend">${segs.map(s => `<span class="lg"><i style="background:${s.color}"></i>${esc(s.label)} <b>${s.n}</b></span>`).join('')}</div>`;
-}
+
 function twproxySection() {
-  if (!twTotal && !twExitTotal) return `<h2>Feedback proxy <span class="muted">(twproxy)</span></h2><div class="card"><p class="muted">No twproxy events in <code>${esc(TWGROUP)}</code> for the retained window.${warn.filter(w => w.startsWith('twproxy')).length ? ' See data warnings.' : ''}</p></div>`;
+  if (!twTotal && !twExitTotal) return `<h2>Feedback proxy — pre-gate <span class="muted">(twproxy plain-text)</span></h2><div class="card"><p class="muted">No twproxy events in <code>${esc(TWGROUP)}</code> for the retained window.</p></div>`;
   const funnel = [
     { n: twReached, color: 'var(--s2)', label: 'reached siteverify' },
     { n: twRobot, color: 'var(--s6)', label: 'Turnstile-blocked (robot)' },
     { n: Math.max(0, twHostile - twRobot), color: 'var(--s3)', label: 'rejected pre-gate (method/tags/payload)' },
   ];
   const modeCls = twModeLive === 'Observe' ? 'warning' : twModeLive === 'Require' ? 'good' : '';
-  return `<h2>Feedback proxy <span class="muted">(twproxy · ${esc(ENV === 'prod' ? 'web-06 public' : 'web-04 preview2')} · retained ${TW_HOURS / 24}d)</span></h2>
-  <p class="sub">The feedback → Teamwork-task proxy. Its telemetry is plain-text in <code>${esc(TWGROUP)}</code>, a separate CloudWatch group from the Logon lake — <b>this surface is invisible to the funnel above</b>. Requests that fail method/tag/payload/token checks exit before siteverify; only survivors reach the Turnstile gate.</p>
+  return `<h2>Feedback proxy — pre-gate detail <span class="muted">(twproxy · ${esc(ENV === 'prod' ? 'web-06 public' : 'web-04 preview2')} · retained ${TW_HOURS / 24}d plain-text)</span></h2>
+  <p class="sub">The pre-gate attack detail that exits <b>before</b> the verify point (method/tag/payload/SQLi) — not visible to the structured funnel above. Once <code>/twproxy/events</code> deploys, the verify-decision (pass/absent/fail) joins the unified funnel; this panel remains the source for pre-gate floods.</p>
   <div class="card">
     <div class="tiles">
       ${tile('total requests', fmt(twTotal), 'retained window', twHostilePct >= 80 ? 'critical' : twHostilePct >= 50 ? 'warning' : '')}
@@ -289,16 +562,16 @@ function twproxySection() {
         ${twSqli.length ? twSqli.map(r => `<tr><td><code>${esc(r.vt.slice(0, 48))}</code></td><td class="n">${fmt(r.n)}</td></tr>`).join('') : '<tr><td class="muted">none detected</td></tr>'}
       </tbody></table></div>
     </div>
-    <p class="muted" style="margin-top:12px">${twModeLive === 'Observe' ? '<b style="color:var(--warning)">Live mode reads Observe</b> — Turnstile-only bot failures are NOT blocked here today; they proceed toward task creation. Flip to Require to close it.' : twModeLive === 'Require' ? '<b style="color:var(--good)">Live mode reads Require</b> — the gate is actively denying bots.' : 'Mode not inferable from this window (no <code>valid=/observe=</code> scheme lines).'} "Robot-block" lines only emit under Require, so their presence dates Require-mode traffic. Window is the twproxy group\'s full retention (bulk re-shipped on the rotation deploy), not the ${HOURS}h Logon window.</p>
+    <p class="muted" style="margin-top:12px">${twModeLive === 'Observe' ? '<b style="color:var(--warning)">Live mode reads Observe</b> — Turnstile-only bot failures are NOT blocked here today.' : twModeLive === 'Require' ? '<b style="color:var(--good)">Live mode reads Require</b> — the gate is actively denying bots.' : 'Mode not inferable from this window.'} Window is the twproxy group\'s full retention (bulk re-shipped on the rotation deploy), not the ${HOURS}h event window.</p>
   </div>`;
 }
-const bTotAll = pipe.reduce((a, p) => a + p.bTot, 0), bSolvedAll = pipe.reduce((a, p) => a + p.bSolved, 0);
 
+// ---- assemble ----
 const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Turnstile soak — ${esc(CFG.label)}</title><style>
-:root{--surface:#fcfcfb;--plane:#f9f9f7;--ink:#0b0b0b;--ink2:#52514e;--muted:#898781;--grid:#e1e0d9;--ring:rgba(11,11,11,.10);
+:root{--surface:#fcfcfb;--plane:#f9f9f7;--ink:#0b0b0b;--ink2:#52514e;--muted:#898781;--grid:#e1e0d9;--ring:rgba(11,11,11,.12);
 --s1:#2a78d6;--s2:#1baf7a;--s3:#eda100;--s5:#4a3aa7;--s6:#e34948;--good:#0ca30c;--warning:#e08600;--critical:#d03b3b;}
-@media(prefers-color-scheme:dark){:root{--surface:#1a1a19;--plane:#0d0d0d;--ink:#fff;--ink2:#c3c2b7;--muted:#898781;--grid:#2c2c2a;--ring:rgba(255,255,255,.10);
+@media(prefers-color-scheme:dark){:root{--surface:#1a1a19;--plane:#0d0d0d;--ink:#fff;--ink2:#c3c2b7;--muted:#898781;--grid:#2c2c2a;--ring:rgba(255,255,255,.14);
 --s1:#3987e5;--s2:#199e70;--s3:#c98500;--s5:#9085e9;--s6:#e66767;--good:#0ca30c;--warning:#fab219;}}
 *{box-sizing:border-box}body{margin:0;background:var(--plane);color:var(--ink);font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
 .wrap{max-width:1040px;margin:0 auto;padding:28px 20px 60px}h1{font-size:1.5em;margin:0 0 2px}
@@ -311,18 +584,33 @@ h2{font-size:1.05em;margin:30px 0 4px}.sub{color:var(--muted);font-size:.82em;ma
 .tile{background:var(--surface);border:1px solid var(--ring);border-radius:10px;padding:13px 15px}
 .tile-val{font-size:1.8em;font-weight:650;letter-spacing:-.02em}.tile-lbl{color:var(--ink2);font-size:.82em;margin-top:2px}.tile-sub{color:var(--muted);font-size:.74em;margin-top:4px}
 .tile.good .tile-val{color:var(--good)}.tile.warning .tile-val{color:var(--warning)}.tile.critical .tile-val{color:var(--critical)}
-.key{display:flex;gap:16px;flex-wrap:wrap;font-size:.76em;color:var(--ink2);margin:4px 0 10px}
 .o{display:inline-flex;align-items:center;gap:3px;color:var(--ink2);white-space:nowrap}.o b{font-size:1.1em;line-height:1}.o em{font-style:normal;font-weight:650;color:var(--ink)}
 .o.ok b{color:var(--good)}.o.enf b{color:var(--warning)}.o.blk b{color:var(--critical)}
-.lc{display:grid;grid-template-columns:84px 1fr 44px 1.1fr 26px 1.55fr;gap:9px;align-items:start;padding:14px 2px;border-top:1px solid var(--grid)}
-.lc-form{font-weight:600;font-size:.92em;padding-top:14px}.tag{display:inline-block;background:var(--grid);border-radius:20px;padding:0 6px;font-size:.68em;color:var(--ink2);font-weight:500}
+/* flow diagram */
+.flow-card{padding:10px 14px 14px}.flow-title{font-weight:600;font-size:.92em;margin:4px 2px 2px}
+.flow-svg{width:100%;height:auto;display:block}
+.fl-tier{fill:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.03em}
+.fl-val{fill:var(--ink);font-size:21px;font-weight:650}
+.fl-sub{fill:var(--muted);font-size:10.5px}
+.fl-flow{fill:var(--ink2);font-size:11px;font-weight:600}
+.fl-caption{fill:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.03em}
+.fl-drop,.fl-reason,.fl-bypass,.fl-outk{fill:var(--ink2);font-size:12px}
+.fl-reason{font-size:11.5px}
+.fl-n{fill:var(--ink);font-weight:650}
+.fl-note{fill:var(--muted);font-size:10px}
+.await-wrap{margin-top:10px;display:flex;flex-direction:column;gap:6px}
+.await{background:var(--surface);border:1px dashed var(--ring);border-radius:8px;padding:8px 12px;font-size:.82em;color:var(--ink2)}
+.await-v{color:var(--muted);font-weight:500;font-style:italic}.await-tag{background:transparent;border:1px dashed var(--muted);color:var(--muted)}
+.lc{display:grid;grid-template-columns:96px 1fr 44px 1.1fr 26px 1.55fr;gap:9px;align-items:start;padding:14px 2px;border-top:1px solid var(--grid)}
+.lc-form{font-weight:600;font-size:.92em;padding-top:14px;display:flex;flex-direction:column;gap:3px}.tag{display:inline-block;background:var(--grid);border-radius:20px;padding:0 6px;font-size:.68em;color:var(--ink2);font-weight:500;width:fit-content}
 .lc-k{font-size:.66em;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:1px}.lc-k i{font-style:normal;text-transform:none;letter-spacing:0;background:var(--grid);border-radius:20px;padding:0 6px;color:var(--ink2);font-size:1.05em}
-.lc-v{font-size:1.25em;font-weight:650;font-variant-numeric:tabular-nums;line-height:1.1}.lc-v.na{color:var(--muted);font-weight:500}
+.lc-v{font-size:1.25em;font-weight:650;font-variant-numeric:tabular-nums;line-height:1.1}
 .lc-s{font-size:.7em;color:var(--muted)}
 .lc-arr{text-align:center;color:var(--muted);font-size:.66em;font-variant-numeric:tabular-nums;padding-top:16px}.lc-arr span{display:block;font-size:1.2em;color:var(--grid)}
 .lc-out{display:flex;flex-wrap:wrap;gap:3px 9px;margin-top:6px;font-size:.72em;font-variant-numeric:tabular-nums}
 .sbar{height:8px;border-radius:3px;overflow:hidden;display:flex;gap:1.5px;margin-top:5px;background:var(--grid)}.sbar>div{min-width:2px}
 .pbar{height:22px;border-radius:5px;overflow:hidden;display:flex;gap:2px;background:var(--grid);margin-top:4px}.pbar>div{min-width:3px}
+.hbar{height:11px;border-radius:3px;overflow:hidden;background:var(--grid)}.hbar>div{height:100%}
 .empty{background:var(--grid);opacity:.4;flex:1}
 .days{display:flex;gap:7px;align-items:flex-end;padding:6px 0}.day-col{flex:1;display:flex;flex-direction:column;align-items:center;min-width:24px}
 .day-stack{width:100%;max-width:42px;display:flex;flex-direction:column-reverse;border-radius:4px 4px 0 0;overflow:hidden;gap:2px}
@@ -332,148 +620,82 @@ h2{font-size:1.05em;margin:30px 0 4px}.sub{color:var(--muted);font-size:.82em;ma
 .flags .critical{border-left:3px solid var(--critical)}.flags .warning{border-left:3px solid var(--warning)}
 table{width:100%;border-collapse:collapse;font-size:.82em;margin-top:8px}th,td{text-align:left;padding:5px 9px;border-bottom:1px solid var(--grid)}th{color:var(--muted);font-weight:600}td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
 .foot{color:var(--muted);font-size:.77em;margin-top:32px;border-top:1px solid var(--grid);padding-top:13px}
-.pill{display:inline-block;background:var(--grid);border-radius:20px;padding:1px 9px;color:var(--ink2)}
+.pill{display:inline-block;background:var(--grid);border-radius:20px;padding:1px 9px;color:var(--ink2);font-size:.9em}
+/* PDF/print: A3-portrait is ~1123px wide (fits the 1040px report at full width); keep cards/rows
+   whole across page breaks and preserve the colored fills. Chromium headless renders light by default. */
+@media print{body{background:#fff}.wrap{max-width:none;padding:10px 16px}
+.card,.flow-card,.lc,.tile,.await,.flow-svg,table{break-inside:avoid}h1,h2{break-after:avoid}
+body,.banner,.tile,.card{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 </style></head><body><div class="wrap">
 <h1>Turnstile soak report</h1>
-<div class="meta"><span class="pill">${esc(CFG.label)}</span> &middot; last ${HOURS}h &middot; ${esc(iso(startMs))} → ${esc(iso(now))} &middot; generated ${esc(iso(now))}<br>
-CF GraphQL issuance + Insights <code>${esc(CFG.group)}</code> (beacon + siteverify) + <code>twproxy-logs</code> (feedback) + CloudWatch alarms &middot; organic (ua~curl excluded)</div>
+<div class="meta"><span class="pill">${esc(CFG.label)}</span> &middot; <span class="pill">${esc(modeWord)} mode</span> &middot; last ${HOURS}h &middot; ${esc(iso(startMs))} → ${esc(iso(now))}<br>
+Unified per-system Insights (${SOURCES.map(s => `<code>${esc(s.group)}</code>${s.exists ? '' : ' <span class="muted">(pending)</span>'}`).join(' · ')}) + CF GraphQL issuance + <code>twproxy-logs</code> pre-gate + CloudWatch alarms &middot; organic (ua~curl excluded)</div>
 <div class="banner ${verdict}"><span class="dot">${verdict === 'good' ? '●' : verdict === 'warning' ? '▲' : '■'}</span><span>${esc(verdictText)}</span></div>
 
 <div class="tiles">
 ${tile('server pass', fmt(vPass), 'register+forgot, organic', 'good')}
 ${tile('server fail', fmt(vFail), 'invalid token', vFail > TH.failRed ? 'critical' : vFail ? 'warning' : 'good')}
-${tile('direct-API tokenless', fmt(vAbsent), 'absent → 403 under Enforce', vAbsent > TH.absentYellow ? 'warning' : '')}
-${tile('server 403s served', fmt(vBlocked), vBlocked ? 'actual blocks (allowed=false)' : 'Observe: 0 (recorded, not blocked)', vBlocked ? 'warning' : 'good')}
-${tile('ratelimited softpass', fmt(vRl), 'allowed through (now+Enforce)', vRl >= TH.ratelimitedRed ? 'critical' : 'good')}
-${tile('beacon solve-rate', bTotAll ? Math.round(bSolvedAll * 100 / bTotAll) + '%' : '—', `${fmt(bSolvedAll)}/${fmt(bTotAll)} all forms`)}
+${tile('tokenless (absent)', fmt(absentTotal), enforceActive ? '403 under Enforce' : 'absent → 403 under Enforce', absentTotal > TH.absentYellow ? 'warning' : '')}
+${tile('server 403s served', fmt(vBlocked), vBlocked ? 'actual blocks (allowed=false)' : (enforceActive ? 'none in window' : 'Observe: recorded, not blocked'), vBlocked ? 'warning' : 'good')}
+${tile('429 rate-limit', fmt(vRl429), 'Logon per-IP throttle', vRl429 ? 'warning' : 'good')}
+${tile('ratelimited softpass', fmt(vRl), 'allowed through', vRl >= TH.ratelimitedRed ? 'critical' : 'good')}
+${tile('beacon solve-rate', combined.beaconTot ? Math.round(combined.solved * 100 / combined.beaconTot) + '%' : '—', `${fmt(combined.solved)}/${fmt(combined.beaconTot)} all forms`)}
 ${tile('alarms', alarmFiring ? 'FIRING' : 'OK', alarms.map(a => a.name.replace('logon-', '')).join(', ') || 'n/a', alarmFiring ? 'critical' : 'good')}
 </div>
 ${flags.length ? `<ul class="flags">${flags.map(f => `<li class="${f.sev}"><b>${f.sev.toUpperCase()}</b> — ${esc(f.msg)}</li>`).join('')}</ul>` : '<p class="muted">No threshold flags — all watch signals nominal.</p>'}
 
+<h2>Stage flow <span class="muted">(the funnel — issuance → widget → challenge → server, quantified end-to-end)</span></h2>
+<p class="sub">Each node is the volume reaching that stage; each arrow is quantified flow-through. Drop-offs exit as labeled arrows: <b>not-loaded</b> (mount fail) at the widget, one arrow <b>per challenge fail reason</b>, and <b>403 / 429</b> at the server. The <b style="color:var(--critical)">tokenless/absent</b> bypass enters directly at the server — bots that skip [1]–[3].</p>
+${flowSection()}
+
 <h2>Bot / non-human prevention <span class="muted">(two gates · auth forms)</span></h2>
-<p class="sub"><b>Client gate</b> (widget): page-loading bots that can't solve → no token → blocked before the server (enforced now under Observe). <b>Server gate</b> (turnstile): <b>direct-API</b> bots that skip the page and POST tokenless/invalid → reach siteverify → allowed under Observe today, <b>403 under Enforce</b>.</p>
+<p class="sub"><b>Client gate</b> (widget): page-loading bots that can't solve → no token → blocked before the server (mode-independent). <b>Server gate</b> (turnstile): <b>direct-to-server</b> bots that skip the page and POST tokenless/invalid → ${enforceActive ? '403 under Enforce (live)' : 'allowed under Observe, 403 under Enforce'}.</p>
 <div class="card">
   <div class="tiles">
     ${tile('bot-like prevented', fmt(preventedTotal), preventRate != null ? preventRate + '% of submit attempts' : '', preventedTotal ? 'good' : '')}
-    ${tile('client gate — now', fmt(preventClient), 'widget failed → no token')}
-    ${tile('server gate — Enforce', fmt(preventServer), 'direct-API tokenless/invalid → 403', preventServer > TH.absentYellow ? 'warning' : '')}
+    ${tile('client gate', fmt(preventClient), 'widget failed → no token')}
+    ${tile('server gate', fmt(preventServer), 'tokenless/invalid → 403', preventServer > TH.absentYellow ? 'warning' : '')}
     ${tile('human verified', fmt(allowedHuman), 'pass + softpass + trusted', 'good')}
   </div>
   ${prevBar()}
-  <p class="muted" style="margin-top:11px">Widget-gate friction across <b>all</b> forms (incl estimator/twproxy): <b>${fmt(preventClientAll)}</b> failed beacons blocked before any server. Caveat: "client-gate blocked" includes real users who couldn't load the widget (iOS ratelimited, slow networks, blockers) — it is <i>bot-like</i>, not certified bots (the beacon carries no IP).</p>
+  <p class="muted" style="margin-top:11px">Widget-gate friction across <b>all</b> forms (incl estimator/twproxy beacons): <b>${fmt(preventClientAll)}</b> failed beacons blocked before any server. Caveat: "client-gate blocked" includes real users who couldn't load the widget (iOS ratelimited, slow networks, blockers) — <i>bot-like</i>, not certified bots (the beacon carries no IP).</p>
 </div>
 
-${twproxySection()}
+${tokenlessSection()}
 
-<h2>Full form lifecycle</h2>
-<p class="sub">Cloudflare issuance → client gate (widget) → server gate (siteverify), per form. % under the first arrow = issued→beacon conversion.</p>
-<div class="key">
-  <span class="o ok"><b>●</b>allowed now + Enforce</span>
-  <span class="o enf"><b>◑</b>allowed now → 403 under Enforce</span>
-  <span class="o blk"><b>✗</b>blocked at client gate (no token)</span>
+<h2>Full form lifecycle <span class="muted">(per form · exact numbers)</span></h2>
+<p class="sub">Cloudflare issuance → client gate (widget) → server gate (siteverify), per discovered form. Server cells populate per surface as each events group deploys — "awaiting" means the app hasn't shipped its emitter yet, not a gap.</p>
+<div class="key" style="display:flex;gap:16px;flex-wrap:wrap;font-size:.76em;color:var(--ink2);margin:4px 0 10px">
+  <span class="o ok"><b>●</b>allowed</span>
+  <span class="o enf"><b>◑</b>${enforceActive ? 'allowed this event' : 'allow now → 403 Enforce'}</span>
+  <span class="o blk"><b>■</b>403'd</span>
+  <span class="o blk"><b>✗</b>client-gate blocked</span>
 </div>
-<div class="card">${pipe.map(lifecycle).join('')}</div>
+<div class="card">${allEps.map(lifecycleRow).join('')}</div>
 
-<h2>Server verify — outcomes by day</h2>
+<h2>Server verify — outcomes by day <span class="muted">(Logon plane)</span></h2>
 <div class="card">${trend()}</div>
+
+${siteSection()}
 
 <h2>Beacon failure reasons — by form</h2>
 <div class="card"><table><thead><tr><th>form</th><th>reason</th><th class="n">count</th></tr></thead><tbody>
-${beaconFail.length ? beaconFail.map(r => `<tr><td>${esc(r.action)}</td><td>${esc(r.reason || '(none)')}</td><td class="n">${r.n}</td></tr>`).join('') : '<tr><td colspan="3" class="muted">no organic beacon failures</td></tr>'}
+${beaconFailRows.length ? beaconFailRows.map(r => `<tr><td>${esc(r.action)}</td><td>${esc(r.reason || '(none)')}</td><td class="n">${r.n}</td></tr>`).join('') : '<tr><td colspan="3" class="muted">no organic beacon failures</td></tr>'}
 </tbody></table></div>
+
+${twproxySection()}
 
 ${accountsSection()}
 
 ${warn.length ? `<h2>Data warnings</h2><div class="card"><ul>${warn.map(w => `<li class="muted">${esc(w)}</li>`).join('')}</ul></div>` : ''}
 
 <div class="foot">
-Two gates: the <b>client gate</b> (widget) blocks page-loading bots that fail the challenge (enforced now, mode-independent); the <b>server gate</b> (turnstile siteverify) blocks direct-API bots that skip the page and POST tokenless/invalid — only under Enforce (Observe today allows+records). pass / pass-ratelimited (softpass) / bypassed-auth are allowed in both modes; fail / absent are the Enforce delta.<br>
-Thresholds (tunable): fail&gt;${TH.failRed}=RED, absent&gt;${TH.absentYellow}=YELLOW, ratelimited-softpass&ge;${TH.ratelimitedRed}=RED. Verdict on auth forms (register+forgot); pdfshare/feedback lack a Logon server stage.<br>
-Caveats: CF issuance is fleet-wide and counts every challenge/render, so issued ≫ beacon ≫ verified is expected. "Organic" excludes only ua~curl synthetic tests — it does NOT separate bots from humans (beacon has no IP). Real clients behind the web-06 ARR proxy are recorded by their true XFF IP (port-stripped by ClientIp.From).<br>
-Regenerate: <code>node soak-report.js --env ${ENV} --hours ${HOURS}</code>
+<b>One unified schema across every surface.</b> Each system emits <code>{system, endpoint, outcome, allowed, hostname, …}</code> to its own CloudWatch group; the report derives <code>system</code> from the event (or its source group) and discovers <code>endpoint</code>s from the data, so a new form/surface appears automatically with no report edit. Live mode is <b>${esc(modeWord)}</b>.<br>
+Two gates: the <b>client gate</b> (widget) blocks page-loading bots that fail the challenge (mode-independent); the <b>server gate</b> (turnstile siteverify) blocks direct-to-server bots that skip the page and POST tokenless/invalid. pass / pass-ratelimited (softpass) / bypassed-auth are allowed; fail / absent are 403'd under Enforce; <b>429</b> is the Logon per-IP rate-limit (a distinct exit). The <b>layer</b> axis (edge=WAF, app=Turnstile; all surfaces here = <code>app</code>) is derived from <code>system</code>, reserved for the future WAF-edge join.<br>
+Thresholds (tunable): fail&gt;${TH.failRed}=RED, absent&gt;${TH.absentYellow}=YELLOW, ratelimited-softpass&ge;${TH.ratelimitedRed}=RED. Verdict on the Logon auth surface (register+forgot). CF issuance is fleet-wide (issued ≫ beacon ≫ verified is expected). "Organic" excludes ua~curl only — it does not separate bots from humans (beacon has no IP).<br>
+Regenerate: <code>node soak-report.js --env ${ENV} --hours ${HOURS}</code> &middot; generated ${esc(iso(now))}
 </div>
 </div></body></html>`;
 
-// ---- email-safe render (inline styles + tables; no <style>/var()/grid/flex/media — survives Gmail) ----
-function emailHtml_() {
-  const C = { s1: '#2a78d6', s2: '#1baf7a', s3: '#c07d00', s5: '#4a3aa7', s6: '#d63a39', good: '#0ca30c', warn: '#c47000', crit: '#c8322f', ink: '#111', ink2: '#4a4a47', mut: '#7a7873', line: '#dedcd4', card: '#ffffff', plane: '#f3f3f1' };
-  const vC = verdict === 'good' ? C.good : verdict === 'warning' ? C.warn : C.crit;
-  const et = (val, lbl, sub, col) => `<td width="50%" style="padding:5px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${C.line};border-radius:8px;background:${C.card}"><tr><td style="padding:9px 12px">
-    <div style="font-size:21px;font-weight:700;color:${col || C.ink};line-height:1.15">${val}</div>
-    <div style="font-size:12px;color:${C.ink2};margin-top:2px">${esc(lbl)}</div>
-    ${sub ? `<div style="font-size:11px;color:${C.mut};margin-top:3px">${esc(sub)}</div>` : ''}</td></tr></table></td>`;
-  const rows2 = (cells) => { let o = ''; for (let i = 0; i < cells.length; i += 2) o += `<tr>${cells[i]}${cells[i + 1] || '<td width="50%"></td>'}</tr>`; return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${o}</table>`; };
-  const bar = (segs) => { const t = segs.reduce((a, s) => a + s.n, 0) || 1; const on = segs.filter(s => s.n); return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="table-layout:fixed;border-collapse:separate;border-spacing:2px 0"><tr>${on.length ? on.map(s => `<td style="background:${s.color};height:15px;border-radius:3px;width:${Math.max(2, Math.round(s.n / t * 100))}%;font-size:0;line-height:0">&nbsp;</td>`).join('') : `<td style="background:${C.line};height:15px">&nbsp;</td>`}</tr></table>`; };
-  const legend = (segs) => `<div style="font-size:11px;color:${C.ink2};margin-top:6px">${segs.map(s => `<span style="white-space:nowrap"><span style="color:${s.color};font-size:13px">&#9632;</span> ${esc(s.label)} <b>${fmt(s.n)}</b></span>`).join('&nbsp;&nbsp;&nbsp;')}</div>`;
-  const h2 = (t) => `<div style="font-size:15px;font-weight:700;color:${C.ink};margin:22px 0 8px">${t}</div>`;
-
-  const kpis = rows2([
-    et(fmt(vPass), 'server pass', 'register+forgot, organic', C.good),
-    et(fmt(vFail), 'server fail', 'invalid token', vFail ? C.crit : C.ink),
-    et(fmt(vAbsent), 'direct-API tokenless', 'absent → 403 under Enforce', vAbsent ? C.warn : C.ink),
-    et(fmt(vBlocked), 'server 403s served', vBlocked ? 'actual blocks' : 'none this window', vBlocked ? C.warn : C.ink),
-    et(fmt(vRl), 'ratelimited softpass', 'allowed through', vRl ? C.crit : C.ink),
-    et(bTotAll ? Math.round(bSolvedAll * 100 / bTotAll) + '%' : '—', 'beacon solve-rate', `${fmt(bSolvedAll)}/${fmt(bTotAll)} all forms`),
-    et(alarmFiring ? 'FIRING' : 'OK', 'alarms', alarms.map(a => a.name.replace('logon-', '')).join(', ') || 'n/a', alarmFiring ? C.crit : C.good),
-    et(fmt(preventedTotal), 'bot-like prevented', preventRate != null ? preventRate + '% of attempts' : '', C.good),
-  ]);
-
-  const prevSegs = [{ n: allowedHuman, color: C.s2, label: 'human verified' }, { n: preventClient, color: C.s6, label: 'client-gate blocked' }, { n: preventServer, color: C.s3, label: 'server-gate (Enforce)' }];
-
-  const twSegs = [{ n: twReached, color: C.s2, label: 'reached siteverify' }, { n: twRobot, color: C.s6, label: 'Turnstile-blocked' }, { n: Math.max(0, twHostile - twRobot), color: C.s3, label: 'rejected pre-gate' }];
-  const twTiles = rows2([
-    et(fmt(twTotal), 'total requests', 'retained window', twHostilePct >= 80 ? C.crit : C.ink),
-    et(twHostilePct != null ? twHostilePct + '%' : '—', 'hostile / non-legit', `${fmt(twHostile)} never reached siteverify`, twHostilePct >= 80 ? C.crit : C.warn),
-    et(fmt(twRobot), 'Turnstile robot-blocks', twRobot ? 'gate denied (Require)' : 'none', twRobot ? C.good : C.ink),
-    et(fmt(twSqliTotal), 'SQLi probes', 'in validationType field', twSqliTotal ? C.crit : C.good),
-    et(twModeLive, 'live mode (inferred)', 'newest signal', twModeLive === 'Require' ? C.good : twModeLive === 'Observe' ? C.warn : C.ink),
-    et(fmt(twReached), 'reached siteverify', `${fmt(twPass)} passed`, C.good),
-  ]);
-  const twoCol = (title, rowsHtml) => `<td width="50%" valign="top" style="padding:0 6px"><div style="font-size:11px;color:${C.mut};text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px">${title}</div><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:12px">${rowsHtml}</table></td>`;
-  const exitRows = twExits.map(e => `<tr><td style="padding:3px 0;border-bottom:1px solid ${C.line}">${esc(e.ex)}</td><td style="padding:3px 0;border-bottom:1px solid ${C.line};text-align:right">${fmt(e.n)}</td></tr>`).join('') || `<tr><td style="color:${C.mut}">none</td></tr>`;
-  const sqliRows = (twSqli.length ? twSqli : []).map(r => `<tr><td style="padding:3px 0;border-bottom:1px solid ${C.line};font-family:Consolas,monospace;font-size:11px">${esc(r.vt.slice(0, 42))}</td><td style="padding:3px 0;border-bottom:1px solid ${C.line};text-align:right">${fmt(r.n)}</td></tr>`).join('') || `<tr><td style="color:${C.mut}">none detected</td></tr>`;
-
-  const lc = pipe.map(p => {
-    const s = p.server;
-    const sv = s ? `pass ${s.pass}${s.absent ? `, absent ${s.absent}` : ''}${s.fail ? `, fail ${s.fail}` : ''}${s.blocked ? `, <b style="color:${C.crit}">${s.blocked} 403</b>` : ''}` : `<span style="color:${C.mut}">n/a · ${esc(p.serverSystem || '')}</span>`;
-    return `<tr><td style="padding:6px 8px;border-bottom:1px solid ${C.line};font-weight:600">${esc(p.form)}</td><td style="padding:6px 8px;border-bottom:1px solid ${C.line};text-align:right">${fmt(p.cf)}</td><td style="padding:6px 8px;border-bottom:1px solid ${C.line};text-align:right">${p.bTot ? `${p.bSolved}/${p.bTot}` : '—'}</td><td style="padding:6px 8px;border-bottom:1px solid ${C.line}">${sv}</td></tr>`;
-  }).join('');
-
-  const dayRows = days.map(d => { const o = {}; for (const r of serverDay.filter(x => (x.day || '').slice(0, 10) === d)) o[r.outcome] = +r.n; return `<tr><td style="padding:4px 8px;border-bottom:1px solid ${C.line}">${d.slice(5)}</td>${OUTCOMES.map(oc => `<td style="padding:4px 8px;border-bottom:1px solid ${C.line};text-align:right;color:${o[oc] ? C.ink : C.mut}">${o[oc] || '·'}</td>`).join('')}</tr>`; }).join('');
-
-  return `<!doctype html><html><body style="margin:0;padding:0;background:${C.plane};font-family:-apple-system,'Segoe UI',Arial,sans-serif;color:${C.ink}">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${C.plane}"><tr><td align="center" style="padding:16px">
-<table role="presentation" width="640" cellpadding="0" cellspacing="0" style="width:640px;max-width:100%;background:${C.card};border:1px solid ${C.line};border-radius:10px"><tr><td style="padding:22px 22px 26px">
-  <div style="font-size:20px;font-weight:700">Turnstile soak report</div>
-  <div style="font-size:12px;color:${C.mut};margin:3px 0 14px">${esc(CFG.label)} &middot; last ${HOURS}h &middot; ${esc(iso(startMs).slice(0, 16))}Z → ${esc(iso(now).slice(0, 16))}Z</div>
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${vC};border-radius:8px"><tr><td style="padding:12px 16px;color:#fff;font-weight:700;font-size:15px">${esc(verdictText)}</td></tr></table>
-  <div style="height:12px"></div>
-  ${kpis}
-  ${flags.length ? `<div style="margin-top:10px">${flags.map(f => `<div style="padding:8px 12px;border-left:3px solid ${f.sev === 'critical' ? C.crit : C.warn};background:${C.plane};border-radius:4px;font-size:12px;margin-bottom:5px"><b>${f.sev.toUpperCase()}</b> — ${esc(f.msg)}</div>`).join('')}</div>` : `<div style="color:${C.mut};font-size:12px;margin-top:8px">No threshold flags — all watch signals nominal.</div>`}
-
-  ${h2('Bot / non-human prevention <span style="font-weight:400;color:' + C.mut + '">(auth forms)</span>')}
-  ${bar(prevSegs)}${legend(prevSegs)}
-
-  ${h2('Feedback proxy <span style="font-weight:400;color:' + C.mut + '">(twproxy &middot; ' + esc(ENV === 'prod' ? 'web-06 public' : 'web-04 preview2') + ' &middot; retained ' + (TW_HOURS / 24) + 'd)</span>')}
-  ${twTiles}
-  <div style="height:8px"></div>
-  ${bar(twSegs)}${legend(twSegs)}
-  <div style="height:12px"></div>
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>${twoCol('Exit reasons', exitRows)}${twoCol('SQL-injection probes', sqliRows)}</tr></table>
-  <div style="font-size:11px;color:${C.mut};margin-top:8px">${twModeLive === 'Require' ? '<b style="color:' + C.good + '">Live mode Require</b> — the gate is actively denying bots.' : twModeLive === 'Observe' ? '<b style="color:' + C.warn + '">Live mode Observe</b> — turnstile-only failures not blocked here.' : 'Mode not inferable this window.'} Retained window (bulk re-shipped on rotation deploy), not the ${HOURS}h Logon window.</div>
-
-  ${h2('Full form lifecycle')}
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:12px"><tr style="color:${C.mut}"><td style="padding:4px 8px">form</td><td style="padding:4px 8px;text-align:right">CF issued</td><td style="padding:4px 8px;text-align:right">client solved</td><td style="padding:4px 8px">server gate</td></tr>${lc}</table>
-
-  ${days.length ? h2('Server verify — outcomes by day') + `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:12px"><tr style="color:${C.mut}"><td style="padding:4px 8px">day</td>${OUTCOMES.map(oc => `<td style="padding:4px 8px;text-align:right">${oc}</td>`).join('')}</tr>${dayRows}</table>` : ''}
-
-  <div style="font-size:11px;color:${C.mut};margin-top:22px;border-top:1px solid ${C.line};padding-top:12px">
-  Two gates: the <b>client gate</b> (widget) blocks page-loading bots (mode-independent); the <b>server gate</b> (siteverify) blocks direct-API tokenless/invalid under Enforce. pass / pass-ratelimited / bypassed-auth allowed in both modes; fail / absent are the Enforce delta. Full interactive report: <code>tools/soak-report/soak-report-prod.html</code> (open in a browser). Generated ${esc(iso(now).slice(0, 16))}Z.
-  </div>
-</td></tr></table>
-</td></tr></table>
-</body></html>`;
-}
-
-fs.writeFileSync(OUT, EMAIL ? emailHtml_() : html);
-console.log(`wrote ${OUT}  verdict=${verdict}  auth pass=${vPass} fail=${vFail} absent=${vAbsent} rl=${vRl}  prevented=${preventedTotal} (client ${preventClient}/server ${preventServer})  forms=${forms.length}  twproxy=${twTotal}req/${twHostilePct}%hostile/robot${twRobot}/sqli${twSqliTotal}/mode=${twModeLive}  warnings=${warn.length}`);
+fs.writeFileSync(OUT, html);
+console.log(`wrote ${OUT}  verdict=${verdict}  mode=${modeWord}  auth pass=${vPass} fail=${vFail} absent=${vAbsent} rl=${vRl} 429=${vRl429} 403s=${vBlocked}  prevented=${preventedTotal} (client ${preventClient}/server ${preventServer})  forms=${allEps.length} [${allEps.join(',')}]  systems=[${systemsWithServer.join(',')||'none'}]  sites=${sites.length}  twproxy=${twTotal}req/${twHostilePct}%hostile  warnings=${warn.length}`);

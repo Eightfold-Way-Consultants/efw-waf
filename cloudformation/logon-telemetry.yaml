@@ -260,6 +260,55 @@ Resources:
       DestinationArn: !GetAtt EventsFirehose.Arn
       RoleArn: !GetAtt SubscriptionRole.Arn
 
+  # ---------------- ADDITIONAL PROD PRODUCERS: twproxy / estimator / pdfreport ----------------
+  # Same lake, same Firehose/Glue table. Each prod producer group is tapped identically to /logon/events
+  # (empty pattern = every record). The events table gained system/config/targetstate columns to carry
+  # these producers' extra fields alongside Logon's. No preview groups here (prod-only taps).
+  TwproxyEventsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /twproxy/events
+      RetentionInDays: 14
+
+  EstimatorEventsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /estimator/events
+      RetentionInDays: 14
+
+  PdfreportEventsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /pdfreport/events
+      RetentionInDays: 14
+
+  TwproxySubscriptionFilter:
+    Type: AWS::Logs::SubscriptionFilter
+    DependsOn: [SubscriptionRole, EventsFirehose, TwproxyEventsLogGroup]
+    Properties:
+      LogGroupName: !Ref TwproxyEventsLogGroup
+      FilterPattern: ''
+      DestinationArn: !GetAtt EventsFirehose.Arn
+      RoleArn: !GetAtt SubscriptionRole.Arn
+
+  EstimatorSubscriptionFilter:
+    Type: AWS::Logs::SubscriptionFilter
+    DependsOn: [SubscriptionRole, EventsFirehose, EstimatorEventsLogGroup]
+    Properties:
+      LogGroupName: !Ref EstimatorEventsLogGroup
+      FilterPattern: ''
+      DestinationArn: !GetAtt EventsFirehose.Arn
+      RoleArn: !GetAtt SubscriptionRole.Arn
+
+  PdfreportSubscriptionFilter:
+    Type: AWS::Logs::SubscriptionFilter
+    DependsOn: [SubscriptionRole, EventsFirehose, PdfreportEventsLogGroup]
+    Properties:
+      LogGroupName: !Ref PdfreportEventsLogGroup
+      FilterPattern: ''
+      DestinationArn: !GetAtt EventsFirehose.Arn
+      RoleArn: !GetAtt SubscriptionRole.Arn
+
   LogonGlueDatabase:
     Type: AWS::Glue::Database
     Properties:
@@ -325,6 +374,9 @@ Resources:
             - { Name: count, Type: int }
             - { Name: max, Type: int }
             - { Name: windowseconds, Type: int }
+            - { Name: system, Type: string }
+            - { Name: config, Type: string }
+            - { Name: targetstate, Type: string }
 
   AthenaWorkGroup:
     Type: AWS::Athena::WorkGroup

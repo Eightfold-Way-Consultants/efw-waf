@@ -1,0 +1,149 @@
+{
+ "logs": {
+  "logs_collected": {
+   "files": {
+    "collect_list": [
+     {
+      "file_path": "C:\\temp\\EstimatorLogs\\**\\*_Error.log",
+      "log_group_name": "estimator-logs/{hostname}",
+      "log_stream_name": "{instance_id}",
+      "retention_in_days": 7
+     },
+     {
+      "file_path": "C:\\temp\\*-twproxy.log",
+      "log_group_name": "twproxy-logs/{hostname}",
+      "log_stream_name": "{instance_id}",
+      "timestamp_format": "%Y-%m-%d %H:%M:%S",
+      "timezone": "UTC",
+      "retention_in_days": 14
+     },
+     {
+      "file_path": "C:\\temp\\twproxy.log",
+      "log_group_name": "twproxy-logs/{hostname}",
+      "log_stream_name": "{instance_id}",
+      "retention_in_days": 14
+     },
+     {
+      "file_path": "C:\\temp\\*-twproxy-events-production.txt",
+      "log_group_name": "/twproxy/events",
+      "log_stream_name": "{instance_id}",
+      "timezone": "UTC"
+     },
+     {
+      "file_path": "C:\\temp\\*-estimator-events-production.txt",
+      "log_group_name": "/estimator/events",
+      "log_stream_name": "{instance_id}",
+      "timezone": "UTC"
+     },
+     {
+      "file_path": "C:\\temp\\*-pdfreport-events-production.txt",
+      "log_group_name": "/pdfreport/events",
+      "log_stream_name": "{instance_id}",
+      "timezone": "UTC"
+     },
+     {
+      "file_path": "C:\\temp\\*-twproxy-events-preview.txt",
+      "log_group_name": "/twproxy-preview/events",
+      "log_stream_name": "{instance_id}",
+      "timezone": "UTC",
+      "retention_in_days": 14
+     },
+     {
+      "file_path": "C:\\temp\\*-estimator-events-preview.txt",
+      "log_group_name": "/estimator-preview/events",
+      "log_stream_name": "{instance_id}",
+      "timezone": "UTC",
+      "retention_in_days": 14
+     },
+     {
+      "file_path": "C:\\temp\\*-pdfreport-events-preview.txt",
+      "log_group_name": "/pdfreport-preview/events",
+      "log_stream_name": "{instance_id}",
+      "timezone": "UTC",
+      "retention_in_days": 14
+     }
+    ]
+   }
+  }
+ },
+ "metrics": {
+  "aggregation_dimensions": [
+   [
+    "InstanceId"
+   ]
+  ],
+  "append_dimensions": {
+   "AutoScalingGroupName": "${aws:AutoScalingGroupName}",
+   "ImageId": "${aws:ImageId}",
+   "InstanceId": "${aws:InstanceId}",
+   "InstanceType": "${aws:InstanceType}"
+  },
+  "metrics_collected": {
+   "LogicalDisk": {
+    "measurement": [
+     "% Free Space"
+    ],
+    "metrics_collection_interval": 60,
+    "resources": [
+     "*"
+    ]
+   },
+   "Memory": {
+    "measurement": [
+     "% Committed Bytes In Use"
+    ],
+    "metrics_collection_interval": 60
+   },
+   "Paging File": {
+    "measurement": [
+     "% Usage"
+    ],
+    "metrics_collection_interval": 60,
+    "resources": [
+     "*"
+    ]
+   },
+   "PhysicalDisk": {
+    "measurement": [
+     "% Disk Time",
+     "Disk Write Bytes/sec",
+     "Disk Read Bytes/sec",
+     "Disk Writes/sec",
+     "Disk Reads/sec"
+    ],
+    "metrics_collection_interval": 60,
+    "resources": [
+     "*"
+    ]
+   },
+   "Processor": {
+    "measurement": [
+     "% User Time",
+     "% Idle Time",
+     "% Interrupt Time"
+    ],
+    "metrics_collection_interval": 60,
+    "resources": [
+     "*"
+    ]
+   },
+   "TCPv4": {
+    "measurement": [
+     "Connections Established"
+    ],
+    "metrics_collection_interval": 60
+   },
+   "TCPv6": {
+    "measurement": [
+     "Connections Established"
+    ],
+    "metrics_collection_interval": 60
+   },
+   "statsd": {
+    "metrics_aggregation_interval": 60,
+    "metrics_collection_interval": 60,
+    "service_address": ":8125"
+   }
+  }
+ }
+}
