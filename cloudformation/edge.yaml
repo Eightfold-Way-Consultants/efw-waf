@@ -427,6 +427,31 @@ Resources:
           ContentTypeOptions: { Override: false }
           FrameOptions: { FrameOption: SAMEORIGIN, Override: false }
 
+  # Viewer-request guard: any request addressed to the CloudFront DEFAULT domain
+  # (*.cloudfront.net) — as opposed to a real alias — is returned a bodyless 404 at
+  # the edge, before it reaches origin. The default domain is permanent + publicly
+  # reachable and only scanners use it; forwarding its Host to IIS yields an
+  # unroutable 502 (origin recon + 5xx-alarm noise). A bodyless 404 ("never heard of
+  # it") leaks the least — the dist's existence is already exposed by DNS+cert+CF
+  # headers, so no code hides it; this just makes the default domain a dead end.
+  # Verified (2026-07-20): zero legit traffic uses the default domain.
+  DefaultDomainGuardFunction:
+    Type: AWS::CloudFront::Function
+    Properties:
+      Name: !Sub 'efw-${EnvName}-default-domain-guard'
+      AutoPublish: true
+      FunctionConfig:
+        Comment: 'Return 404 for CloudFront default-domain (*.cloudfront.net) requests.'
+        Runtime: cloudfront-js-2.0
+      FunctionCode: |
+        function handler(event) {
+          var h = event.request.headers.host;
+          if (h && h.value.toLowerCase().slice(-15) === '.cloudfront.net') {
+            return { statusCode: 404, statusDescription: 'Not Found' };
+          }
+          return event.request;
+        }
+
   Distribution:
     Type: AWS::CloudFront::Distribution
     Properties:
@@ -468,6 +493,9 @@ Resources:
           OriginRequestPolicyId: !Ref OriginRequestPolicyDynamic
           ResponseHeadersPolicyId: !Ref ResponseHeadersPolicy
           Compress: true
+          FunctionAssociations:
+            - EventType: viewer-request
+              FunctionARN: !GetAtt DefaultDomainGuardFunction.FunctionARN
         # Static assets — the ONLY cached paths. Everything else falls through to default (no cache).
         CacheBehaviors:
           - PathPattern: '*.css'
@@ -476,18 +504,27 @@ Resources:
             AllowedMethods: [GET, HEAD]
             CachePolicyId: !Ref CachePolicyStatic
             Compress: true
+            FunctionAssociations:
+              - EventType: viewer-request
+                FunctionARN: !GetAtt DefaultDomainGuardFunction.FunctionARN
           - PathPattern: '*.js'
             TargetOriginId: iis-origin
             ViewerProtocolPolicy: redirect-to-https
             AllowedMethods: [GET, HEAD]
             CachePolicyId: !Ref CachePolicyStatic
             Compress: true
+            FunctionAssociations:
+              - EventType: viewer-request
+                FunctionARN: !GetAtt DefaultDomainGuardFunction.FunctionARN
           - PathPattern: '/dist/*'
             TargetOriginId: iis-origin
             ViewerProtocolPolicy: redirect-to-https
             AllowedMethods: [GET, HEAD]
             CachePolicyId: !Ref CachePolicyStatic
             Compress: true
+            FunctionAssociations:
+              - EventType: viewer-request
+                FunctionARN: !GetAtt DefaultDomainGuardFunction.FunctionARN
           # Published static paths (both tiers serve CMS-published exports, so the
           # full static set incl *.htm is safe to cache; invalidation on publish
           # via InvalidateCdn).
@@ -497,30 +534,45 @@ Resources:
             AllowedMethods: [GET, HEAD]
             CachePolicyId: !Ref CachePolicyStatic
             Compress: true
+            FunctionAssociations:
+              - EventType: viewer-request
+                FunctionARN: !GetAtt DefaultDomainGuardFunction.FunctionARN
           - PathPattern: '/master_images/*'
             TargetOriginId: iis-origin
             ViewerProtocolPolicy: redirect-to-https
             AllowedMethods: [GET, HEAD]
             CachePolicyId: !Ref CachePolicyStatic
             Compress: true
+            FunctionAssociations:
+              - EventType: viewer-request
+                FunctionARN: !GetAtt DefaultDomainGuardFunction.FunctionARN
           - PathPattern: '/master_documents/*'
             TargetOriginId: iis-origin
             ViewerProtocolPolicy: redirect-to-https
             AllowedMethods: [GET, HEAD]
             CachePolicyId: !Ref CachePolicyStatic
             Compress: true
+            FunctionAssociations:
+              - EventType: viewer-request
+                FunctionARN: !GetAtt DefaultDomainGuardFunction.FunctionARN
           - PathPattern: '/documents/*'
             TargetOriginId: iis-origin
             ViewerProtocolPolicy: redirect-to-https
             AllowedMethods: [GET, HEAD]
             CachePolicyId: !Ref CachePolicyStatic
             Compress: true
+            FunctionAssociations:
+              - EventType: viewer-request
+                FunctionARN: !GetAtt DefaultDomainGuardFunction.FunctionARN
           - PathPattern: '/images/*'
             TargetOriginId: iis-origin
             ViewerProtocolPolicy: redirect-to-https
             AllowedMethods: [GET, HEAD]
             CachePolicyId: !Ref CachePolicyStatic
             Compress: true
+            FunctionAssociations:
+              - EventType: viewer-request
+                FunctionARN: !GetAtt DefaultDomainGuardFunction.FunctionARN
         # NOTE: ScriptResource.axd / *_AppService.axd are dynamic — they correctly
         # fall through to the no-cache default. Do NOT add *.axd to static behaviors.
 
