@@ -58,6 +58,14 @@
       "log_group_name": "/pdfreport-preview/events",
       "log_stream_name": "{instance_id}",
       "timezone": "UTC"
+     },
+     {
+      "file_path": "C:\\temp\\PdfJobs\\ControllerLogs\\log_*.log",
+      "log_group_name": "pdfreport-controller/{hostname}",
+      "log_stream_name": "{instance_id}",
+      "timestamp_format": "%Y-%m-%d %H:%M:%S",
+      "timezone": "UTC",
+      "retention_in_days": 14
      }
     ]
    }
