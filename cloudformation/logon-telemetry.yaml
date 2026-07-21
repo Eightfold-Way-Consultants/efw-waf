@@ -309,6 +309,21 @@ Resources:
       LogGroupName: /pdfreport-preview/events
       RetentionInDays: 14
 
+  # Plain rotating text logs (RotatingLog / TempDir.Log), fixed-name so instance churn does not
+  # spawn per-hostname orphan groups (unlike the agent-auto-created twproxy-logs/estimator-logs).
+  # Diagnostic tails only -- NOT tapped to S3.
+  CorsmoduleLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: corsmodule-logs
+      RetentionInDays: 14
+
+  PdfreportControllerLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: pdfreport-controller
+      RetentionInDays: 14
+
   TwproxySubscriptionFilter:
     Type: AWS::Logs::SubscriptionFilter
     DependsOn: [SubscriptionRole, EventsFirehose, TwproxyEventsLogGroup]
