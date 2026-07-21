@@ -115,7 +115,7 @@ Resources:
   # OWN zone's cf-redirect (apex: same-zone ALIAS->alias->dist is legal; subdomain: CNAME).
   # On a dist rebuild, redeploying this stack re-points every cf-redirect via GetAtt, so all
   # bounces auto-heal (apexes included) while the cutover records stay imperative/gated.
-  # Add a zone's pair here when its domain cuts over (db101/vets101/hb101/eightfoldway later).
+  # All 6 bounce zones have their pair (inert until a bounce record points at them).
   CfRedirectDisabilityA:
     Type: AWS::Route53::RecordSet
     Properties:
@@ -142,6 +142,62 @@ Resources:
     Properties:
       HostedZoneId: Z3OFPBTAG2ANJC
       Name: cf-redirect.housingbenefits101.org.
+      Type: AAAA
+      AliasTarget: { DNSName: !GetAtt Distribution.DomainName, HostedZoneId: Z2FDTNDATAQYW2, EvaluateTargetHealth: false }
+  CfRedirectDb101A:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: Z3T3K8XH9ZMBIW                 # db101.org
+      Name: cf-redirect.db101.org.
+      Type: A
+      AliasTarget: { DNSName: !GetAtt Distribution.DomainName, HostedZoneId: Z2FDTNDATAQYW2, EvaluateTargetHealth: false }
+  CfRedirectDb101AAAA:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: Z3T3K8XH9ZMBIW
+      Name: cf-redirect.db101.org.
+      Type: AAAA
+      AliasTarget: { DNSName: !GetAtt Distribution.DomainName, HostedZoneId: Z2FDTNDATAQYW2, EvaluateTargetHealth: false }
+  CfRedirectVetsA:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: Z3UQCHV318XC5K                 # vets101.org
+      Name: cf-redirect.vets101.org.
+      Type: A
+      AliasTarget: { DNSName: !GetAtt Distribution.DomainName, HostedZoneId: Z2FDTNDATAQYW2, EvaluateTargetHealth: false }
+  CfRedirectVetsAAAA:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: Z3UQCHV318XC5K
+      Name: cf-redirect.vets101.org.
+      Type: AAAA
+      AliasTarget: { DNSName: !GetAtt Distribution.DomainName, HostedZoneId: Z2FDTNDATAQYW2, EvaluateTargetHealth: false }
+  CfRedirectEightfoldA:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: Z1KW10MTO4TFYM                 # eightfoldway.com
+      Name: cf-redirect.eightfoldway.com.
+      Type: A
+      AliasTarget: { DNSName: !GetAtt Distribution.DomainName, HostedZoneId: Z2FDTNDATAQYW2, EvaluateTargetHealth: false }
+  CfRedirectEightfoldAAAA:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: Z1KW10MTO4TFYM
+      Name: cf-redirect.eightfoldway.com.
+      Type: AAAA
+      AliasTarget: { DNSName: !GetAtt Distribution.DomainName, HostedZoneId: Z2FDTNDATAQYW2, EvaluateTargetHealth: false }
+  CfRedirectHb101A:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: Z26W7416MQ6FIP                 # hb101.org
+      Name: cf-redirect.hb101.org.
+      Type: A
+      AliasTarget: { DNSName: !GetAtt Distribution.DomainName, HostedZoneId: Z2FDTNDATAQYW2, EvaluateTargetHealth: false }
+  CfRedirectHb101AAAA:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: Z26W7416MQ6FIP
+      Name: cf-redirect.hb101.org.
       Type: AAAA
       AliasTarget: { DNSName: !GetAtt Distribution.DomainName, HostedZoneId: Z2FDTNDATAQYW2, EvaluateTargetHealth: false }
 
