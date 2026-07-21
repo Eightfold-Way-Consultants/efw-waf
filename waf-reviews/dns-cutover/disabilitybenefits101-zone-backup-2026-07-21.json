@@ -1,0 +1,318 @@
+{
+  "HostedZoneId": "Z37FVJFDBZFWDS",
+  "Snapshot": "2026-07-21",
+  "ResourceRecordSets": [
+    {
+      "Name": "disabilitybenefits101.org.",
+      "Type": "A",
+      "TTL": 300,
+      "ResourceRecords": [
+        {
+          "Value": "69.90.209.69"
+        }
+      ]
+    },
+    {
+      "Name": "disabilitybenefits101.org.",
+      "Type": "MX",
+      "TTL": 300,
+      "ResourceRecords": [
+        {
+          "Value": "10 mail.disabilitybenefits101.org"
+        }
+      ]
+    },
+    {
+      "Name": "disabilitybenefits101.org.",
+      "Type": "NS",
+      "TTL": 172800,
+      "ResourceRecords": [
+        {
+          "Value": "ns-1953.awsdns-52.co.uk."
+        },
+        {
+          "Value": "ns-1131.awsdns-13.org."
+        },
+        {
+          "Value": "ns-806.awsdns-36.net."
+        },
+        {
+          "Value": "ns-213.awsdns-26.com."
+        }
+      ]
+    },
+    {
+      "Name": "disabilitybenefits101.org.",
+      "Type": "SOA",
+      "TTL": 900,
+      "ResourceRecords": [
+        {
+          "Value": "ns-1953.awsdns-52.co.uk. awsdns-hostmaster.amazon.com. 1 7200 900 1209600 86400"
+        }
+      ]
+    },
+    {
+      "Name": "disabilitybenefits101.org.",
+      "Type": "TXT",
+      "TTL": 300,
+      "ResourceRecords": [
+        {
+          "Value": "\"google-site-verification=bPVgChKz50-1laYByxjcQGzsoilIBHckoZq9Zx_6ruE\""
+        },
+        {
+          "Value": "\"v=spf1 ip4:69.90.209.69 ?all\""
+        }
+      ]
+    },
+    {
+      "Name": "_795e03558de21f1779dbb4f6bdae74fd.disabilitybenefits101.org.",
+      "Type": "CNAME",
+      "TTL": 300,
+      "ResourceRecords": [
+        {
+          "Value": "_75a6388469876481d37919585176b0dd.jkddzztszm.acm-validations.aws."
+        }
+      ]
+    },
+    {
+      "Name": "mail.disabilitybenefits101.org.",
+      "Type": "A",
+      "TTL": 300,
+      "ResourceRecords": [
+        {
+          "Value": "69.90.209.69"
+        }
+      ]
+    },
+    {
+      "Name": "mail.disabilitybenefits101.org.",
+      "Type": "TXT",
+      "TTL": 300,
+      "ResourceRecords": [
+        {
+          "Value": "\"v=spf1 ip4:69.90.209.69 ?all\""
+        }
+      ]
+    },
+    {
+      "Name": "preview-az.disabilitybenefits101.org.",
+      "Type": "CNAME",
+      "TTL": 300,
+      "ResourceRecords": [
+        {
+          "Value": "preview-site.db101.org"
+        }
+      ]
+    },
+    {
+      "Name": "www.preview-az.disabilitybenefits101.org.",
+      "Type": "CNAME",
+      "TTL": 300,
+      "ResourceRecords": [
+        {
+          "Value": "preview-az.disabilitybenefits101.org"
+        }
+      ]
+    },
+    {
+      "Name": "preview-ca.disabilitybenefits101.org.",
+      "Type": "CNAME",
+      "TTL": 300,
+      "ResourceRecords": [
+        {
+          "Value": "preview-site.db101.org"
+        }
+      ]
+    },
+    {
+      "Name": "www.preview-ca.disabilitybenefits101.org.",
+      "Type": "CNAME",
+      "TTL": 300,
+      "ResourceRecords": [
+        {
+          "Value": "preview-ca.disabilitybenefits101.org"
+        }
+      ]
+    },
+    {
+      "Name": "preview-mi.disabilitybenefits101.org.",
+      "Type": "CNAME",
+      "TTL": 300,
+      "ResourceRecords": [
+        {
+          "Value": "preview-site.db101.org"
+        }
+      ]
+    },
+    {
+      "Name": "www.preview-mi.disabilitybenefits101.org.",
+      "Type": "CNAME",
+      "TTL": 300,
+      "ResourceRecords": [
+        {
+          "Value": "preview-mi.disabilitybenefits101.org"
+        }
+      ]
+    },
+    {
+      "Name": "preview-mn.disabilitybenefits101.org.",
+      "Type": "CNAME",
+      "TTL": 300,
+      "ResourceRecords": [
+        {
+          "Value": "preview-site.db101.org"
+        }
+      ]
+    },
+    {
+      "Name": "www.preview-mn.disabilitybenefits101.org.",
+      "Type": "CNAME",
+      "TTL": 300,
+      "ResourceRecords": [
+        {
+          "Value": "preview-mn.disabilitybenefits101.org"
+        }
+      ]
+    },
+    {
+      "Name": "preview-nj.disabilitybenefits101.org.",
+      "Type": "CNAME",
+      "TTL": 300,
+      "ResourceRecords": [
+        {
+          "Value": "preview-site.db101.org"
+        }
+      ]
+    },
+    {
+      "Name": "www.preview-nj.disabilitybenefits101.org.",
+      "Type": "CNAME",
+      "TTL": 300,
+      "ResourceRecords": [
+        {
+          "Value": "preview-nj.disabilitybenefits101.org"
+        }
+      ]
+    },
+    {
+      "Name": "preview.disabilitybenefits101.org.",
+      "Type": "CNAME",
+      "TTL": 300,
+      "ResourceRecords": [
+        {
+          "Value": "preview-ca.disabilitybenefits101.org"
+        }
+      ]
+    },
+    {
+      "Name": "preview2-az-es.disabilitybenefits101.org.",
+      "Type": "CNAME",
+      "TTL": 300,
+      "ResourceRecords": [
+        {
+          "Value": "preview2-site.disabilitybenefits101.org"
+        }
+      ]
+    },
+    {
+      "Name": "preview2-az.disabilitybenefits101.org.",
+      "Type": "CNAME",
+      "TTL": 300,
+      "ResourceRecords": [
+        {
+          "Value": "preview2-site.disabilitybenefits101.org"
+        }
+      ]
+    },
+    {
+      "Name": "preview2-ca-es.disabilitybenefits101.org.",
+      "Type": "CNAME",
+      "TTL": 300,
+      "ResourceRecords": [
+        {
+          "Value": "preview2-site.disabilitybenefits101.org"
+        }
+      ]
+    },
+    {
+      "Name": "preview2-ca.disabilitybenefits101.org.",
+      "Type": "CNAME",
+      "TTL": 300,
+      "ResourceRecords": [
+        {
+          "Value": "preview2-site.disabilitybenefits101.org"
+        }
+      ]
+    },
+    {
+      "Name": "preview2-mi.disabilitybenefits101.org.",
+      "Type": "CNAME",
+      "TTL": 300,
+      "ResourceRecords": [
+        {
+          "Value": "preview2-site.disabilitybenefits101.org"
+        }
+      ]
+    },
+    {
+      "Name": "preview2-mn.disabilitybenefits101.org.",
+      "Type": "CNAME",
+      "TTL": 300,
+      "ResourceRecords": [
+        {
+          "Value": "preview2-site.disabilitybenefits101.org"
+        }
+      ]
+    },
+    {
+      "Name": "preview2-nj-es.disabilitybenefits101.org.",
+      "Type": "CNAME",
+      "TTL": 300,
+      "ResourceRecords": [
+        {
+          "Value": "preview2-site.disabilitybenefits101.org"
+        }
+      ]
+    },
+    {
+      "Name": "preview2-nj.disabilitybenefits101.org.",
+      "Type": "CNAME",
+      "TTL": 300,
+      "ResourceRecords": [
+        {
+          "Value": "preview2-site.disabilitybenefits101.org"
+        }
+      ]
+    },
+    {
+      "Name": "preview2-site.disabilitybenefits101.org.",
+      "Type": "CNAME",
+      "TTL": 300,
+      "ResourceRecords": [
+        {
+          "Value": "preview2-site.eightfoldway.com"
+        }
+      ]
+    },
+    {
+      "Name": "schema.disabilitybenefits101.org.",
+      "Type": "CNAME",
+      "TTL": 300,
+      "ResourceRecords": [
+        {
+          "Value": "dtd.eightfoldway.com"
+        }
+      ]
+    },
+    {
+      "Name": "www.disabilitybenefits101.org.",
+      "Type": "CNAME",
+      "TTL": 300,
+      "ResourceRecords": [
+        {
+          "Value": "public-site.db101.org"
+        }
+      ]
+    }
+  ]
+}

@@ -1,41 +1,68 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
-  efw-waf-redirect — collapses an entire domain to a 301 redirect via a CloudFront Function
-  (viewer-request). Used for housingbenefits101.org -> hb101.org. No WAF, no real origin
-  (the function returns 301 at the edge before cache/origin). Deploy in us-east-1.
-  See waf-cloudfront-migration.md Decisions ("housingbenefits101.org -> redirect").
+  efw-waf-redirect — ONE generalized 301/302 bounce distribution for every apex + legacy-brand
+  host. A viewer-request CloudFront Function maps the request host (by registrable apex, longest
+  suffix) to its canonical target and returns a redirect at the edge — no WAF, no real origin
+  (the dummy origin is never contacted). Deploy in us-east-1.
+
+  Topology "B": all bounce sources are aliases on this single dist under one multi-SAN cert;
+  declaring an alias is inert until DNS points at it, so families cut over incrementally.
+  Status defaults to 302 (soak) — promote to 301 by editing params once verified.
+  See [[edge-redirect-cutover-design]] + waf-cloudfront-migration.md.
 
 Parameters:
-  TargetHost:
-    Type: String
-    Default: hb101.org
-    Description: Host to 301-redirect to (path + query preserved). e.g. hb101.org.
   AcmCertificateArn:
     Type: String
-    Default: arn:aws:acm:us-east-1:874922373146:certificate/d25dc33a-a3fa-4273-a14c-2b8b04ed7507
-    Description: us-east-1 ACM cert covering the AlternateDomainNames (the issued cert already has housingbenefits101.org + *.housingbenefits101.org).
+    Description: us-east-1 ACM cert covering every AlternateDomainNames entry.
   AlternateDomainNames:
     Type: CommaDelimitedList
-    Default: "housingbenefits101.org,*.housingbenefits101.org"
-    Description: Source hostnames to redirect (apex + wildcard covers www/mn/preview-mn/preview2-mn).
+    Description: Exact source hosts to claim (apexes exact to avoid colliding with the edge dist's wildcards; legacy brands may use *.brand).
+  RedirectMap:
+    Type: String
+    Description: >
+      JSON object of registrable-apex -> target host. The function picks the LONGEST matching
+      suffix key for the request host. e.g. {"db101.org":"www.db101.org","hb101.org":"mn.hb101.org"}
+  DefaultTarget:
+    Type: String
+    Default: www.db101.org
+    Description: Fallback target if no map key matches (should not happen — every alias matches a key).
+  RedirectStatus:
+    Type: String
+    Default: '302'
+    AllowedValues: ['301', '302']
+    Description: 302 during soak; promote to 301 once targets are verified.
+  RedirectStatusText:
+    Type: String
+    Default: Found
+    Description: Must match RedirectStatus — 'Found' for 302, 'Moved Permanently' for 301.
   Comment:
     Type: String
-    Default: housingbenefits101.org -> hb101.org 301 redirect
+    Default: efw generalized apex/legacy bounce (B)
 
 Resources:
 
   RedirectFunction:
     Type: AWS::CloudFront::Function
     Properties:
-      Name: !Sub 'efw-redirect-${AWS::StackName}'   # Function names can't contain dots (no TargetHost)
+      Name: !Sub 'efw-redirect-${AWS::StackName}'   # Function names can't contain dots
       AutoPublish: true
       FunctionConfig:
         Comment: !Ref Comment
         Runtime: cloudfront-js-2.0
       FunctionCode: !Sub |
         function handler(event) {
-          var request = event.request;
-          var qs = request.querystring;
+          var req = event.request;
+          var host = (req.headers.host && req.headers.host.value || '').toLowerCase();
+          var MAP = ${RedirectMap};
+          // longest-suffix match: exact host, or host ends with '.'+key
+          var bestKey = '';
+          for (var k in MAP) {
+            if ((host === k || host.slice(-(k.length + 1)) === '.' + k) && k.length > bestKey.length) {
+              bestKey = k;
+            }
+          }
+          var dest = bestKey ? MAP[bestKey] : '${DefaultTarget}';
+          var qs = req.querystring;
           var query = '';
           var first = true;
           for (var key in qs) {
@@ -44,11 +71,10 @@ Resources:
             query += (first ? '?' : '&') + pair;
             first = false;
           }
-          var location = 'https://${TargetHost}' + request.uri + query;
           return {
-            statusCode: 301,
-            statusDescription: 'Moved Permanently',
-            headers: { 'location': { value: location } }
+            statusCode: ${RedirectStatus},
+            statusDescription: '${RedirectStatusText}',
+            headers: { 'location': { value: 'https://' + dest + req.uri + query } }
           };
         }
 
@@ -66,12 +92,11 @@ Resources:
           AcmCertificateArn: !Ref AcmCertificateArn
           SslSupportMethod: sni-only
           MinimumProtocolVersion: TLSv1.2_2021
-        # A dummy origin is required by CloudFront but is NEVER contacted — the viewer-request
-        # function returns the 301 before the cache/origin phase. Point it at the target as a
-        # harmless, valid placeholder.
+        # Dummy origin — REQUIRED by CloudFront but NEVER contacted (the viewer-request function
+        # returns the redirect before the cache/origin phase). A harmless valid placeholder.
         Origins:
           - Id: unused-origin
-            DomainName: !Ref TargetHost
+            DomainName: !Ref DefaultTarget
             CustomOriginConfig:
               OriginProtocolPolicy: https-only
               OriginSSLProtocols: [TLSv1.2]
@@ -84,9 +109,45 @@ Resources:
             - EventType: viewer-request
               FunctionARN: !GetAtt RedirectFunction.FunctionMetadata.FunctionARN
 
+  # --- Per-zone indirection records (self-healing on rebuild) -------------------------------
+  # One cf-redirect.<domain> per bounce zone, ALIAS -> this dist via !GetAtt. The gated apex +
+  # subdomain bounce records (managed IMPERATIVELY via change-batches, NOT here) point at their
+  # OWN zone's cf-redirect (apex: same-zone ALIAS->alias->dist is legal; subdomain: CNAME).
+  # On a dist rebuild, redeploying this stack re-points every cf-redirect via GetAtt, so all
+  # bounces auto-heal (apexes included) while the cutover records stay imperative/gated.
+  # Add a zone's pair here when its domain cuts over (db101/vets101/hb101/eightfoldway later).
+  CfRedirectDisabilityA:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: Z37FVJFDBZFWDS                 # disabilitybenefits101.org
+      Name: cf-redirect.disabilitybenefits101.org.
+      Type: A
+      AliasTarget: { DNSName: !GetAtt Distribution.DomainName, HostedZoneId: Z2FDTNDATAQYW2, EvaluateTargetHealth: false }
+  CfRedirectDisabilityAAAA:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: Z37FVJFDBZFWDS
+      Name: cf-redirect.disabilitybenefits101.org.
+      Type: AAAA
+      AliasTarget: { DNSName: !GetAtt Distribution.DomainName, HostedZoneId: Z2FDTNDATAQYW2, EvaluateTargetHealth: false }
+  CfRedirectHousingA:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: Z3OFPBTAG2ANJC                 # housingbenefits101.org
+      Name: cf-redirect.housingbenefits101.org.
+      Type: A
+      AliasTarget: { DNSName: !GetAtt Distribution.DomainName, HostedZoneId: Z2FDTNDATAQYW2, EvaluateTargetHealth: false }
+  CfRedirectHousingAAAA:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: Z3OFPBTAG2ANJC
+      Name: cf-redirect.housingbenefits101.org.
+      Type: AAAA
+      AliasTarget: { DNSName: !GetAtt Distribution.DomainName, HostedZoneId: Z2FDTNDATAQYW2, EvaluateTargetHealth: false }
+
 Outputs:
   DistributionId:
     Value: !Ref Distribution
   DistributionDomainName:
-    Description: Route53 target — apex housingbenefits101.org ALIAS + *.housingbenefits101.org records point here.
+    Description: Route53 target — apex A/AAAA ALIAS + legacy CNAME/ALIAS records point here.
     Value: !GetAtt Distribution.DomainName

@@ -1,0 +1,55 @@
+{
+  "HostedZoneId": "Z3OFPBTAG2ANJC",
+  "Deleted": [
+    {
+      "Name": "preview-mn.housingbenefits101.org.",
+      "Type": "CNAME",
+      "TTL": 300,
+      "ResourceRecords": [
+        {
+          "Value": "preview-site.housingbenefits101.org"
+        }
+      ]
+    },
+    {
+      "Name": "preview-site.housingbenefits101.org.",
+      "Type": "A",
+      "TTL": 300,
+      "ResourceRecords": [
+        {
+          "Value": "52.8.7.0"
+        }
+      ]
+    },
+    {
+      "Name": "preview2-mn.housingbenefits101.org.",
+      "Type": "CNAME",
+      "TTL": 300,
+      "ResourceRecords": [
+        {
+          "Value": "preview2-site.housingbenefits101.org"
+        }
+      ]
+    },
+    {
+      "Name": "preview2-site.housingbenefits101.org.",
+      "Type": "CNAME",
+      "TTL": 300,
+      "ResourceRecords": [
+        {
+          "Value": "preview2-site.eightfoldway.com"
+        }
+      ]
+    },
+    {
+      "Name": "public-site.housingbenefits101.org.",
+      "Type": "A",
+      "TTL": 300,
+      "ResourceRecords": [
+        {
+          "Value": "52.8.7.0"
+        }
+      ]
+    }
+  ]
+}

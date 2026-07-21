@@ -1,18 +1,30 @@
 [
   {
     "ParameterKey": "AcmCertificateArn",
-    "ParameterValue": "arn:aws:acm:us-east-1:874922373146:certificate/d25dc33a-a3fa-4273-a14c-2b8b04ed7507"
+    "ParameterValue": "arn:aws:acm:us-east-1:874922373146:certificate/61156f04-4c61-4403-a3ae-6e4b5ddd125e"
   },
   {
     "ParameterKey": "AlternateDomainNames",
-    "ParameterValue": "housingbenefits101.org,*.housingbenefits101.org"
+    "ParameterValue": "db101.org,vets101.org,start.vets101.org,eightfoldway.com,hb101.org,disabilitybenefits101.org,*.disabilitybenefits101.org,housingbenefits101.org,*.housingbenefits101.org"
+  },
+  {
+    "ParameterKey": "RedirectMap",
+    "ParameterValue": "{\"db101.org\":\"www.db101.org\",\"vets101.org\":\"www.vets101.org\",\"eightfoldway.com\":\"www.eightfoldway.com\",\"hb101.org\":\"mn.hb101.org\",\"disabilitybenefits101.org\":\"www.db101.org\",\"housingbenefits101.org\":\"hb101.org\"}"
+  },
+  {
+    "ParameterKey": "DefaultTarget",
+    "ParameterValue": "www.db101.org"
+  },
+  {
+    "ParameterKey": "RedirectStatus",
+    "ParameterValue": "302"
+  },
+  {
+    "ParameterKey": "RedirectStatusText",
+    "ParameterValue": "Found"
   },
   {
     "ParameterKey": "Comment",
-    "ParameterValue": "housingbenefits101.org -> hb101.org 301 redirect"
-  },
-  {
-    "ParameterKey": "TargetHost",
-    "ParameterValue": "hb101.org"
+    "ParameterValue": "efw generalized apex/legacy bounce (B) -- 302 soak, promote to 301 after verify"
   }
 ]
