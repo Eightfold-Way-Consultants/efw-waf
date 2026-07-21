@@ -24,6 +24,14 @@
       "retention_in_days": 14
      },
      {
+      "file_path": "C:\\temp\\*-corsmodule.log",
+      "log_group_name": "corsmodule-logs/{hostname}",
+      "log_stream_name": "{instance_id}",
+      "timestamp_format": "%Y-%m-%d %H:%M:%S",
+      "timezone": "UTC",
+      "retention_in_days": 14
+     },
+     {
       "file_path": "C:\\temp\\*-twproxy-prod-events.txt",
       "log_group_name": "/twproxy/events",
       "log_stream_name": "{instance_id}",
