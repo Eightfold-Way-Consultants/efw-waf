@@ -5,7 +5,7 @@
   },
   {
     "ParameterKey": "AlternateDomainNames",
-    "ParameterValue": "REPLACE_WITH_PUBLIC_DOMAIN_LIST_BEFORE_DEPLOY"
+    "ParameterValue": "*.db101.org,*.hb101.org,*.vets101.org,www.eightfoldway.com"
   },
   {
     "ParameterKey": "BaseStackName",

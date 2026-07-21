@@ -576,6 +576,31 @@ Resources:
         # NOTE: ScriptResource.axd / *_AppService.axd are dynamic — they correctly
         # fall through to the no-cache default. Do NOT add *.axd to static behaviors.
 
+  # Central DNS handle for this tier: cf-<env>.eightfoldway.com ALIAS -> this dist.
+  # Every real-site record for the tier CNAMEs to this one name, so a dist rebuild
+  # updates one record (via GetAtt) and all sites self-heal. Edge serves only
+  # SUBDOMAINS (no bare apexes -- those bounce via the redirect stack), so subdomain
+  # CNAMEs to a single central handle suffice; no per-zone records needed (unlike
+  # the redirect stack, whose apex targets forced per-zone handles).
+  # NOTE: cf-preview2.eightfoldway.com currently exists as a MANUAL record still in
+  # use by the live preview2 tier. Adopting it means deleting the manual one right
+  # before the next edge-preview2 deploy (CFN CREATE conflicts otherwise) -- do that
+  # AFTER HOURS. cf-public is new, so edge-public deploys cleanly.
+  CfHandle:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: Z1KW10MTO4TFYM               # eightfoldway.com
+      Name: !Sub 'cf-${EnvName}.eightfoldway.com.'
+      Type: A
+      AliasTarget: { DNSName: !GetAtt Distribution.DomainName, HostedZoneId: Z2FDTNDATAQYW2, EvaluateTargetHealth: false }
+  CfHandleAAAA:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: Z1KW10MTO4TFYM
+      Name: !Sub 'cf-${EnvName}.eightfoldway.com.'
+      Type: AAAA
+      AliasTarget: { DNSName: !GetAtt Distribution.DomainName, HostedZoneId: Z2FDTNDATAQYW2, EvaluateTargetHealth: false }
+
   # Per-tier distribution id, owned by this stack. The app servers' existing
   # efw.policy.secrets.read covers reading it — no new IAM. InvalidateCdn looks up
   # efw-waf/dist/{tier}.
