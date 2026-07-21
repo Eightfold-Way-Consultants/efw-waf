@@ -1,13 +1,13 @@
 <#
 .SYNOPSIS
-  Reproducible CloudFormation deploy for the efw-waf stack family — a thin wrapper over
+  Reproducible CloudFormation deploy for the efw-waf stack family -- a thin wrapper over
   `aws cloudformation deploy`, driven by a checked-in manifest + per-stack parameter file.
 
 .DESCRIPTION
   The friction this removes: you no longer look up (or remember) a stack's name, region, IAM
   capability, or parameters. The manifest below is the single source of truth for name/region/
   capability/template/param-file per stack; the parameter VALUES live in cloudformation/params/<key>.json
-  (checked in, declarative) — NOT in the deployed stack's state. So first-deploy and redeploy read the
+  (checked in, declarative) -- NOT in the deployed stack's state. So first-deploy and redeploy read the
   SAME source, the stack is recreatable from the repo, and a param change is a reviewable `git diff`.
 
   Deploy is idempotent: `aws cloudformation deploy` creates + executes a change-set, streams events,
@@ -56,7 +56,7 @@ foreach ($f in @($template, $paramFile)) { if (-not (Test-Path $f)) { throw "Not
 
 # Guard: refuse to deploy an unfilled scaffold (e.g. edge-public's placeholder domain list).
 if ((Get-Content -Raw $paramFile) -match 'REPLACE_WITH_') {
-  throw "$Stack.json still has a REPLACE_WITH_ placeholder — fill it in before deploying."
+  throw "$Stack.json still has a REPLACE_WITH_ placeholder -- fill it in before deploying."
 }
 
 Write-Host "Stack     : $($cfg.StackName) ($($cfg.Region))"
