@@ -582,10 +582,10 @@ Resources:
   # SUBDOMAINS (no bare apexes -- those bounce via the redirect stack), so subdomain
   # CNAMEs to a single central handle suffice; no per-zone records needed (unlike
   # the redirect stack, whose apex targets forced per-zone handles).
-  # NOTE: cf-preview2.eightfoldway.com currently exists as a MANUAL record still in
-  # use by the live preview2 tier. Adopting it means deleting the manual one right
-  # before the next edge-preview2 deploy (CFN CREATE conflicts otherwise) -- do that
-  # AFTER HOURS. cf-public is new, so edge-public deploys cleanly.
+  # Both handles are now stack-managed: cf-public (edge-public) and cf-preview2
+  # (edge-preview2, adopted 2026-07-21 -- the pre-existing manual CNAME was deleted
+  # and recreated here as an ALIAS; brief off-hours gap, TTL-masked). A dist rebuild
+  # updates the handle via GetAtt and every tier leaf that CNAMEs to it self-heals.
   CfHandle:
     Type: AWS::Route53::RecordSet
     Properties:
