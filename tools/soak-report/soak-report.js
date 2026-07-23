@@ -300,7 +300,7 @@ function flowSvg(title, m, note) {
   const reasons = m.reasons.slice(0, 5);
   const listTop = base + 26, rowH = 17;
   const bottomOfReasons = reasons.length ? listTop + (reasons.length - 1) * rowH : (m.mountFail ? base + 41 : base + 12);
-  const bottomOfServer = base + 8 + 49 + (m.rl429 ? 17 : 0);
+  const bottomOfServer = base + 16 + 49 + (m.rl429 ? 17 : 0);
   const H = Math.max(184, Math.ceil(Math.max(bottomOfReasons, bottomOfServer, m.mountFail ? base + 41 : 0, m.absent ? base + 122 : 0)) + 14);
   let s = `<svg viewBox="0 0 ${W} ${H}" class="flow-svg" role="img" aria-label="${esc(title)} stage flow" preserveAspectRatio="xMidYMid meet">`;
   s += `<defs><marker id="ah" markerWidth="9" markerHeight="9" refX="6.5" refY="3.2" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L7,3.2 L0,6.4 Z" fill="context-stroke"/></marker></defs>`;
@@ -318,38 +318,42 @@ function flowSvg(title, m, note) {
   for (const n of NODES) {
     const bw = Math.max(6, Math.round((n.w - 24) * Math.sqrt(n.val) / Math.sqrt(maxVal)));
     s += `<rect x="${n.x}" y="${ntop}" width="${n.w}" height="${nh}" rx="9" fill="var(--surface)" stroke="var(--ring)"/>`;
-    s += `<rect x="${n.x}" y="${ntop}" width="${n.w}" height="4" rx="2" fill="${n.accent}"/>`;
+    s += `<rect x="${n.x + 9}" y="${ntop + 1}" width="${n.w - 18}" height="3" rx="1.5" fill="${n.accent}"/>`;
     s += `<text x="${cx(n)}" y="${ntop - 8}" text-anchor="middle" class="fl-tier">${esc(n.tier)}</text>`;
     s += `<text x="${cx(n)}" y="${ntop + 31}" text-anchor="middle" class="fl-val">${fmt(n.val)}</text>`;
     s += `<text x="${cx(n)}" y="${ntop + 48}" text-anchor="middle" class="fl-sub">${esc(n.sub)}</text>`;
     s += `<rect x="${cx(n) - bw / 2}" y="${ntop + nh - 8}" width="${bw}" height="3" rx="1.5" fill="${n.accent}" opacity="0.6"/>`;
   }
-  // [2] not-loaded (mount-fail) exit — a short down-arrow below node 2 (x well left of the reason list)
+  // [2] not-loaded (mount-fail) exit — orthogonal elbow: straight down the box's left edge, then a
+  // right-angle turn pointing right at the cause label.
   if (m.mountFail) {
-    const ex = cx(NODES[1]);
-    s += `<line x1="${ex}" y1="${base}" x2="${ex}" y2="${base + 14}" stroke="var(--warning)" stroke-width="2" marker-end="url(#ah)"/>`;
-    s += `<text x="${ex}" y="${base + 29}" text-anchor="middle" class="fl-drop"><tspan fill="var(--warning)">▼</tspan> not-loaded <tspan class="fl-n">${fmt(m.mountFail)}</tspan></text>`;
-    s += `<text x="${ex}" y="${base + 41}" text-anchor="middle" class="fl-note">mount fail</text>`;
+    const trunkX = NODES[1].x + 6, armX = trunkX + 16, ay = base + 22;
+    s += `<line x1="${trunkX}" y1="${base}" x2="${trunkX}" y2="${ay}" stroke="var(--warning)" stroke-width="2"/>`;
+    s += `<line x1="${trunkX}" y1="${ay}" x2="${armX}" y2="${ay}" stroke="var(--warning)" stroke-width="2" marker-end="url(#ah)"/>`;
+    s += `<text x="${armX + 6}" y="${ay + 4}" text-anchor="start" class="fl-drop">not-loaded <tspan class="fl-n">${fmt(m.mountFail)}</tspan> <tspan class="fl-note">· mount fail</tspan></text>`;
   }
-  // [3] challenge fail reasons — a fan of exit arrows dropping to a left-aligned list directly below node 3
+  // [3] challenge fail reasons — orthogonal "comb": one trunk straight down the box's left edge, with a
+  // right-angle branch peeling off to point right at each cause label.
   if (reasons.length) {
-    const originX = cx(NODES[2]), listX = NODES[2].x;
-    s += `<text x="${listX}" y="${base + 12}" class="fl-caption">challenge exits</text>`;
-    reasons.forEach((r, i) => {
-      const ly = listTop + i * rowH;
-      s += `<line x1="${originX}" y1="${base}" x2="${listX + 3}" y2="${ly - 4}" stroke="var(--s6)" stroke-width="1.4" opacity="0.5" marker-end="url(#ah)"/>`;
-      s += `<text x="${listX + 9}" y="${ly}" class="fl-reason"><tspan fill="var(--s6)">◆</tspan> ${esc(r.reason)} <tspan class="fl-n">${fmt(r.n)}</tspan></text>`;
+    const trunkX = NODES[2].x + 6, armX = trunkX + 16;
+    s += `<text x="${armX}" y="${base + 12}" class="fl-caption">challenge exits</text>`;
+    const arms = reasons.map((r, i) => ({ r, ay: listTop + i * rowH - 4 }));
+    const lastY = arms[arms.length - 1].ay;
+    s += `<line x1="${trunkX}" y1="${base}" x2="${trunkX}" y2="${lastY}" stroke="var(--s6)" stroke-width="1.4" opacity="0.6"/>`;
+    arms.forEach(({ r, ay }) => {
+      s += `<line x1="${trunkX}" y1="${ay}" x2="${armX}" y2="${ay}" stroke="var(--s6)" stroke-width="1.4" opacity="0.6" marker-end="url(#ah)"/>`;
+      s += `<text x="${armX + 6}" y="${ay + 4}" class="fl-reason"><tspan fill="var(--s6)">◆</tspan> ${esc(r.reason)} <tspan class="fl-n">${fmt(r.n)}</tspan></text>`;
     });
   }
   // [4] server outcome split + exits (403 block, 429 rate-limit), stacked under node 4
-  const splitY = base + 8, sx = n4.x, sw = n4.w;
+  const splitY = base + 16, sx = n4.x, sw = n4.w;
   const segs = [{ n: m.pass, c: 'var(--s2)', t: 'pass' }, { n: m.rl, c: 'var(--s5)', t: 'pass-rl' }, { n: m.byp, c: 'var(--s1)', t: 'bypassed' }, { n: m.fail, c: 'var(--s6)', t: 'fail' }].filter(x => x.n);
   const stot = segs.reduce((a, x) => a + x.n, 0) || 1;
   s += `<text x="${sx}" y="${splitY - 1}" class="fl-caption">verify outcomes</text>`;
   let ox = sx;
   for (const g of segs) { const gw = Math.max(3, sw * g.n / stot); s += `<rect x="${ox}" y="${splitY + 4}" width="${Math.max(2, gw - 2)}" height="9" rx="2" fill="${g.c}"><title>${g.t}: ${g.n}</title></rect>`; ox += gw; }
   s += `<text x="${sx}" y="${splitY + 32}" class="fl-outk"><tspan fill="var(--s2)">●</tspan> allowed <tspan class="fl-n">${fmt(m.pass + m.rl + m.byp)}</tspan></text>`;
-  const ex403 = m.block ? `<tspan fill="var(--critical)">■</tspan> 403'd <tspan class="fl-n">${fmt(m.block)}</tspan>` : `<tspan fill="var(--muted)">■</tspan> 0 403'd`;
+  const ex403 = m.block ? `<tspan fill="var(--critical)">■</tspan> 403'd <tspan class="fl-n">${fmt(m.block)}</tspan>` : `<tspan fill="var(--muted)">■</tspan> 403'd <tspan class="fl-n">0</tspan>`;
   s += `<text x="${sx}" y="${splitY + 49}" class="fl-outk">${ex403}</text>`;
   if (m.rl429) s += `<text x="${sx}" y="${splitY + 66}" class="fl-outk"><tspan fill="var(--critical)">▼</tspan> 429 rate-limit <tspan class="fl-n">${fmt(m.rl429)}</tspan></text>`;
   // [4] tokenless / absent bypass — a DISTINCT dashed inbound arrow entering node 4 from below (far
@@ -591,13 +595,12 @@ h2{font-size:1.05em;margin:30px 0 4px}.sub{color:var(--muted);font-size:.82em;ma
 /* flow diagram */
 .flow-card{padding:10px 14px 14px}.flow-title{font-weight:600;font-size:.92em;margin:4px 2px 2px}
 .flow-svg{width:100%;height:auto;display:block}
-.fl-tier{fill:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.03em}
+.fl-tier{fill:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.03em}
 .fl-val{fill:var(--ink);font-size:21px;font-weight:650}
-.fl-sub{fill:var(--muted);font-size:10.5px}
+.fl-sub{fill:var(--muted);font-size:10px}
 .fl-flow{fill:var(--ink2);font-size:11px;font-weight:600}
 .fl-caption{fill:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.03em}
-.fl-drop,.fl-reason,.fl-bypass,.fl-outk{fill:var(--ink2);font-size:12px}
-.fl-reason{font-size:11.5px}
+.fl-drop,.fl-reason,.fl-bypass,.fl-outk{fill:var(--ink2);font-size:11px}
 .fl-n{fill:var(--ink);font-weight:650}
 .fl-note{fill:var(--muted);font-size:10px}
 .await-wrap{margin-top:10px;display:flex;flex-direction:column;gap:6px}
