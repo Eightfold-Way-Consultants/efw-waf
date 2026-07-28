@@ -441,15 +441,30 @@ Resources:
       Name: !Sub 'efw-${EnvName}-default-domain-guard'
       AutoPublish: true
       FunctionConfig:
-        Comment: 'Return 404 for CloudFront default-domain (*.cloudfront.net) requests.'
+        Comment: 'Default-domain 404 guard + stray /<state>/planning -> /my.htm redirect (edge).'
         Runtime: cloudfront-js-2.0
       FunctionCode: |
         function handler(event) {
-          var h = event.request.headers.host;
-          if (h && h.value.toLowerCase().slice(-15) === '.cloudfront.net') {
+          var req = event.request;
+          var h = req.headers.host;
+          var host = (h && h.value.toLowerCase()) || '';
+
+          // Block CloudFront default-domain (*.cloudfront.net) requests.
+          if (host.slice(-15) === '.cloudfront.net') {
             return { statusCode: 404, statusDescription: 'Not Found' };
           }
-          return event.request;
+
+          // Stray "/<state>/planning[...]" (redundant state prefix, always an error) -> 302 to /my.htm.
+          // Legit estimator entry is "/planning/..." (no state prefix), so p[1] is never a 2-char state there.
+          var p = req.uri.split('/');   // "/az/planning" -> ["","az","planning",...]
+          if (host && p.length >= 3 && p[1].length === 2 && p[2] === 'planning') {
+            return {
+              statusCode: 302, statusDescription: 'Found',
+              headers: { location: { value: 'https://' + host + '/my.htm' } }
+            };
+          }
+
+          return req;
         }
 
   Distribution:
