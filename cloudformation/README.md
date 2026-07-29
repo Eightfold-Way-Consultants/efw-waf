@@ -49,13 +49,14 @@ CloudFront reaches the origin over a **service-managed ENI in the origin's priva
 4. `redirect.yaml` for housingbenefits101 (Phase 4).
 5. `origin-sg` (us-west-1) + the `TargetOrigin=vpc` flip — Phase-5 VPC-origin cutover, per tier, after the VpcOrigin is created (see "VPC origins" above).
 
-Read each stack's `Outputs.DistributionDomainName` — that's the value the manual `cf-*` terminator record points at (see below).
+Each stack owns its `cf-*` handle (`cf-<env>.eightfoldway.com`, an ALIAS → the dist via `GetAtt`); site leaf records CNAME to that handle. `Outputs.DistributionDomainName` is still emitted for reference/debugging (see "What is intentionally NOT in these stacks" below).
 
 ## What is intentionally NOT in these stacks (and why)
 DNS is the cutover lever and must stay decoupled from the stack lifecycle:
 - **ACM cert** — issued out-of-band, passed in as an ARN param, never recreated.
 - **Per-site cutover records** — the `preview2-<state>` / apex flips stay **manual + staged** so the canary, 60s-TTL pre-lower, and one-click revert work without a stack update.
-- **`cf-*` terminator records** (`cf-preview2`/`cf-public`/`cf-redirect` → each dist's domain) — **manual, deliberately not stack-owned.** They're the stable anchors live site records point at, so a stack delete or distribution *replacement* must not be able to delete them (that would NXDOMAIN every dependent site = mass outage). The stack only *outputs* the dist domain; a human sets/updates the one `cf-*` record from it. `DeletionPolicy: Retain` was rejected (orphan conflicts on re-create).
+  What stays manual is only the **leaf** layer (the site CNAMEs / apex flips). The **`cf-*` handles they point at are STACK-managed** — see next bullet.
+- **`cf-*` terminator handles are STACK-managed** (updated 2026-07-21 — this reverses the earlier "keep them manual" stance): `cf-preview2`/`cf-public` by `edge.yaml` (`CfHandle`/`CfHandleAAAA`), `cf-redirect.<zone>` by `redirect.yaml` (per-zone). Each is an **A+AAAA ALIAS → its dist via `!GetAtt Distribution.DomainName`**, so a dist rebuild/replacement **auto-updates the handle** and every leaf that CNAMEs to it self-heals — no manual repoint. That `GetAtt` self-heal is exactly the "distribution replacement" case the old manual approach was guarding against, now handled automatically. The residual risk (a *stack delete* removing the handle → NXDOMAIN dependents) is accepted: deleting an edge stack is a deliberate, rare act, not routine. Edge serves only subdomains (apexes bounce via the redirect stack), so one central handle per tier suffices — no per-zone records (unlike the redirect stack, whose apex ALIAS targets forced per-zone handles).
 
 ## DNS model (summary)
 Every hostname terminates at one named terminator: `s4`/`s6` (direct origins) or `cf-preview2`/`cf-public`/`cf-redirect` (CNAME → dist). Cutover = point a site CNAME at its `cf-*` terminator (CloudFront routes on the site's own Host/SNI, so the `cf-*` name needs no alias/cert — but each site hostname does). Revert = point the site CNAME back at `s4`/`s6`. Apexes ALIAS straight at the dist (can't CNAME). Origins (`s4`/`s6.eightfoldway.com`) are never DNS'd at CloudFront (loop).
