@@ -46,7 +46,7 @@ Resources:
       FromPort: !Ref OriginHttpsPort
       ToPort: !Ref OriginHttpsPort
       SourceSecurityGroupId: !Ref CloudFrontVpcOriginsSgId
-      Description: CloudFront VPC origins -> origin HTTPS (efw-waf, us-west-1)
+      Description: CloudFront VPC origins to web-04/web-06 HTTPS. Managed by CloudFormation stack efw-waf-origin-sg (do not hand-edit).
 
 Outputs:
   IngressRuleId:
