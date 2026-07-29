@@ -28,6 +28,14 @@
     "ParameterValue": "s6.eightfoldway.com"
   },
   {
+    "ParameterKey": "OriginInstanceArn",
+    "ParameterValue": "arn:aws:ec2:us-west-1:874922373146:instance/i-0c82adf476c7c5e32"
+  },
+  {
+    "ParameterKey": "TargetOrigin",
+    "ParameterValue": "vpc"
+  },
+  {
     "ParameterKey": "PlanningRateLimit",
     "ParameterValue": "1000"
   },
