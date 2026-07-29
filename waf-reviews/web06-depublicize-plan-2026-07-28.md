@@ -155,7 +155,31 @@ SNI/cert anchor); the `s6` A-record → 52.8.7.0 becomes a Phase-D cleanup, `s4`
    VPN/peering.
 3. Confirm WebDeploy is VPN-only; keep `s6*` names resolving private for tooling.
 
-**Phase D — release the EIP**
+**Phase C1 — catch-all 404 origin site (RE-INSTATED from dns-dangling-audit Policy #1; PHASE-D PREREQ).**
+This was **dns-audit/dns-dangling-audit-2026-06-10.md:36 Policy #1** and **was never built** (confirmed
+live 2026-07-29: web-06 has NO blank-hostheader binding, no Default Web Site, every 443 binding =
+`sslFlags=1` Require-SNI; old probe `ssm-tmp/batch29-catchall.json` logged the same). It fell out of this
+plan on 2026-07-28 — restoring it here. **Why it matters:** with the wildcard `*.db101.org` CloudFront
+alias-claim in place (see below), an unbound-but-wildcard-matched Host (any stray `foo.db101.org` DNS'd at
+cf-public) is forwarded to web-06, which has no site for it → **Require-SNI TLS reset → CloudFront 502**
+(exactly what `preview-master`/`preview-site.*` do). A catch-all site turns that into a clean controlled
+**404**. It is defense-in-depth / clean behavior, **NOT** the primary capture gate.
+- **Build on BOTH web-06 and web-04** (audit said "both servers"): one IIS site, `physicalPath` = a tiny
+  static root serving a 404 page; bindings `*:80:` (blank host) + `*:443:` (blank host) with the existing
+  LE wildcard cert bound and **Require-SNI OFF** on the 443 catch-all (so it actually catches unmatched
+  SNI — a Require-SNI catch-all would still reset). Lowest IIS site precedence so it never shadows a real
+  host-header site.
+- **Verify:** `curl --resolve <bogus>.db101.org:443:<origin>` → 404 (not reset); every real host still 200;
+  no real site regressed. Then via CloudFront a stray wildcard name → 404, not 502.
+
+**PRIMARY ANTI-CAPTURE DEFENSE — VERIFIED IN PLACE 2026-07-29 (separate from the catch-all).** edge-public
+(E14TU8NPRHUI0M) holds wildcard aliases `*.db101.org`, `*.hb101.org`, `*.vets101.org` (+ `www.eightfoldway.com`),
+and we hold the matching wildcard ACM cert → **no external AWS account can claim any `x.db101.org`/`x.hb101.org`/
+`x.vets101.org` as a CloudFront alias.** So web-06 depublicization opens NO capture hole at the CloudFront layer.
+**GAP logged:** `*.eightfoldway.com` is NOT wildcard-claimed (only `www.` + apex via cf-redirect) — arbitrary
+`sub.eightfoldway.com` names are not CF-alias-claimed. Not a viewer surface in this cutover; track separately.
+
+**Phase D — release the EIP** (PREREQ: Phase C1 catch-all 404 site built + verified)
 1. Remove the public origin from `edge.yaml` (VPC origin is now sole origin); redeploy.
 2. Lower web-06 SG: drop world 80/443; keep CloudFront-VPCOrigins SG + VPN CIDRs + SSM.
 3. Disassociate + release `eipalloc-b5c725d0`. web-06 now private-only.
@@ -184,4 +208,22 @@ SNI/cert anchor); the `s6` A-record → 52.8.7.0 becomes a Phase-D cleanup, `s4`
 ## Execution order (agreed)
 Phase A **preview leaves first** (→ cf-public, Count soak) → Phase A public leaves + apex flips →
 Phase B (add VPC origin, flip behaviors, validate) → Phase C tidy-up (strip stale SPF) →
+**Phase C1 (build catch-all 404 site on web-06 + web-04 — Phase-D prereq)** →
 Phase D (drop public origin + world 80/443, release EIP).
+
+## Phase A status (2026-07-29)
+- **Staging fan-out DONE:** all 23 db101 state leaves (az..oh incl `-es` + `master`) + `preview-site.db101.org`
+  (was A→52.8.7.0, swapped to CNAME) + `preview-site.hb101.org` flipped CNAME→`cf-public`; `preview-mn.hb101.org`
+  rides `preview-site.hb101.org`. Route53 INSYNC both zones; re-enumeration = ZERO preview-* on s6/52.8.7.0.
+  Left untouched: `preview-favorites`/`preview-logon` (s3 service tier, not web-06).
+- **Verified:** state leaves (mn/ca/oh/az/nc-es + hb101-mn) homepage + deep content `.htm` = 200 via CloudFront;
+  `/planning` = 302 (session mint OK). Bare `/<state>/` = 403 (IIS no-default-doc; SAME on known-good canary
+  preview-ak → baseline, not a regression).
+- **502 anchors (expected, NOT regressions):** `preview-master.db101.org`, `preview-site.db101.org`,
+  `preview-site.hb101.org` → 502 via CloudFront because web-06 has NO IIS binding for those Hosts (disk dir for
+  preview-master EXISTS w/ 1024 files but was never IIS-bound; Jack: no-binding is fine — the real master site is
+  `db101-master.eightfoldway.com` on web-04/edit-cms, cloned from for new sites). These are CNAME routing anchors,
+  not viewer hosts. They 502 (not 404) purely because **Phase C1 catch-all is not built yet** — building it flips
+  them to a clean 404. Optional cosmetic tidy-up: `preview-master`/`preview-site.db101.org` now have zero
+  dependents (state leaves CNAME straight to cf-public) → deletable dead records; `preview-site.hb101.org` STAYS
+  (live CNAME hop for `preview-mn.hb101.org`).
