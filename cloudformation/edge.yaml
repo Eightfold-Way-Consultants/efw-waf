@@ -502,7 +502,7 @@ Resources:
         HTTPSPort: 443
         OriginProtocolPolicy: https-only
         OriginSSLProtocols: [!Ref MinimumOriginSslProtocol]
-        IpAddressType: ipv4
+        # IpAddressType omitted — not settable for this account; defaults to IPv4 (origins are IPv4).
 
   Distribution:
     Type: AWS::CloudFront::Distribution

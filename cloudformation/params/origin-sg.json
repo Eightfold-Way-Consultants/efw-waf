@@ -5,6 +5,6 @@
   },
   {
     "ParameterKey": "CloudFrontVpcOriginsSgId",
-    "ParameterValue": "REPLACE_WITH_VPCORIGINS_SERVICE_SG_ID"
+    "ParameterValue": "sg-05445653418287042"
   }
 ]
