@@ -176,8 +176,13 @@ cf-public) is forwarded to web-06, which has no site for it → **Require-SNI TL
     anchors — currently reset→502; `s6.eightfoldway.com` itself is ALSO unbound on web-06 → reset).
   - *web-04:* `edit-site.eightfoldway.com` (CNAME hub for the 24 `db101-<state>` edit sites — those are bound by
     their OWN host headers; the hub name is not), `preview2-site.eightfoldway.com`, `preview2-site.hb101.org`
-    (routing hubs), `brk-site.eightfoldway.com` (direct A→52.8.85.37, no binding — legacy/dead, deletion
-    candidate). BOUND on web-04 (NOT caught): `s4.eightfoldway.com`, `q.db101.org`, all `db101-*` edit sites.
+    (routing hubs), `brk-site.eightfoldway.com` (direct A→52.8.85.37; no host-header binding found, BUT it is
+    the documented **"break/test site"** — the build-server VPN-path validation target, `waf-reviews/01-disruption.md:18` —
+    with **3 live inbound CNAMEs** `design`/`remote`/`rpc.eightfoldway.com`, classified **NEVER-migrate / stay
+    direct to web-04** in `waf-cloudfront-migration.md:478`. NOT dead, NOT a deletion candidate; likely served
+    over the existing `pubbot *:80:` blank binding on HTTP. A `:443` catch-all would answer its unmatched-SNI hits
+    cleanly, but do NOT retire brk-site or its 3 CNAMEs). BOUND on web-04 (NOT caught): `s4.eightfoldway.com`,
+    `q.db101.org`, all `db101-*` edit sites.
 - **WEB-04 WRINKLES (must resolve in the C1 design):**
   1. web-04 ALREADY has a blank-host binding **`pubbot | *:80:`** (port 80 only) → unmatched HTTP Host currently
      lands on the *pubbot* site, NOT a 404; and there is **no `:443` blank binding** (unmatched SNI → reset).
