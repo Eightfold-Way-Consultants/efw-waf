@@ -11,6 +11,7 @@ Full narrative + decisions live in [`../waf-cloudfront-migration.md`](../waf-clo
 | `base.yaml` | **once** | Shared building blocks, exported for the edge stacks: `ScannerIpSet` + `AllowIpSet` (WAFv2 IP sets, empty seed), `WafLogBucket` (S3, `aws-waf-logs-efw-<acct>`), `OriginVerifySecret` (`efw-waf/origin-verify`), `AlarmTopic` (SNS, email-subscribed). No IAM, no traffic path. |
 | `edge.yaml` | **twice** (preview2, public) | Per-tier `WebAcl` (+ logging), CloudFront `Distribution`, cache/origin-request/response-headers policies, `Alarm5xx` + `AlarmWafBlocked`, and a per-tier dist-id secret (`efw-waf/dist/<env>`). Imports everything from `base`. |
 | `redirect.yaml` | once (Phase 4) | Small CloudFront dist + Function returning `301` to `https://hb101.org` for `housingbenefits101.org` + `*.housingbenefits101.org`. |
+| `origin-sg.yaml` | **us-west-1**, per VPC-origin tier | One `AWS::EC2::SecurityGroupIngress` on the existing origin SG (`sg-06348763`, by id) allowing 443 from the service-managed `CloudFront-VPCOrigins-Service-SG`. **Lives in us-west-1** (the origin VPC's region — a stack can't manage cross-region resources; `edge.yaml` is us-east-1). Deploy **after** the VpcOrigin exists (that's when AWS creates the service SG). See "VPC origins" below. |
 | `diagnostics.yaml` | once (Phase -1) | Athena/Glue over the S3 logs: db `efw_waf_logs`, WAF + CloudFront tables (date partition projection), workgroup `efw-diagnostics`, saved diagnostic queries. **Read-only metadata; no traffic path, no recycle.** |
 
 The **edit-cms tier is deliberately NOT fronted** (Decision B): NTLM breaks behind any L7 proxy, and the tier is already auth-gated, so WAF adds ~nothing. Edit names + `q.db101.org` stay DNS'd direct to web-04. → **2 content distributions** (preview2, public) + 1 redirect.
@@ -25,12 +26,28 @@ The **edit-cms tier is deliberately NOT fronted** (Decision B): NTLM breaks behi
 | `AlternateDomainNames` | explicit `preview2-*` list | wildcards + apexes (`*.db101.org`, apexes, `*.hb101.org`, `*.vets101.org`, `www`/apex eightfoldway, explicit `turtles`/`preview`) |
 | `WafRuleAction` | `Count` → `Block` | `Count` → `Block` |
 | `RateLimit` / `PlanningRateLimit` | `1000` / `1000` | `1000` / `1000` |
+| `OriginInstanceArn` | web-04 instance ARN (VPC origin) | web-06 instance ARN (VPC origin) |
+| `TargetOrigin` | `public` → `vpc` (flip) | `public` → `vpc` (flip) |
+
+## VPC origins (private origin — no public IP on the box)
+CloudFront reaches the origin over a **service-managed ENI in the origin's private subnet** instead of resolving the public origin FQDN — so the box needs no public IP. Controlled by two `edge.yaml` params:
+- **`OriginInstanceArn`** — empty = classic public `CustomOriginConfig` on `OriginDomainName`; set to the tier's EC2 instance ARN = a second origin `iis-vpc-origin` (a `VpcOriginConfig`) is defined and an `AWS::CloudFront::VpcOrigin` resource is created.
+- **`TargetOrigin`** (`public` | `vpc`) — the **one-parameter flip/rollback** of which origin the 9 cache behaviors target. `vpc` only takes effect when `OriginInstanceArn` is set (`UseVpcOrigin` condition).
+
+**Key facts:** the VPC origin keeps `DomainName: s4/s6.eightfoldway.com`, so **SNI + cert validation + Host are identical to the public origin** — only *routing* moves to the private ENI (routing is driven by `VpcOriginId`, not DNS; the origin cert is validated against the Origin domain **or** the forwarded viewer Host, both wildcard-covered). `X-Origin-Verify` is preserved on the VPC origin. VPC origins is supported in **us-west-1 except AZ `usw1-az2`**; web-04 + web-06 are both `usw1-az3` (OK). The origin box's SG must allow 443 from the CloudFront VPC-origins ENI — that's `origin-sg.yaml` (us-west-1, separate stack; see below).
+
+**Staged deploy (per tier — preview2 first as the canary):**
+1. Set `OriginInstanceArn` (+ leave `TargetOrigin=public`) in the tier's param file; `deploy-stack.ps1 edge-<tier>` → **creates the VpcOrigin** (ENI provisions, up to ~15 min), behaviors still on the public origin → **zero serving change**.
+2. Read the auto-created service SG id (`aws ec2 describe-security-groups --region us-west-1 --filters Name=group-name,Values=CloudFront-VPCOrigins-Service-SG --query 'SecurityGroups[0].GroupId'`), fill `params/origin-sg.json`, `deploy-stack.ps1 origin-sg` → opens origin `:443` to the ENI.
+3. Flip `TargetOrigin=vpc`, redeploy the edge stack → behaviors target the VPC origin.
+4. Validate (200s, cert OK, no 502). **Rollback = `TargetOrigin=public`, redeploy** (one param).
 
 ## Deploy order
 1. `aws cloudformation deploy --stack-name efw-waf-base --template-file cloudformation/base.yaml --capabilities CAPABILITY_NAMED_IAM --region us-east-1` → **then confirm the SNS subscription email** (else alarms are silent).
 2. `efw-waf-edge-preview2` (preview2 params) — Phase 0 canary.
 3. `efw-waf-edge-public` (public params) — only after preview2 is proven through Block.
 4. `redirect.yaml` for housingbenefits101 (Phase 4).
+5. `origin-sg` (us-west-1) + the `TargetOrigin=vpc` flip — Phase-5 VPC-origin cutover, per tier, after the VpcOrigin is created (see "VPC origins" above).
 
 Read each stack's `Outputs.DistributionDomainName` — that's the value the manual `cf-*` terminator record points at (see below).
 

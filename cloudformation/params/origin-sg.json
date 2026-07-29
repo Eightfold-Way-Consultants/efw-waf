@@ -1,0 +1,10 @@
+[
+  {
+    "ParameterKey": "OriginSecurityGroupId",
+    "ParameterValue": "sg-06348763"
+  },
+  {
+    "ParameterKey": "CloudFrontVpcOriginsSgId",
+    "ParameterValue": "REPLACE_WITH_VPCORIGINS_SERVICE_SG_ID"
+  }
+]

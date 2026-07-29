@@ -1,0 +1,54 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  efw-waf-origin-sg (us-west-1) — grants CloudFront VPC origins inbound HTTPS to the origin
+  instances' security group. This lives in us-west-1 (the origin VPC's region), NOT with the
+  edge stacks (us-east-1, CloudFront scope) — a CloudFormation stack can only manage resources
+  in its own region, and the SG is a us-west-1 VPC resource.
+
+  It adds a standalone AWS::EC2::SecurityGroupIngress rule to an EXISTING security group
+  (referenced by id; the SG itself is not imported/managed here). Source = the service-managed
+  CloudFront-VPCOrigins-Service-SG that AWS auto-creates on the first VPC origin (Option 2 =
+  tight: restricts origin ingress to your CloudFront VPC origins only). Because that SG only
+  exists AFTER the first VPC origin is created, deploy this stack AFTER the edge stack that
+  defines the VpcOrigin (see edge.yaml IisVpcOrigin + waf-cloudfront-migration.md / the
+  web06-depublicize plan).
+
+  Deploy: deploy-stack.ps1 origin-sg   (region us-west-1)
+
+Parameters:
+  OriginSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: >
+      The origin instances' security group to open on 443. web-04 (i-0272763b46610ac1b) and
+      web-06 (i-0c82adf476c7c5e32) share the vpc-331ad056 "default" SG sg-06348763, so one rule
+      covers both boxes.
+  CloudFrontVpcOriginsSgId:
+    Type: String
+    AllowedPattern: 'sg-[0-9a-f]+'
+    ConstraintDescription: Must be the sg-xxxx id of the CloudFront-VPCOrigins-Service-SG.
+    Description: >
+      The service-managed CloudFront-VPCOrigins-Service-SG id (AWS-created on the first VPC
+      origin; do NOT create one with this name yourself). Find it once the VPC origin exists:
+      aws ec2 describe-security-groups --region us-west-1
+        --filters Name=group-name,Values=CloudFront-VPCOrigins-Service-SG
+        --query 'SecurityGroups[0].GroupId' --output text
+  OriginHttpsPort:
+    Type: Number
+    Default: 443
+    Description: Origin HTTPS port CloudFront VPC origins connect to (matches edge.yaml VpcOrigin HTTPSPort).
+
+Resources:
+  VpcOriginIngressHttps:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref OriginSecurityGroupId
+      IpProtocol: tcp
+      FromPort: !Ref OriginHttpsPort
+      ToPort: !Ref OriginHttpsPort
+      SourceSecurityGroupId: !Ref CloudFrontVpcOriginsSgId
+      Description: CloudFront VPC origins -> origin HTTPS (efw-waf, us-west-1)
+
+Outputs:
+  IngressRuleId:
+    Description: The SecurityGroupIngress rule id (removed on stack delete = clean revert).
+    Value: !Ref VpcOriginIngressHttps

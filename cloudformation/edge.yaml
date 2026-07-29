@@ -92,10 +92,31 @@ Parameters:
     AllowedValues: ['true', 'false']
     Default: 'false'
     Description: AWS Managed Bot Control is a PAID rule group (~$10/mo/ACL). Off by default.
+  OriginInstanceArn:
+    Type: String
+    Default: ''
+    Description: >
+      EC2 instance ARN for a CloudFront VPC origin (CloudFront reaches the box privately over a
+      service-managed ENI, no public IP). Empty = no VPC origin (origin stays the public
+      CustomOriginConfig on OriginDomainName). Set to the tier's web box to enable:
+      preview2 = web-04 (i-0272763b46610ac1b), public = web-06 (i-0c82adf476c7c5e32).
+      Both boxes are us-west-1b/usw1-az3 (VPC origins supported; usw1-az2 excluded, not present here).
+  TargetOrigin:
+    Type: String
+    Default: public
+    AllowedValues: [public, vpc]
+    Description: >
+      Which origin the cache behaviors target — the one-parameter flip/rollback. 'public' = the
+      CustomOriginConfig (s4/s6, public IP); 'vpc' = the VPC origin (private ENI). 'vpc' takes effect
+      only when OriginInstanceArn is set (else it falls back to public via the UseVpcOrigin condition).
 
 Conditions:
   IsBlock: !Equals [!Ref WafRuleAction, Block]
   UseBotControl: !Equals [!Ref EnableBotControl, 'true']
+  HasVpcOrigin: !Not [!Equals [!Ref OriginInstanceArn, '']]
+  UseVpcOrigin: !And
+    - !Condition HasVpcOrigin
+    - !Equals [!Ref TargetOrigin, vpc]
 
 # Managed policy IDs (AWS-owned, stable):
 #   CachingDisabled              4135ea2d-6df8-44a3-9df3-4b5a84be39ad
@@ -467,6 +488,22 @@ Resources:
           return req;
         }
 
+  # VPC origin — CloudFront reaches the web box over a private, service-managed ENI (no public IP).
+  # Created only when OriginInstanceArn is set. HTTPS to origin with SNI/cert driven by the Origin's
+  # DomainName (= OriginDomainName, same as the public origin) — routing is via VpcOriginId, not DNS.
+  IisVpcOrigin:
+    Type: AWS::CloudFront::VpcOrigin
+    Condition: HasVpcOrigin
+    Properties:
+      VpcOriginEndpointConfig:
+        Name: !Sub 'efw-${EnvName}-web-vpc-origin'
+        Arn: !Ref OriginInstanceArn
+        HTTPPort: 80
+        HTTPSPort: 443
+        OriginProtocolPolicy: https-only
+        OriginSSLProtocols: [!Ref MinimumOriginSslProtocol]
+        IpAddressType: ipv4
+
   Distribution:
     Type: AWS::CloudFront::Distribution
     Properties:
@@ -499,9 +536,25 @@ Resources:
                   - '{{resolve:secretsmanager:${SecretArn}}}'
                   - SecretArn: !ImportValue
                       'Fn::Sub': '${BaseStackName}-OriginVerifySecretArn'
+          # Second origin: the VPC origin (private ENI). Present only when OriginInstanceArn is set.
+          # Same DomainName (OriginDomainName) so SNI/cert/Host are identical to the public origin;
+          # only routing differs (private ENI via VpcOriginId). Behaviors target it when TargetOrigin=vpc.
+          - !If
+            - HasVpcOrigin
+            - Id: iis-vpc-origin
+              DomainName: !Ref OriginDomainName
+              VpcOriginConfig:
+                VpcOriginId: !GetAtt IisVpcOrigin.Id
+              OriginCustomHeaders:
+                - HeaderName: X-Origin-Verify
+                  HeaderValue: !Sub
+                    - '{{resolve:secretsmanager:${SecretArn}}}'
+                    - SecretArn: !ImportValue
+                        'Fn::Sub': '${BaseStackName}-OriginVerifySecretArn'
+            - !Ref 'AWS::NoValue'
         # Default = no caching: every path not matched below passes to origin.
         DefaultCacheBehavior:
-          TargetOriginId: iis-origin
+          TargetOriginId: !If [UseVpcOrigin, iis-vpc-origin, iis-origin]
           ViewerProtocolPolicy: redirect-to-https
           AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
           CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad   # Managed-CachingDisabled
@@ -514,7 +567,7 @@ Resources:
         # Static assets — the ONLY cached paths. Everything else falls through to default (no cache).
         CacheBehaviors:
           - PathPattern: '*.css'
-            TargetOriginId: iis-origin
+            TargetOriginId: !If [UseVpcOrigin, iis-vpc-origin, iis-origin]
             ViewerProtocolPolicy: redirect-to-https
             AllowedMethods: [GET, HEAD]
             CachePolicyId: !Ref CachePolicyStatic
@@ -523,7 +576,7 @@ Resources:
               - EventType: viewer-request
                 FunctionARN: !GetAtt DefaultDomainGuardFunction.FunctionARN
           - PathPattern: '*.js'
-            TargetOriginId: iis-origin
+            TargetOriginId: !If [UseVpcOrigin, iis-vpc-origin, iis-origin]
             ViewerProtocolPolicy: redirect-to-https
             AllowedMethods: [GET, HEAD]
             CachePolicyId: !Ref CachePolicyStatic
@@ -532,7 +585,7 @@ Resources:
               - EventType: viewer-request
                 FunctionARN: !GetAtt DefaultDomainGuardFunction.FunctionARN
           - PathPattern: '/dist/*'
-            TargetOriginId: iis-origin
+            TargetOriginId: !If [UseVpcOrigin, iis-vpc-origin, iis-origin]
             ViewerProtocolPolicy: redirect-to-https
             AllowedMethods: [GET, HEAD]
             CachePolicyId: !Ref CachePolicyStatic
@@ -544,7 +597,7 @@ Resources:
           # full static set incl *.htm is safe to cache; invalidation on publish
           # via InvalidateCdn).
           - PathPattern: '*.htm'
-            TargetOriginId: iis-origin
+            TargetOriginId: !If [UseVpcOrigin, iis-vpc-origin, iis-origin]
             ViewerProtocolPolicy: redirect-to-https
             AllowedMethods: [GET, HEAD]
             CachePolicyId: !Ref CachePolicyStatic
@@ -553,7 +606,7 @@ Resources:
               - EventType: viewer-request
                 FunctionARN: !GetAtt DefaultDomainGuardFunction.FunctionARN
           - PathPattern: '/master_images/*'
-            TargetOriginId: iis-origin
+            TargetOriginId: !If [UseVpcOrigin, iis-vpc-origin, iis-origin]
             ViewerProtocolPolicy: redirect-to-https
             AllowedMethods: [GET, HEAD]
             CachePolicyId: !Ref CachePolicyStatic
@@ -562,7 +615,7 @@ Resources:
               - EventType: viewer-request
                 FunctionARN: !GetAtt DefaultDomainGuardFunction.FunctionARN
           - PathPattern: '/master_documents/*'
-            TargetOriginId: iis-origin
+            TargetOriginId: !If [UseVpcOrigin, iis-vpc-origin, iis-origin]
             ViewerProtocolPolicy: redirect-to-https
             AllowedMethods: [GET, HEAD]
             CachePolicyId: !Ref CachePolicyStatic
@@ -571,7 +624,7 @@ Resources:
               - EventType: viewer-request
                 FunctionARN: !GetAtt DefaultDomainGuardFunction.FunctionARN
           - PathPattern: '/documents/*'
-            TargetOriginId: iis-origin
+            TargetOriginId: !If [UseVpcOrigin, iis-vpc-origin, iis-origin]
             ViewerProtocolPolicy: redirect-to-https
             AllowedMethods: [GET, HEAD]
             CachePolicyId: !Ref CachePolicyStatic
@@ -580,7 +633,7 @@ Resources:
               - EventType: viewer-request
                 FunctionARN: !GetAtt DefaultDomainGuardFunction.FunctionARN
           - PathPattern: '/images/*'
-            TargetOriginId: iis-origin
+            TargetOriginId: !If [UseVpcOrigin, iis-vpc-origin, iis-origin]
             ViewerProtocolPolicy: redirect-to-https
             AllowedMethods: [GET, HEAD]
             CachePolicyId: !Ref CachePolicyStatic
