@@ -184,10 +184,14 @@ cf-public) is forwarded to web-06, which has no site for it → **Require-SNI TL
     cleanly, but do NOT retire brk-site or its 3 CNAMEs). BOUND on web-04 (NOT caught): `s4.eightfoldway.com`,
     `q.db101.org`, all `db101-*` edit sites.
 - **WEB-04 WRINKLES (must resolve in the C1 design):**
-  1. web-04 ALREADY has a blank-host binding **`pubbot | *:80:`** (port 80 only) → unmatched HTTP Host currently
-     lands on the *pubbot* site, NOT a 404; and there is **no `:443` blank binding** (unmatched SNI → reset).
-     Can't add a second `*:80:` blank (collision). CHOICE: (a) move pubbot to a host-header binding + give the
-     404 site `:80`+`:443` blank; or (b) leave pubbot on `:80`, add only the `:443` catch-all. (b) is lower-touch.
+  1. web-04 has a blank-host binding **`pubbot | *:80:`**, but the **pubbot site is `Stopped`** (verified
+     2026-07-29) — it's not a web app, it's the **WebDeploy/msdeploy target for the PubBot installer** (content
+     dir = `Installer/`+`ServiceFiles/`+`Deploy-PubBot.ps1`, pushed via WMSVC on `:8172`; msdeploy targets by
+     site-name + physicalPath, NOT via any HTTP binding). So the `*:80:` blank binding is **inert** (stopped site
+     doesn't listen → today unmatched HTTP Host on web-04 gets http.sys 404/reset, NOT pubbot) and **unneeded**.
+     CLEAN FIX: **remove pubbot's `*:80:` blank binding** (IIS enforces binding uniqueness even for a stopped
+     site, so it must be deleted, not merely left) → frees blank `:80`+`:443` for the catch-all 404 site. Does
+     not affect msdeploy (site stays, just loses an unused binding). Better than moving pubbot or `:443`-only.
   2. **web-04 KEEPS its public EIP** (hosts un-fronted edit-cms; not depublicized) → `52.8.85.37` stays directly
      internet-reachable with any Host. The catch-all matters MORE here than web-06 (direct-to-IP bogus-Host probing);
      web-04's catch-all is independent of the web-06 EIP release and can be done anytime.
