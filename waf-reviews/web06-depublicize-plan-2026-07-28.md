@@ -171,6 +171,21 @@ cf-public) is forwarded to web-06, which has no site for it → **Require-SNI TL
   host-header site.
 - **Verify:** `curl --resolve <bogus>.db101.org:443:<origin>` → 404 (not reset); every real host still 200;
   no real site regressed. Then via CloudFront a stray wildcard name → 404, not 502.
+- **NAMES THE CATCH-ALL WOULD CATCH (enumerated 2026-07-29):**
+  - *web-06:* `preview-master.db101.org`, `preview-site.db101.org`, `preview-site.hb101.org` (unbound routing
+    anchors — currently reset→502; `s6.eightfoldway.com` itself is ALSO unbound on web-06 → reset).
+  - *web-04:* `edit-site.eightfoldway.com` (CNAME hub for the 24 `db101-<state>` edit sites — those are bound by
+    their OWN host headers; the hub name is not), `preview2-site.eightfoldway.com`, `preview2-site.hb101.org`
+    (routing hubs), `brk-site.eightfoldway.com` (direct A→52.8.85.37, no binding — legacy/dead, deletion
+    candidate). BOUND on web-04 (NOT caught): `s4.eightfoldway.com`, `q.db101.org`, all `db101-*` edit sites.
+- **WEB-04 WRINKLES (must resolve in the C1 design):**
+  1. web-04 ALREADY has a blank-host binding **`pubbot | *:80:`** (port 80 only) → unmatched HTTP Host currently
+     lands on the *pubbot* site, NOT a 404; and there is **no `:443` blank binding** (unmatched SNI → reset).
+     Can't add a second `*:80:` blank (collision). CHOICE: (a) move pubbot to a host-header binding + give the
+     404 site `:80`+`:443` blank; or (b) leave pubbot on `:80`, add only the `:443` catch-all. (b) is lower-touch.
+  2. **web-04 KEEPS its public EIP** (hosts un-fronted edit-cms; not depublicized) → `52.8.85.37` stays directly
+     internet-reachable with any Host. The catch-all matters MORE here than web-06 (direct-to-IP bogus-Host probing);
+     web-04's catch-all is independent of the web-06 EIP release and can be done anytime.
 
 **PRIMARY ANTI-CAPTURE DEFENSE — VERIFIED IN PLACE 2026-07-29 (separate from the catch-all).** edge-public
 (E14TU8NPRHUI0M) holds wildcard aliases `*.db101.org`, `*.hb101.org`, `*.vets101.org` (+ `www.eightfoldway.com`),
