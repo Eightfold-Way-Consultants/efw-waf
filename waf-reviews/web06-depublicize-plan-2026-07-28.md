@@ -192,6 +192,9 @@ cf-public) is forwarded to web-06, which has no site for it → **Require-SNI TL
      CLEAN FIX: **remove pubbot's `*:80:` blank binding** (IIS enforces binding uniqueness even for a stopped
      site, so it must be deleted, not merely left) → frees blank `:80`+`:443` for the catch-all 404 site. Does
      not affect msdeploy (site stays, just loses an unused binding). Better than moving pubbot or `:443`-only.
+     **DONE 2026-07-29 (Jack go):** `Remove-WebBinding -Name pubbot -Protocol http -IPAddress '*' -Port 80 -HostHeader ''`
+     → pubbot now has zero bindings; web-04 has NO blank-host binding on any port (clean); WMSVC (:8172 msdeploy)
+     still Running; pubbot site/path/pool intact. Restore if ever needed: `New-WebBinding -Name pubbot -Protocol http -Port 80`.
   2. **web-04 KEEPS its public EIP** (hosts un-fronted edit-cms; not depublicized) → `52.8.85.37` stays directly
      internet-reachable with any Host. The catch-all matters MORE here than web-06 (direct-to-IP bogus-Host probing);
      web-04's catch-all is independent of the web-06 EIP release and can be done anytime.
