@@ -171,6 +171,16 @@ cf-public) is forwarded to web-06, which has no site for it → **Require-SNI TL
   host-header site.
 - **Verify:** `curl --resolve <bogus>.db101.org:443:<origin>` → 404 (not reset); every real host still 200;
   no real site regressed. Then via CloudFront a stray wildcard name → 404, not 502.
+- **WEB-04 CATCH-ALL BUILT + VERIFIED 2026-07-29 (Jack go; web-04 only — NOT web-06 yet).** Site `catchall`,
+  pool `catchall` (No-Managed-Code/Integrated), root `C:\inetpub\catchall`, `web.config` = URL Rewrite
+  `CustomResponse` rule (`match .*` → 404, empty body) [web-04 HAS RewriteModule]. Bindings `*:80:` + `*:443:`
+  blank-host, `sslFlags=0` (SNI OFF); wildcard cert `4B2C5303CCAE5244AD37215BF0546072656AB067` (CN=*.db101.org
+  +SAN *.eightfoldway/*.hb101/*.vets101) bound → rewrote the http.sys `0.0.0.0:443` default (was stale `a6982b64…`
+  not in My-store; rollback recorded). VERIFIED: unmatched Hosts (edit-site/preview2-site.*/brk-site/bogus
+  *.db101.org/http-unmatched) → empty-body 404; real SNI sites unaffected (db101-mn 401 NTLM, q 403, preview2-mn
+  200, s4 native 404 w/ 103-byte IIS body = its OWN response, specific-SNI binding wins over blank — proven by
+  distinct signature); unmatched-SNI handshake uses wildcard cert, validates (ssl_verify_result=0). Recipe in
+  scratchpad catchall-build.ps1 — **REUSE verbatim for web-06** (Phase-D prereq) OUTSIDE business hours.
 - **NAMES THE CATCH-ALL WOULD CATCH (enumerated 2026-07-29):**
   - *web-06:* `preview-master.db101.org`, `preview-site.db101.org`, `preview-site.hb101.org` (unbound routing
     anchors — currently reset→502; `s6.eightfoldway.com` itself is ALSO unbound on web-06 → reset).
