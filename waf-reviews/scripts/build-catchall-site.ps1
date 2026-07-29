@@ -9,11 +9,22 @@
 #
 # PER-BOX PREREQS to confirm first:
 #   1. URL Rewrite installed (Test-Path C:\Windows\System32\inetsrv\rewrite.dll). web-04 = yes.
-#   2. Wildcard cert thumbprint in Cert:\LocalMachine\My (CN=*.db101.org + SAN *.eightfoldway/
-#      *.hb101/*.vets101). web-04 = 4B2C5303CCAE5244AD37215BF0546072656AB067. web-06 may differ
-#      (same SANs, own copy) — look it up on the box and set $thumb below.
-#   3. On web-06 there must be NO conflicting blank-host binding (web-04's stale pubbot *:80:
-#      was removed 2026-07-29). Check: Get-Website | %{ $_.bindings.Collection } | ? bindingInformation -match '^\*?:(80|443):$'
+#   2. Multi-SAN wildcard cert thumbprint in Cert:\LocalMachine\My (SAN must cover *.db101.org +
+#      *.eightfoldway.com + *.hb101.org + *.vets101.org; pick the VALID one — stores hold expired
+#      leftovers). web-04 = 4B2C5303CCAE5244AD37215BF0546072656AB067 (CN=*.db101.org, exp 2026-09-29).
+#      web-06 = A315518EBA452E7EE16194321439EBA677F23D7C (CN=eightfoldway.com, exp 2026-10-21;
+#      CONFIRMED 2026-07-29 as the cert on web-06's live https bindings). Pass -Thumb accordingly.
+#   3. NO conflicting blank-host binding on the box (web-04's stale pubbot *:80: was removed
+#      2026-07-29; web-06 CONFIRMED clean 2026-07-29 — no blank binding). Check:
+#      Get-Website | %{ $_.bindings.Collection } | ? bindingInformation -match '^\*?:(80|443):$'
+#   4. web-06 has NO existing http.sys 0.0.0.0:443 default (CONFIRMED 2026-07-29) — the :443 bind
+#      CREATES it (no prior cert to roll back; that missing default is why web-06 resets on unmatched
+#      SNI today). web-04 HAD a stale a6982b64 default that this recipe replaced.
+#
+# WEB-06 RUN (tonight / off-hours — apphost change on the business-hours-restricted box):
+#   python run-ssm.py build-catchall-site.ps1 i-0c82adf476c7c5e32 --region us-west-1 \
+#     -- -Thumb A315518EBA452E7EE16194321439EBA677F23D7C
+#   (verify: scanner-magnet preview-site.db101.org via cf-public -> 404 not 502; efw-public-cf-5xx quiets.)
 #
 # Run via ssm-windows: python run-ssm.py build-catchall-site.ps1 <instance-id> --region us-west-1
 
