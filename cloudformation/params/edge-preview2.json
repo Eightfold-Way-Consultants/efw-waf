@@ -33,7 +33,7 @@
   },
   {
     "ParameterKey": "TargetOrigin",
-    "ParameterValue": "public"
+    "ParameterValue": "vpc"
   },
   {
     "ParameterKey": "PlanningRateLimit",
