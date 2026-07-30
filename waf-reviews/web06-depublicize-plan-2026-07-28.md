@@ -67,8 +67,17 @@ private tooling, but they must no longer resolve to a public IP.
   `\forums\` trees are a separate removable cleanup.
 - **Direct server-to-server callers — all already on the PRIVATE path.** PubBot publish reaches web-06
   by SMB on the private IP (`C:\s6d.eightfoldway.com` on web-04 = symlink -> `\\10.3.0.63\wwwroot`,
-  live `:445` conn). Build server -> web-06 via hosts entry `10.3.0.63 s6.eightfoldway.com`. WebDeploy
-  -> `10.3.0.63:8172`. NO app code hardcodes `52.8.7.0`/`s6` (repo sweep = docs only). All survive EIP removal.
+  live `:445` conn). WebDeploy -> `10.3.0.63:8172`. NO app code hardcodes `52.8.7.0`/`s6` (repo sweep = docs only).
+- **CORRECTION 2026-07-30 (.pubxml sweep of c:\git + c:\svn vs local hosts file):** the hosts entry for
+  web-06 is **`10.3.0.63 web-6b.eightfoldway.com`**, NOT `s6.eightfoldway.com` (earlier audit was wrong).
+  Hosts pins: edit-site + preview2-site -> 10.3.0.122 (web-04), web-6b -> 10.3.0.63 (web-06), s3 -> 10.2.2.18
+  (web-03b). **`s6.eightfoldway.com` is NOT in hosts -> resolves to the public EIP 52.8.7.0**, so the **7 .pubxml
+  profiles that publish to `s6` will BREAK at Phase D** (EIP release): `DB101SessionSvc/public`, `LogonSvc/public`,
+  `LogonSvc/preview`, `FavoritesSvc/final`, `personal.eightfoldway.com/personal-final`+`personal-preview`,
+  `bp101-sites/planning-mn/preview-site`. (`s4.eightfoldway.com` also not-in-hosts -> public 52.8.85.37, but web-04
+  KEEPS its EIP so those are fine.) **PHASE-D PREREQ: add `10.3.0.63  s6.eightfoldway.com` to the build box hosts
+  file** (mirrors web-6b) OR repoint those 7 profiles to web-6b/10.3.0.63. web-6b + literal-10.3.0.63 profiles
+  already survive.
 - **Uptime monitor** (public-url-checker) hits the **public hostnames** -> rides CloudFront after
   cutover (Jack confirmed). No direct-IP dependency.
 - **Net: Phase C is essentially empty** — only tidy-up = strip `ip4:52.8.7.0` from the 3 SPF records.
