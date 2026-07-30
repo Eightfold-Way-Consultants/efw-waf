@@ -75,9 +75,17 @@ private tooling, but they must no longer resolve to a public IP.
   profiles that publish to `s6` will BREAK at Phase D** (EIP release): `DB101SessionSvc/public`, `LogonSvc/public`,
   `LogonSvc/preview`, `FavoritesSvc/final`, `personal.eightfoldway.com/personal-final`+`personal-preview`,
   `bp101-sites/planning-mn/preview-site`. (`s4.eightfoldway.com` also not-in-hosts -> public 52.8.85.37, but web-04
-  KEEPS its EIP so those are fine.) **PHASE-D PREREQ: add `10.3.0.63  s6.eightfoldway.com` to the build box hosts
-  file** (mirrors web-6b) OR repoint those 7 profiles to web-6b/10.3.0.63. web-6b + literal-10.3.0.63 profiles
-  already survive.
+  KEEPS its EIP so those are fine.)
+- **RESOLVED 2026-07-30 — s6 landmine CLEARED, all 7 profiles are OBSOLETE (no hosts fix needed):** walked each
+  vs web-06 IIS + DNS + svn dates. Targets 1-6 (`db101sessionsvc`, `logonsvc*`, `favoritessvc`, `personal*`) have
+  NO IIS site on web-06 AND NXDOMAIN -> publish would fail today, EIP or not. svn last-changed: DB101SessionSvc
+  **2015** (r1158), LogonSvc **2015** (r1053), FavoritesSvc **2015** (r1036) — dead services superseded by
+  git `Logon2.2`/`Favorites2` on web-03b (s3); personal.eightfoldway.com explicitly marked **"Now obsolete" r7265
+  2023** (its r9050 2026-07 touch was a repo-wide telemetry sweep, not real work). Target #7 `planning-mn/
+  preview-site.pubxml` last changed **2016** (r2567) — preview1 estimator-deploy path dead, superseded by preview2
+  (`bp101-site.pubxml` -> preview2-site/web-04), even though preview-mn.db101.org still SERVES. **=> web-06 has NO
+  live WebDeploy consumer via s6; Phase D needs no hosts entry.** TIDY-UP candidate: remove the 7 obsolete .pubxml
+  (and the dead 2015 DB101SessionSvc/LogonSvc/FavoritesSvc projects) from svn — pending Jack's go/mechanism.
 - **Uptime monitor** (public-url-checker) hits the **public hostnames** -> rides CloudFront after
   cutover (Jack confirmed). No direct-IP dependency.
 - **Net: Phase C is essentially empty** — only tidy-up = strip `ip4:52.8.7.0` from the 3 SPF records.
