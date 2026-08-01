@@ -210,6 +210,15 @@ Resources:
               RuleActionOverrides:
                 - Name: SizeRestrictions_BODY
                   ActionToUse: { Count: {} }
+                # NoUserAgent_HEADER + BadBots pinned to Count: legit MONITORING (the public URL
+                # checkers / CloudWatch Synthetics canaries) sends no/tool User-Agent and was
+                # false-positive BLOCKED at the Count->Block flip (2026-08-01, broke db101-user-login
+                # canary on /l2svc/api/Organizations + the whole checker fleet). Real browser users
+                # send a UA and are unaffected; SQLi/XSS/LFI/SensitivePaths/IpReputation still Block.
+                - Name: NoUserAgent_HEADER
+                  ActionToUse: { Count: {} }
+                - Name: UserAgent_BadBots_HEADER
+                  ActionToUse: { Count: {} }
         # 5 — Known bad inputs
         - Name: AWS-KnownBadInputs
           Priority: 5
