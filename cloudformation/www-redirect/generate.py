@@ -43,7 +43,21 @@ def load_hosts():
     return out
 
 def main():
-    hosts = load_hosts()
+    all_hosts = load_hosts()
+    # ACTIVE=<comma-list> scopes the ENTIRE stack (cert SANs + aliases + records) to a subset, for a
+    # staged/canary rollout that stays under the ACM SAN limit. Unset/empty => all hosts. Canary flow:
+    #   ACTIVE=mn.db101.org,preview-mn.db101.org,... generate+deploy (small cert), test, then re-run
+    #   with ACTIVE unset and deploy the full set (cert is REPLACED with the full SAN list).
+    active_env = os.environ.get("ACTIVE", "").strip()
+    if active_env:
+        active = set(x.strip() for x in active_env.split(",") if x.strip())
+        unknown = active - set(all_hosts)
+        if unknown:
+            raise SystemExit(f"ACTIVE lists hosts not in hosts.txt: {sorted(unknown)}")
+        hosts = [h for h in all_hosts if h in active]
+        print(f"  (STAGED: {len(hosts)} of {len(all_hosts)} hosts -> {hosts})")
+    else:
+        hosts = all_hosts
     wwws  = [f"www.{h}" for h in hosts]
     primary, sans = wwws[0], wwws[1:]
 
@@ -126,37 +140,10 @@ def main():
     w("          FunctionAssociations:")
     w("            - EventType: viewer-request")
     w("              FunctionARN: !GetAtt StripWwwFunction.FunctionMetadata.FunctionARN")
-    # --- route53 record groups, one per zone ---
-    # SANs + aliases above always cover the FULL host list (so the cert issues once and never
-    # replaces during a staged rollout). Records can be staged to a subset via ACTIVE=<comma-list>
-    # for a canary; ACTIVE unset/empty => all hosts. Canary flow: ACTIVE=mn.db101.org,preview-mn...
-    # generate+deploy, test, then re-generate with ACTIVE unset and deploy the rest (no cert change).
-    active_env = os.environ.get("ACTIVE", "").strip()
-    active = set(x.strip() for x in active_env.split(",") if x.strip()) if active_env else set(hosts)
-    unknown = active - set(hosts)
-    if unknown:
-        raise SystemExit(f"ACTIVE lists hosts not in hosts.txt: {sorted(unknown)}")
-    if active_env:
-        print(f"  (records staged to ACTIVE subset: {sorted(active)})")
-    by_zone = {}
-    for h, wn in zip(hosts, wwws):
-        if h not in active:
-            continue
-        apex, zid = zone_of(h)
-        by_zone.setdefault((apex, zid), []).append(wn)
-    for i, ((apex, zid), names) in enumerate(sorted(by_zone.items())):
-        res = "RecordsDb101" if apex == "db101.org" else "RecordsHb101"
-        w(f"  {res}:")
-        w("    Type: AWS::Route53::RecordSetGroup")
-        w("    Properties:")
-        w(f"      HostedZoneId: {zid}   # {apex}")
-        w("      RecordSets:")
-        for wn in names:
-            w(f"        - Name: {wn}")
-            w("          Type: CNAME")
-            w("          TTL: 300")
-            w("          ResourceRecords:")
-            w("            - !GetAtt Distribution.DomainName")
+    # NOTE: the www.<host> DNS records are NOT managed here. CloudFormation Route53 RecordSets use
+    # CREATE (not UPSERT), so they collide with the existing www.<host> -> s6 records. Instead the
+    # records are pointed with an UPSERT change-batch by point-records.py (which adopts the existing
+    # records atomically -> no NXDOMAIN gap, no bulk pre-delete). This stack owns cert + dist + function.
     w("")
     w("Outputs:")
     w("  DistributionDomain:")
