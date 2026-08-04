@@ -291,3 +291,13 @@ Phase D (drop public origin + world 80/443, release EIP).
   them to a clean 404. Optional cosmetic tidy-up: `preview-master`/`preview-site.db101.org` now have zero
   dependents (state leaves CNAME straight to cf-public) → deletable dead records; `preview-site.hb101.org` STAYS
   (live CNAME hop for `preview-mn.hb101.org`).
+
+## Phase C DONE (2026-08-04)
+Phase C was essentially empty (caller/mail audit all-clear 07-28, catch-all C1 done 07-29). Final residual
+resolved 08-04:
+- **SPF trimmed:** `db101.org` TXT `v=spf1 mx a include:_spf.google.com ~all` → `v=spf1 include:_spf.google.com ~all`
+  (Route53 UPSERT, change `C08265523DNWQ9SOKCCJY`, INSYNC; google-site-verification TXT preserved). Dropped dead
+  `mx` (MX=Google) + `a` (apex `a` now resolves to the CloudFront apex ALIAS — not a mail sender). No literal
+  `ip4:52.8.7.0` was present (already gone). Live-verified via 8.8.8.8.
+- Re-swept all mail SPF: `eightfoldway.com`/`vets101.org` = google-only clean; `mail.vets101.org`/`mail.*` = no SPF TXT.
+- **Net: no `52.8.7.0` / dead-web-06 reference remains in any SPF. Phase C fully clean; nothing here gates Phase D.**
