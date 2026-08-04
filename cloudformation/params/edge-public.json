@@ -45,6 +45,6 @@
   },
   {
     "ParameterKey": "WafRuleAction",
-    "ParameterValue": "Count"
+    "ParameterValue": "Block"
   }
 ]

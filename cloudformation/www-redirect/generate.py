@@ -127,8 +127,21 @@ def main():
     w("            - EventType: viewer-request")
     w("              FunctionARN: !GetAtt StripWwwFunction.FunctionMetadata.FunctionARN")
     # --- route53 record groups, one per zone ---
+    # SANs + aliases above always cover the FULL host list (so the cert issues once and never
+    # replaces during a staged rollout). Records can be staged to a subset via ACTIVE=<comma-list>
+    # for a canary; ACTIVE unset/empty => all hosts. Canary flow: ACTIVE=mn.db101.org,preview-mn...
+    # generate+deploy, test, then re-generate with ACTIVE unset and deploy the rest (no cert change).
+    active_env = os.environ.get("ACTIVE", "").strip()
+    active = set(x.strip() for x in active_env.split(",") if x.strip()) if active_env else set(hosts)
+    unknown = active - set(hosts)
+    if unknown:
+        raise SystemExit(f"ACTIVE lists hosts not in hosts.txt: {sorted(unknown)}")
+    if active_env:
+        print(f"  (records staged to ACTIVE subset: {sorted(active)})")
     by_zone = {}
     for h, wn in zip(hosts, wwws):
+        if h not in active:
+            continue
         apex, zid = zone_of(h)
         by_zone.setdefault((apex, zid), []).append(wn)
     for i, ((apex, zid), names) in enumerate(sorted(by_zone.items())):

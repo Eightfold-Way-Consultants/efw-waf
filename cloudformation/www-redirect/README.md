@@ -64,6 +64,24 @@ The only visible effect is a CloudFront config propagation (a few minutes). This
 exactly why it's a **single** stack: a split cert-stack that *exported* the ARN would hit
 CloudFormation's "Export cannot be updated as it is in use" wall on every cert replacement.
 
+## Staged rollout / canary (`ACTIVE`)
+
+The cert SANs and CloudFront aliases always cover the **full** `hosts.txt` (so the cert issues once and
+never re-issues mid-rollout), but the Route53 records can be **staged** to a subset via the `ACTIVE`
+env var — point one state at the dist, test, then roll out the rest with no cert change:
+
+```
+# canary: only Minnesota's www records flip to the redirect dist (others stay on s6)
+ACTIVE=mn.db101.org,preview-mn.db101.org,mn.hb101.org,preview-mn.hb101.org python generate.py
+../deploy-stack.ps1 www-redirect
+#   ... test https://www.mn.db101.org etc. ...
+# roll out the rest (records for all hosts; cert/dist unchanged -> fast)
+python generate.py
+../deploy-stack.ps1 www-redirect
+```
+`ACTIVE` unset/empty = all hosts (the committed `www-redirect.yaml` is always the full set). `ACTIVE`
+only stages the *records*; the cert already covers every host, so a canary name has a valid cert immediately.
+
 ## Hard limit: 100 hosts
 
 The cert's SAN count = number of hosts. ACM allows a max of **100 domain names per certificate**
