@@ -37,6 +37,7 @@ $STACKS = [ordered]@{
   'edge-preview2'   = @{ Template = 'edge.yaml';            StackName = 'efw-waf-edge-preview2'; Region = 'us-east-1'; Capabilities = 'CAPABILITY_NAMED_IAM' }
   'edge-public'     = @{ Template = 'edge.yaml';            StackName = 'efw-waf-edge-public';   Region = 'us-east-1'; Capabilities = 'CAPABILITY_NAMED_IAM' }
   'redirect'        = @{ Template = 'redirect.yaml';        StackName = 'efw-waf-redirect';      Region = 'us-east-1'; Capabilities = $null }
+  'www-redirect'    = @{ Template = 'www-redirect.yaml';    StackName = 'efw-waf-www-redirect';  Region = 'us-east-1'; Capabilities = $null }
   'origin-sg'       = @{ Template = 'origin-sg.yaml';       StackName = 'efw-waf-origin-sg';     Region = 'us-west-1'; Capabilities = $null }
   'logon-telemetry' = @{ Template = 'logon-telemetry.yaml'; StackName = 'logon-telemetry';       Region = 'us-west-1'; Capabilities = 'CAPABILITY_IAM' }
 }

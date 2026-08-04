@@ -1,0 +1,72 @@
+# www-redirect host list — the maintainable source of truth.
+#
+# Each line is a DB101/HB101 state-estimator host (public or preview). The generator
+# (generate.py) emits, for each: a cert SAN `www.<host>`, an ACM DNS-validation entry in
+# the host's zone, a CloudFront alias, and a Route53 CNAME `www.<host>` -> the redirect dist.
+# The dist runs one generic strip-`www` 301, so www.<host> -> https://<host>/.
+#
+# WHY: DB101's audience (older/less-technical users) and our clients (told to test on
+# preview-<state>) reflexively type "www." in front of a host. Because HSTS force-upgrades
+# to HTTPS and *.db101.org (a single-label wildcard) does NOT cover the double-label
+# www.<state>.db101.org, they hit a non-bypassable cert error today. This makes them work.
+#
+# ADD A NEW STATE: add its public + preview (+ -es) host line(s) below, run `generate.py`,
+# then `deploy-stack.ps1 www-redirect`. (SANs are immutable, so the deploy replaces the ACM
+# cert, waits for issuance, and swaps the dist to it — all in one run.)
+#
+# Do NOT add: single-label www hosts (www.db101.org — real site, already *.db101.org-covered),
+# eightfoldway.com, or vets101.org. Only db101.org + hb101.org state leaves.
+
+# ---- db101.org : public ----
+ak.db101.org
+az.db101.org
+az-es.db101.org
+ca.db101.org
+ca-es.db101.org
+co.db101.org
+co-es.db101.org
+ga.db101.org
+ia.db101.org
+ia-es.db101.org
+il.db101.org
+il-es.db101.org
+ky.db101.org
+mi.db101.org
+mn.db101.org
+mo.db101.org
+nc.db101.org
+nc-es.db101.org
+nj.db101.org
+nj-es.db101.org
+nv.db101.org
+nv-es.db101.org
+oh.db101.org
+
+# ---- db101.org : preview ----
+preview-ak.db101.org
+preview-az.db101.org
+preview-az-es.db101.org
+preview-ca.db101.org
+preview-ca-es.db101.org
+preview-co.db101.org
+preview-co-es.db101.org
+preview-ga.db101.org
+preview-ia.db101.org
+preview-ia-es.db101.org
+preview-il.db101.org
+preview-il-es.db101.org
+preview-ky.db101.org
+preview-mi.db101.org
+preview-mn.db101.org
+preview-mo.db101.org
+preview-nc.db101.org
+preview-nc-es.db101.org
+preview-nj.db101.org
+preview-nj-es.db101.org
+preview-nv.db101.org
+preview-nv-es.db101.org
+preview-oh.db101.org
+
+# ---- hb101.org ----
+mn.hb101.org
+preview-mn.hb101.org
