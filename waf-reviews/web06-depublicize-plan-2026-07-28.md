@@ -244,12 +244,32 @@ and we hold the matching wildcard ACM cert → **no external AWS account can cla
 `sub.eightfoldway.com` names are not CF-alias-claimed. Not a viewer surface in this cutover; track separately.
 
 **Phase D — release the EIP** (PREREQ: Phase C1 catch-all 404 site built + verified)
-1. Remove the public origin from `edge.yaml` (VPC origin is now sole origin); redeploy.
-2. Lower web-06 SG: drop world 80/443; keep CloudFront-VPCOrigins SG + VPN CIDRs + SSM.
-3. Disassociate + release `eipalloc-b5c725d0`. web-06 now private-only.
+
+1. **[DONE 2026-08-04]** Repoint the origin anchors private: `s6`/`s6a`/`s6c`/`preview-site.eightfoldway.com`
+   A `52.8.7.0` → `10.3.0.63` (9 names follow incl. dtd/schema/s6.db101.org). Verified serving via VPC origin.
+2. **[DONE 2026-08-04, efw-waf b9d44bf]** Remove the public origin from `edge.yaml` — `iis-vpc-origin` is now
+   the sole origin (dropped `TargetOrigin`/`UseVpcOrigin` flip). `edge-public` redeployed + broad-tested.
+3. **Lower web-06's inbound to least-privilege — REVISED to version (a): dedicated SG.**
+   The original "drop world 80/443 on `sg-06348763`" is **WRONG**: `sg-06348763` is the VPC **default** SG,
+   shared by **web-04 + web-06 + the OpenVPN gateway** (8 ENIs). web-04 serves un-fronted edit-cms
+   (`edit-site.eightfoldway.com`, `q.db101.org`, `s4.eightfoldway.com`) direct on `52.8.85.37` and NEEDS world
+   443 — editing the shared SG's world rules would break it. Instead:
+   - Create a **web-06-only SG** (`efw-web06-private`) with inbound ONLY: 443 from the CloudFront-VPCOrigins
+     service SG `sg-05445653418287042`; and internal `10.3.0.0/16` mgmt — RDP 3389, SMB 445, WebDeploy 8172,
+     4026/4027, SQL 1433. **NO world 80/443/22, no OpenVPN 1194.** (SSM needs no inbound — agent is outbound.)
+   - Detach `sg-06348763` from web-06 (`i-0c82adf476c7c5e32`), attach `efw-web06-private`. web-04 + VPN box
+     stay on `sg-06348763`, untouched.
+   - Repoint `origin-sg.yaml`'s `AWS::EC2::SecurityGroupIngress` from `sg-06348763` to `efw-web06-private`
+     (or fold that 443-from-service-SG rule into the new SG directly and retire the ingress-only stack rule).
+   - **Lockout care:** verify RDP/SMB/SSM reachability from the mgmt/VPN CIDRs on the new SG BEFORE detaching
+     the old one; keep a rollback (re-attach `sg-06348763`) ready.
+   - *Note:* #3 is defense-in-depth, not strictly required for public exposure — #4 (EIP release) already
+     removes web-06's only public IP, making the world rules unreachable for it. #3 guards against a future
+     accidental re-IP. Can be done before or after #4.
+4. Disassociate + release `eipalloc-b5c725d0`. web-06 now private-only.
    - **Rollback model changes here:** the "flip DNS back to `s6`" lever is now dead (no public IP).
      Post-D revert = re-add a public origin to CloudFront (or re-allocate an EIP), not DNS. So do NOT
-     enter Phase D until Phase A/B are fully soaked and all DNS-revert paths are retired
+     enter this step until #1/#2 are fully soaked and all DNS-revert paths are retired
      (integrated-review **L34**).
 
 ## Verify (end state)
@@ -257,7 +277,8 @@ and we hold the matching wildcard ACM cert → **no external AWS account can cla
 - No Route53 record resolves to `52.8.7.0` (re-run the session's s6/IP enumeration → empty).
 - All sites 200 via CloudFront; PDF/print still renders (loopback); cert alarms green
   (`CertDaysRemaining`/`CertHeartbeat`); `edge-public` origin = VPC origin only.
-- web-06 SG: no world 80/443; reachable only via CloudFront ENI + VPN + SSM.
+- web-06 on its own dedicated SG (`efw-web06-private`), NOT the shared VPC-default `sg-06348763`; inbound only
+  = CloudFront-VPCOrigins service SG :443 + internal `10.3.0.0/16` mgmt; no world 80/443/22. web-04 unaffected.
 
 ## Decisions — ALL RESOLVED 2026-07-28
 1. Outbound mail from `52.8.7.0` — **stale SPF** (no mail dependency; audit ALL CLEAR above).
@@ -273,7 +294,8 @@ and we hold the matching wildcard ACM cert → **no external AWS account can cla
 Phase A **preview leaves first** (→ cf-public, Count soak) → Phase A public leaves + apex flips →
 Phase B (add VPC origin, flip behaviors, validate) → Phase C tidy-up (strip stale SPF) →
 **Phase C1 (build catch-all 404 site on web-06 + web-04 — Phase-D prereq)** →
-Phase D (drop public origin + world 80/443, release EIP).
+Phase D: #1 anchors→private [DONE] → #2 edge VPC-only origin [DONE] → **soak** → #3 web-06 dedicated SG
+(version (a); NOT the shared default SG — see Phase D above) → #4 release EIP.
 
 ## Phase A status (2026-07-29)
 - **Staging fan-out DONE:** all 23 db101 state leaves (az..oh incl `-es` + `master`) + `preview-site.db101.org`
