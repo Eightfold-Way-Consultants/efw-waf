@@ -32,10 +32,6 @@
     "ParameterValue": "arn:aws:ec2:us-west-1:874922373146:instance/i-0272763b46610ac1b"
   },
   {
-    "ParameterKey": "TargetOrigin",
-    "ParameterValue": "vpc"
-  },
-  {
     "ParameterKey": "PlanningRateLimit",
     "ParameterValue": "1000"
   },
