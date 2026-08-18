@@ -1,4 +1,4 @@
-# soak-mail.ps1 — generate the prod Turnstile soak report, render it to a PDF, and email the PDF to
+# soak-mail.ps1 -- generate the prod Turnstile soak report, render it to a PDF, and email the PDF to
 # Jack's work inbox via gog. Runs daily via Windows Task Scheduler (task "EFW-SoakReport").
 #
 # Delivery is now a PDF ATTACHMENT (not an HTML email body): the rich self-contained report renders
@@ -16,7 +16,7 @@ $log = Join-Path $dir 'soak-mail.log'
 function Log($m) { "$([DateTime]::UtcNow.ToString('u'))  $m" | Tee-Object -FilePath $log -Append | Out-Null }
 
 try {
-  # gog.exe, node, aws, npx are not guaranteed on a scheduled task's PATH — add them explicitly.
+  # gog.exe, node, aws, npx are not guaranteed on a scheduled task's PATH -- add them explicitly.
   $env:PATH = "C:\Users\jeast\bin;C:\nvm4w\nodejs;C:\Program Files\Amazon\AWSCLIV2;$env:PATH"
   $env:GOG_KEYRING_PASSWORD = (Get-Content C:\cowork\env\gog-keyring.pass -Raw).Trim()
   $H = 'C:\cowork\env\.gog'
@@ -24,7 +24,7 @@ try {
   $html = Join-Path $dir 'soak-report-prod.html'
   $pdf  = Join-Path $dir "soak-report-prod-$date.pdf"
 
-  # 1. generate the single rich, self-contained HTML (no --email — that render is retired).
+  # 1. generate the single rich, self-contained HTML (no --email -- that render is retired).
   Log "generating report (node soak-report.js --env prod --hours 24)..."
   Push-Location $dir
   $nodeOut = & node soak-report.js --env prod --hours 24 --out $html 2>&1
@@ -36,11 +36,11 @@ try {
   $line = ($nodeOut | Where-Object { $_ -match 'verdict=' } | Select-Object -First 1)
   $verdict = if ($line -match 'verdict=(\w+)') { $matches[1] } else { 'unknown' }
   $counts  = if ($line -match '(auth pass=.*?)\s+prevented') { $matches[1].Trim() } else { '' }
-  $vMap = @{ good = 'GREEN — soak clean'; warning = 'YELLOW — watch items'; critical = 'RED — action needed'; unknown = 'report generated' }
+  $vMap = @{ good = 'GREEN -- soak clean'; warning = 'YELLOW -- watch items'; critical = 'RED -- action needed'; unknown = 'report generated' }
   $vColor = @{ good = '#0ca30c'; warning = '#e08600'; critical = '#d03b3b'; unknown = '#52514e' }
   $verdictText = $vMap[$verdict]; if (-not $verdictText) { $verdictText = 'report generated' }
   $vc = $vColor[$verdict]; if (-not $vc) { $vc = '#52514e' }
-  $body = "<div style='font:14px system-ui,Segoe UI,sans-serif'><b style='color:$vc'>Turnstile soak $date — $verdictText.</b><br>$counts<br><span style='color:#898781'>Full report attached (PDF). Regenerate: node soak-report.js --env prod --hours 24</span></div>"
+  $body = "<div style='font:14px system-ui,Segoe UI,sans-serif'><b style='color:$vc'>Turnstile soak $date -- $verdictText.</b><br>$counts<br><span style='color:#898781'>Full report attached (PDF). Regenerate: node soak-report.js --env prod --hours 24</span></div>"
 
   # 2. render the HTML to a PDF via headless Chromium (Playwright chromium is cached on the box).
   # A3-portrait is ~1123px wide, fitting the 1040px report at full width; print CSS in the report
