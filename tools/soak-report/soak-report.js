@@ -113,6 +113,20 @@ function groupExists(g) {
     return Array.isArray(r) && r.includes(g);
   }, false);
 }
+// Last event ANY time (not window-bounded) -- turns "0 rows in window" into a datable fact:
+// a live-but-quiet surface reports when it last spoke instead of being mislabeled "not deployed".
+function lastEventMs(g) {
+  return tryd('last-event ' + g, () => {
+    const r = aws(['logs', 'describe-log-streams', '--log-group-name', g, '--order-by', 'LastEventTime',
+      '--descending', '--max-items', '1', '--query', 'logStreams[0].lastEventTimestamp']);
+    return typeof r === 'number' ? r : null;
+  }, null);
+}
+const agoWords = (ms) => {
+  if (ms == null) return null;
+  const h = (now - ms) / 3600000;
+  return h < 1 ? Math.max(1, Math.round(h * 60)) + 'm ago' : h < 48 ? h.toFixed(1) + 'h ago' : Math.round(h / 24) + 'd ago';
+};
 
 // Forward-compat stub: the WAF edge lake is Athena-only, so Athena is the common denominator for
 // cross-LAYER (edge+app) reporting. Unification = adding a source here, not a rewrite. Unused today
@@ -140,7 +154,9 @@ for (const src of SOURCES) {
   if (!src.exists) continue;
   const g = src.group, sf = src.system;
   const tag = rows => { for (const r of rows) if (!r.system) r.system = sf; return rows; };
-  serverRows.push(...tag(tryd(g + ' server', () => insights(`filter type='turnstile' and ${BLOT} | stats count() as n by system, endpoint, outcome, allowed`, g), [])));
+  const srvRows = tag(tryd(g + ' server', () => insights(`filter type='turnstile' and ${BLOT} | stats count() as n by system, endpoint, outcome, allowed`, g), []));
+  src.serverN = srvRows.reduce((a, r) => a + (+r.n || 0), 0);
+  serverRows.push(...srvRows);
   beaconRows.push(...tag(tryd(g + ' beacon', () => insights(`filter type='widget' and ${BLOT} | stats count() as n by system, action, event`, g), [])));
   beaconFailRows.push(...tag(tryd(g + ' beacon-fail', () => insights(`filter type='widget' and event='failed' and ${BLOT} | stats count() as n by system, action, reason | sort n desc`, g), [])));
   rlRows.push(...tag(tryd(g + ' ratelimit', () => insights(`filter type='ratelimit' and ${BLOT} | stats count() as n by system, action`, g), [])));
@@ -196,6 +212,21 @@ const rlByEp = {};           // ep -> 429 count (Logon only today)
 for (const r of rlRows) { const ep = (r.action || 'other').toLowerCase(); rlByEp[ep] = (rlByEp[ep] || 0) + (+r.n); }
 
 const systemsWithServer = [...new Set(serverRows.map(r => r.system))].sort(sysSort);
+
+// ---- why is a surface silent? NOT-DEPLOYED vs LIVE-BUT-QUIET (never conflate the two) ----
+// A group that exists but returned 0 verifies in the window is a TRUSTWORTHY ZERO -- the emitter
+// shipped, the surface was simply unused. Only a group that does not exist is "not yet deployed".
+const missingGroups = SOURCES.filter(s => !s.exists).map(s => s.group);
+const idleGroups = SOURCES.filter(s => s.exists && !s.serverN)
+  .map(s => ({ group: s.group, lastMs: lastEventMs(s.group) }));
+const silentServerVal = missingGroups.length ? 'awaiting' : 'zero';
+// copy for a form whose server stage produced nothing in the window (defined as a function: `esc`
+// lands further down the file, so this must evaluate at render time, not here)
+function silentServerNote() {
+  if (missingGroups.length) return `server telemetry pending -- producer group not yet deployed (${esc(missingGroups.join(', '))})`;
+  const idle = idleGroups.map(x => `<code>${esc(x.group)}</code>${x.lastMs ? ` (last event ${esc(iso(x.lastMs).slice(0, 16).replace('T', ' '))}Z, ${esc(agoWords(x.lastMs))})` : ' (no events ever)'}`).join(', ');
+  return `no verifies in window -- every producer group is live${idle ? `: ${idle}` : ''}. Trustworthy zero, not a gap.`;
+}
 // live mode from the authoritative `mode` field on the primary (Logon) plane. The fleet rolls
 // Observe→Enforce per site, so the window is often MIXED — reflect the split, and treat Enforce as
 // "live" (fail/absent actually 403'd) if ANY Enforce verify or any blocked event is present.
@@ -391,7 +422,9 @@ function flowSection() {
       const missing = srcs.filter(x => !x.exists).map(x => x.group);
       const beaconOnly = allEps.filter(ep => !serverOf[ep] && (beaconByAction[ep] || reasonByAction[ep]));
       const bnote = (sys === 'estimator' || sys === 'twproxy') && beaconOnly.length ? ` · client-gate already visible via Logon beacon for ${beaconOnly.filter(ep => (sys === 'twproxy' ? ep === 'feedback' : ep === 'share' || ep === 'pdfshare')).join(', ') || 'shared forms'}` : '';
-      return `<div class="await"><b>${esc(sys)}</b> — awaiting server telemetry${missing.length ? ` (${esc(missing.join(', '))} not yet deployed)` : ' (group present, no events in window)'}${bnote}</div>`;
+      const idle = srcs.map(x => idleGroups.find(i => i.group === x.group)).filter(i => i && i.lastMs);
+      const quiet = idle.length ? ` (group live, no events in window -- last event ${esc(iso(idle[0].lastMs).slice(0, 16).replace('T', ' '))}Z, ${esc(agoWords(idle[0].lastMs))})` : ' (group present, no events in window)';
+      return `<div class="await"><b>${esc(sys)}</b> -- ${missing.length ? `awaiting server telemetry (${esc(missing.join(', '))} not yet deployed)` : `no server verifies in window${quiet}`}${bnote}</div>`;
     }).join('') + `</div>`;
   }
   return body;
@@ -421,11 +454,14 @@ function lifecycleRow(ep) {
       <div class="sbar">${bar.map(x => `<div style="flex:${x.n};background:${x.color}"></div>`).join('') || '<div class="empty"></div>'}</div>
       <div class="lc-out">${parts.join('')}</div>`;
   } else {
-    // beacon-only endpoint (its widget beacons reach Logon, but its server-gate events group hasn't
-    // deployed yet). Don't guess the exact group name from the endpoint — just flag it pending.
-    serverCell = `<div class="lc-v await-v">awaiting</div><div class="lc-s">server telemetry pending — this surface's events group not yet deployed</div>`;
+    // No server events for this endpoint IN WINDOW. That is NOT evidence the emitter is missing:
+    // `serverOf` is discovered from in-window rows, so a live-but-unused surface lands here too.
+    // Distinguish the two off `SOURCES[].exists` (same test flowSection uses) -- never claim
+    // "not deployed" when every producer group is present and merely quiet.
+    serverCell = `<div class="lc-v await-v">${silentServerVal}</div><div class="lc-s">${silentServerNote()}</div>`;
   }
-  const badge = sys ? (sys === 'logon' ? '' : `<span class="tag">${esc(sys)}</span>`) : `<span class="tag await-tag">pending</span>`;
+  const badge = sys ? (sys === 'logon' ? '' : `<span class="tag">${esc(sys)}</span>`)
+    : `<span class="tag await-tag">${missingGroups.length ? 'pending' : 'quiet'}</span>`;
   return `<div class="lc">
     <div class="lc-form">${esc(ep)}${badge}</div>
     <div class="lc-stage"><div class="lc-k">Cloudflare</div><div class="lc-v">${fmt(cf)}</div><div class="lc-s">issued</div><div class="sbar"><div style="flex:1;background:var(--s1)"></div></div></div>
@@ -548,10 +584,11 @@ function twproxySection() {
   ];
   const modeCls = twModeLive === 'Observe' ? 'warning' : twModeLive === 'Require' ? 'good' : '';
   return `<h2>Feedback proxy — pre-gate detail <span class="muted">(twproxy · ${esc(ENV === 'prod' ? 'web-06 public' : 'web-04 preview2')} · retained ${TW_HOURS / 24}d plain-text)</span></h2>
-  <p class="sub">The pre-gate attack detail that exits <b>before</b> the verify point (method/tag/payload/SQLi) — not visible to the structured funnel above. Once <code>/twproxy/events</code> deploys, the verify-decision (pass/absent/fail) joins the unified funnel; this panel remains the source for pre-gate floods.</p>
+  <p class="sub">The pre-gate attack detail that exits <b>before</b> the verify point (method/tag/payload/SQLi) -- not visible to the structured funnel above. The verify-decision (pass/absent/fail) already rides the unified funnel via <code>/twproxy/events</code>; this panel remains the source for pre-gate floods.<br>
+  <b>Different window:</b> every number below covers the full retained <b>${TW_HOURS / 24} days</b> (the plain-text file is month-accumulating and bulk re-shipped on rotation), <i>not</i> the ${esc(HOURS)}h window used by the funnel and lifecycle sections above. Do not compare the two directly.</p>
   <div class="card">
     <div class="tiles">
-      ${tile('total requests', fmt(twTotal), 'retained window', twHostilePct >= 80 ? 'critical' : twHostilePct >= 50 ? 'warning' : '')}
+      ${tile('total requests', fmt(twTotal), `retained ${TW_HOURS / 24}d, not ${HOURS}h`, twHostilePct >= 80 ? 'critical' : twHostilePct >= 50 ? 'warning' : '')}
       ${tile('hostile / non-legit', twHostilePct != null ? twHostilePct + '%' : '—', `${fmt(twHostile)} never reached siteverify`, twHostilePct >= 80 ? 'critical' : 'warning')}
       ${tile('Turnstile robot-blocks', fmt(twRobot), twRobot ? 'gate denied (Require mode)' : 'none in window', twRobot ? 'good' : '')}
       ${tile('SQLi probes', fmt(twSqliTotal), twSqliTotal ? 'in validationType field' : 'none', twSqliTotal ? 'critical' : 'good')}
@@ -669,7 +706,8 @@ ${flowSection()}
 ${tokenlessSection()}
 
 <h2>Full form lifecycle <span class="muted">(per form · exact numbers)</span></h2>
-<p class="sub">Cloudflare issuance → client gate (widget) → server gate (siteverify), per discovered form. Server cells populate per surface as each events group deploys — "awaiting" means the app hasn't shipped its emitter yet, not a gap.</p>
+<p class="sub">Cloudflare issuance → client gate (widget) → server gate (siteverify), per discovered form. A silent server cell reads <b>awaiting</b> only when that producer log group does not exist yet; when the group is live and merely had no traffic it reads <b>zero</b> with the group's last-event time -- a trustworthy zero, not a blind spot.<br>
+<b>Window caveat:</b> the Cloudflare column comes from <code>turnstileAdaptiveGroups</code>, which is <b>day-granular and fleet-wide</b> (whole calendar days from ${esc(iso(startMs).slice(0, 10))}, every host, both tiers) -- the beacon and server columns are the exact ${esc(HOURS)}h window. Issued ≫ beacon is expected and the ratio is <i>not</i> a drop-off rate.</p>
 <div class="key" style="display:flex;gap:16px;flex-wrap:wrap;font-size:.76em;color:var(--ink2);margin:4px 0 10px">
   <span class="o ok"><b>●</b>allowed</span>
   <span class="o enf"><b>◑</b>${enforceActive ? 'allowed this event' : 'allow now → 403 Enforce'}</span>
