@@ -156,12 +156,7 @@ and must stay decoupled from stack lifecycle.
 - **Apex bounce is still 302.** The distribution comment says "302 soak, promote to 301 after
   verify"; the soak is long over and `https://db101.org/` still answers 302. Promote or record the
   decision to stay.
-- **preview2 still defines an unused public origin.** Phase D #2 collapsed `edge.yaml` to VPC-only,
-  but the preview2 stack was never redeployed, so `iis-origin` lingers in its config. All eight
-  behaviors plus default already target `iis-vpc-origin` on both tiers, so this is cosmetic drift.
 - **`AWS-AdminProtection`** still Count pending the false-positive review.
-- **`cloudformation/README.md`** still documents the `TargetOrigin` public/vpc flip that Phase D #2
-  removed. Needs a pass.
 
 ## Document map
 
@@ -169,7 +164,7 @@ and must stay decoupled from stack lifecycle.
 
 | File | Purpose |
 |---|---|
-| `cloudformation/README.md` | Stack-by-stack structure, VPC origins, DNS model. Current except the `TargetOrigin` flip section (see Open items). |
+| `cloudformation/README.md` | Stack-by-stack structure, VPC origins, DNS model, per-stack deploy state. |
 | `cloudformation/www-redirect/README.md` | The reflexive-www stack, the ACM SAN limit, adding a state. |
 | `cloudwatch-agent/README.md` | Agent config that ships the telemetry files. |
 | `tools/soak-report/` | Turnstile funnel report and its daily mail job. |
