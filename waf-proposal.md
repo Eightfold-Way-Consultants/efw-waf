@@ -1,3 +1,5 @@
+> **HISTORICAL.** Written during the WAF/CloudFront migration and kept for the decision record. It describes plans and state as of its own date, not the system as built. For current state see [README.md](README.md).
+
 # WAF + CloudFront Proposal: Protecting DB101/HB101 IIS Infrastructure
 
 **Date:** 2026-04-21

@@ -1,3 +1,5 @@
+> **HISTORICAL.** Written during the WAF/CloudFront migration and kept for the decision record. It describes plans and state as of its own date, not the system as built. For current state see [README.md](../README.md).
+
 # Review Agent #4 — Route53 Completeness and Issues
 
 **Reviewer:** Figaro (AI assistant, MiniMax-M3)

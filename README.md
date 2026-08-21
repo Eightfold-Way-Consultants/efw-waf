@@ -1,141 +1,207 @@
-# efw-waf — WAF + CloudFront Rollout for DB101/HB101
+# efw-waf -- edge infrastructure for DB101 / HB101
 
-**Project:** Protect DB101/HB101 public and edit-site IIS infrastructure with AWS WAF + CloudFront.  
-**Status:** Approved 2026-04-21. Edit-site first (canary), then public-site.  
-**Channel:** [#f8-platform](https://discord.com/channels/1240282868892219403/1480670862817497403)
+Infrastructure-as-code and operational docs for the CloudFront + WAF layer in front of the
+DB101/HB101/Vets101 sites, plus the Turnstile bot gates and the telemetry that watches them.
 
----
+**This README describes the system as built.** Everything is deployed and serving live traffic;
+the migration-era planning documents are kept for the decision record and are labeled historical
+in the document map below.
 
-## What's the Problem?
-
-On **April 20, 2026**, our IIS logs showed **28 unique malicious IPs** scanning our sites at high volume — looking for `.env`, `.git`, AI config files, WordPress paths, and credential harvest targets. The scanners came from Azure (57%), Google Cloud (18%), and a mix of DigitalOcean, Oracle, Linode, and others.
-
-The current defense (NACL IP-based blocking at Layer 3) is a blunt tool. **WAF + CloudFront** gives us:
-- **Edge blocking** — stop bad traffic before it even reaches our infrastructure (~200+ PoPs worldwide)
-- **Bot control** — identify and rate-limit non-browser automated traffic
-- **Static caching** — CloudFront caches CSS/JS/images, reducing IIS load by 60-80%
-- **Origin IP hiding** — CloudFront IPs only, our servers never exposed directly
-- **Managed rule groups** — XSS/LFI/RFI/SSRF + size limits (CommonRuleSet), **SQL injection (dedicated SQLiRuleSet)**, Windows/IIS cmd-injection (WindowsRuleSet), known-bad inputs, admin-page protection, and IP reputation. NOTE: CommonRuleSet does **not** include SQLi — SQLi coverage is the separate `AWSManagedRulesSQLiRuleSet` (added 2026-06-17 after a WAF test found the gap).
-
-**Why CloudFront + WAF (not ALB + WAF)?** CloudFront wins on edge blocking reach, static caching, and cost. ALB only blocks in-region; CloudFront blocks at the edge.
+Verified against live AWS 2026-08-21.
 
 ---
 
-## Architecture
+## Request path
 
 ```
-Internet → CloudFront (edge, caches static) → WAF Web ACL → IIS Origin (s6.eightfoldway.com public+staging / s4.eightfoldway.com preview2)
-                                                   │
-        estimators / dynamic paths always reach origin (no-cache) → WAF is the only lever there
+viewer
+  -> CloudFront distribution (per tier; caches static, bypasses dynamic)
+       -> WAF web ACL (per tier; 12 rules, Block)
+            -> VPC origin: service-managed ENI in the origin's private subnet
+                 -> IIS on web-04 (preview2) / web-06 (public + staging)
+                      -> estimator app -> benefits engine (ECONorthwest, VPC peering)
 
-Edit-cms tier (db101-*.eightfoldway.com etc., q.db101.org): DIRECT to web-04 — never fronted.
-NTLM is connection-oriented and dies behind any L7 proxy; the tier is NTLM/401-gated at IIS.
+edit-CMS tier (db101-*.eightfoldway.com, q.db101.org) is DELIBERATELY NOT FRONTED:
+NTLM is connection-oriented and dies behind any L7 proxy, and the tier is already
+auth-gated at IIS. Those names stay DNS'd direct to web-04.
 ```
 
-### Defense layers at a glance
+Routing to the origin no longer uses the origin's public IP. Each distribution reaches its box
+over a CloudFront VPC origin (private ENI). The origin `DomainName` is still
+`s4`/`s6.eightfoldway.com`, but that name now serves only as the SNI and certificate anchor --
+it does not drive routing. web-06 has no public viewer traffic left; releasing its Elastic IP is
+the last open step (see Open items).
 
-The Web ACL is a **priority pipeline**; each rule targets a specific concern. The center of
-gravity is **bot-load on the estimators**, not the classic scanner probes.
+## Distributions
 
-| Concern | Rules (priority) | Notes |
+| Dist | ID | Aliases | Purpose |
+|---|---|---|---|
+| `efw-public` | `E14TU8NPRHUI0M` | 4 wildcards (`*.db101.org`, `*.hb101.org`, `*.vets101.org`, `www.eightfoldway.com`) | Public + staging content. Origin: web-06 VPC origin. |
+| `efw-preview2` | `E1ZUT1S4LS09PI` | 28 explicit `preview2-*` names | Internal unstable mirror. Origin: web-04 VPC origin. |
+| apex / legacy bounce | `E62IHCKTGN48T` | 9 (apexes + `*.housingbenefits101.org`, `*.disabilitybenefits101.org`) | CloudFront Function redirect. Apexes cannot CNAME, so they ALIAS here and bounce to the canonical host. |
+| reflexive-www | `E35HA9WZDTRY2Y` | 48 (`www.<state>.db101/hb101.org`) | 301 `www.<host>` -> `<host>`. Own 48-SAN ACM cert. See `cloudformation/www-redirect/README.md`. |
+
+Wildcards on the public dist mean **a new state site needs no WAF or CloudFront change** -- just
+DNS and, if it needs `www.` coverage, a `www-redirect` regeneration. preview2 enumerates its
+aliases (specific overrides wildcard), so a new state does need one alias there.
+
+Every hostname terminates at one named handle: `s4`/`s6` (direct origin, edit tier) or
+`cf-preview2`/`cf-public`/`cf-redirect.<zone>` (CNAME to the dist). The `cf-*` handles are
+stack-managed A+AAAA ALIASes, so a distribution replacement self-heals every leaf pointing at them.
+
+## WAF
+
+Both tiers run the same 12-rule pipeline, in Block. Live as-built:
+
+| Pri | Rule | Action | Notes |
+|---|---|---|---|
+| 0 | `IP-Allowlist-Override` | Allow | Empty seed. Add a legit /32 mid-incident for an instant terminating Allow, remove after tuning the rule that misfired. |
+| 1 | `IP-Blocklist-Scanners` | Block | Manual IP set. |
+| 2 | `SensitivePaths` | Block | `.git`, `.env`, `*.bak`, `*.config`, `elmah.axd`, `trace.axd`. Most file-fishing already 404s (wrong stack); this is the "getting lucky" net. |
+| 3 | `AWS-IpReputation` | managed | |
+| 4 | `AWS-CommonRuleSet` | managed | Three sub-rules pinned to Count on purpose -- see below. |
+| 5 | `AWS-KnownBadInputs` | managed | |
+| 6 | `AWS-SQLi` | managed | Added 2026-06-17: CommonRuleSet contains no SQLi coverage, which a WAF test found the hard way. |
+| 7 | `AWS-Windows` | managed | We are a Windows/IIS stack. |
+| 8 | `AWS-AdminProtection` | Count | Pinned pending a false-positive review. |
+| 9 | `Challenge-Estimator` | Challenge | `/planning/*`. The centerpiece. |
+| 10 | `RateLimit-Estimator` | Block | 1000 per 300s per IP. |
+| 11 | `RateLimit` | Block | 1000 per 300s per IP. General backstop, not a bot tool. |
+
+**Deliberate Count pins inside CommonRuleSet** (they look like oversights otherwise):
+
+- `SizeRestrictions_BODY` -- a heavy estimator walk POSTs ~8136 bytes against an 8192 gate. Too
+  close to enforce without breaking real sessions.
+- `NoUserAgent_HEADER` -- blocking it broke our own no-UA uptime monitors.
+- `UserAgent_BadBots_HEADER` -- false positives on legitimate clients.
+
+**Why Challenge carries the load.** Log analysis showed the busy `/planning/` IPs are humans behind
+shared government and agency NATs, so per-IP rate limiting punishes real users while a per-browser
+challenge does not. The threat a per-IP view cannot see -- a distributed headless fleet -- is exactly
+what Challenge catches and rate limits miss. AWS managed rules cover probes but never fire on a
+well-formed scraper GET, and that bot *load* is the actual pain.
+
+## Turnstile
+
+Cloudflare Turnstile gates the four form surfaces that reach a server, in Enforce:
+
+| Surface | System | Endpoints |
 |---|---|---|
-| **Fast unblock** | **IP-Allowlist-Override (0)** | Empty seed; add a legit /32 (gov NAT) mid-incident for an instant terminating Allow, remove after tuning the offending rule. |
-| **Estimator bot-walking** *(primary)* | **Challenge (6)** · RateLimit-Estimator (7) | `/planning/*`. Silent browser proof-of-work — real browsers pass invisibly, headless/distributed bots fail. The thing that actually protects origin CPU. |
-| **General website probes** | IP-Blocklist (1) · SensitivePaths (2) · IpReputation (3) · CommonRuleSet (4) · KnownBadInputs (5) · **SQLi (6)** · **Windows (7)** · **AdminProtection (8, Count-pending-review)** | Standing, mostly auto. `SensitivePaths` blocks `.git`/`.env`/`*.bak`/`*.config`/`elmah.axd`/`trace.axd` (a probe "getting lucky" net — tested 2026-06-09, nothing exposed today). Most file-fishing just 404s (wrong stack). **SQLi/Windows added 2026-06-17** (test found CommonRuleSet has no SQLi, and we're a Windows/IIS stack); **AdminProtection** pinned to Count pending a false-positive review. Challenge/rate limits shifted to pri 9–12. |
-| **General flood** | RateLimit (8, 500/IP/5min) | Per-IP backstop above the gov-NAT reality (~185/5min). Not a bot tool. |
-| Browser-emulating bots | BotControl (9) | **Off — deferred.** Paid; only adds value vs JS-headless estimator bots, for which logs show zero evidence. Turn on (TARGETED) only if post-launch data shows it. |
-| ~~Verified-bot allowlist~~ | *(removed)* | robots.txt already bars `/planning/`; Challenge is `/planning`-scoped → allowlist was pure bypass risk. |
+| Logon | `logon` | `register`, `forgot`, `resend` |
+| Estimator | `estimator` | `share` (Share Session), `pdfshare` (Email This Report) |
+| Feedback proxy | `twproxy` | `feedback` |
 
-**Why Challenge is the centerpiece:** real traffic analysis (2026-06-08 logs) showed the busy
-`/planning/` IPs are *humans* behind shared gov/agency NATs (e.g. State of Missouri) — so per-IP
-rate-limiting would punish real users, while a per-browser Challenge doesn't. And the one threat
-a per-IP view can't see — a distributed headless fleet — is exactly what Challenge catches and
-rate-limits miss. AWS managed rules cover *probes* but never fire on a well-formed scraper `GET`;
-that bot **load** is the actual pain, so Challenge carries it. See `waf-cloudfront-migration.md`.
+One production sitekey, managed/interaction-only. `pdfshare` alone soft-passes an absent token
+(a real-user widget failure should not eat a report the user already generated); every other
+surface fails closed. Server-to-server callers bypass via an authenticated principal, not an
+exemption.
 
-**Key design decisions:**
-- **Edit-cms tier never fronted** (Decision B, 2026-06-11): NTLM breaks behind any L7 proxy; tier already auth-gated → WAF adds ~nothing. preview2 leads the rollout, public follows; nothing on s6 moves until preview2 is proven.
-- **2 content distributions** (preview2 on s4, public+staging on s6) + housingbenefits101 redirect; both published cache model; `Host` in the static cache key (IIS routes by Host). Public dist uses `*.zone` wildcards + apexes; preview2 enumerates (specific-overrides-wildcard). New state = 1 preview2 alias + DNS, zero other WAF/CF config.
-- Origins are FQDNs (`s4`/`s6.eightfoldway.com`), never IPs (CloudFront rejects them) and never DNS'd at CloudFront (loop).
-- Start all WAF rules in **Count mode** for 72h–1 week before switching to Block
-- Cache bypasses for all dynamic paths: `/planning/*`, `/api/*`, `*.aspx`, `*.ashx`, `*.asmx`, `*_AppService.axd`, `ScriptResource.axd`, `/tw/*`, `/vault/*`, etc.
-- WebDeploy continues via VPN (port 8172, not proxied through CloudFront)
-- NACLs can be decommissioned once WAF is active (WAF is a superset)
+## Telemetry
 
----
+Each surface emits one JSON schema to its own CloudWatch group -- `/logon/events`,
+`/twproxy/events`, `/estimator/events`, `/pdfreport/events`, each with an untapped `-preview`
+twin. Production groups have subscription filters to Firehose into the S3 lake and an Athena
+table; preview groups have none, which is what keeps preview data out of production analytics.
 
-## Document Map
+`tools/soak-report/` renders the whole funnel (Cloudflare issuance -> client widget beacon ->
+server verify) as a self-contained HTML report, emailed daily at 07:37 by the `EFW-SoakReport`
+scheduled task. See `tools/soak-report/` and the alarms `logon-widget-failed-spike` /
+`logon-verify-absent-spike`.
+
+WAF and CloudFront logs land in S3 and are queryable through Athena (`efw_waf_logs`, workgroup
+`efw-diagnostics`) -- see `cloudformation/diagnostics.yaml`.
+
+## Deploying
+
+All CloudFront-scope resources are pinned to **us-east-1** (WAF web ACL, viewer ACM cert,
+CloudFront metrics). Origin-side resources are us-west-1.
+
+```
+cloudformation/deploy-stack.ps1 <stack>
+```
+
+Parameters live in real files under `cloudformation/params/*.json`, deliberately not
+`UsePreviousValue` -- the deployed configuration should be readable from the repo. Stacks:
+
+| Stack | Region | What |
+|---|---|---|
+| `base` | us-east-1 | IP sets, WAF log bucket, origin-verify secret, alarm topic. Deploy once. |
+| `edge` | us-east-1 | Per tier (preview2, public): web ACL, distribution, cache/origin policies, alarms. |
+| `redirect` | us-east-1 | Apex and legacy-domain bounce distribution. |
+| `www-redirect` | us-east-1 | The 48-host reflexive-www distribution, cert and function. Records are managed by `www-redirect/point-records.py`, not the stack. |
+| `origin-sg` | **us-west-1** | Ingress on the origin SG allowing 443 from the CloudFront VPC-origins service SG. Must be us-west-1; deploy after the VpcOrigin exists. |
+| `logon-telemetry` | us-east-1 | Telemetry log groups, Firehose, lake, alarms. |
+| `diagnostics` | us-east-1 | Athena/Glue over the WAF + CloudFront logs. Read-only. |
+
+DNS leaf records are intentionally **not** in the stacks: they are the cutover and rollback lever
+and must stay decoupled from stack lifecycle.
+
+## Operational rules worth knowing
+
+- **No DNS deletion for "dead" names.** Repoint or catch-all instead. A deleted name has burned us.
+- **Business hours (Mon-Fri 08:00-17:00 PT):** do not publish a site to its live public tier, and
+  do not edit web-06's `applicationHost.config` -- it recycles every pool and wipes in-process
+  estimator sessions for live users.
+- Both web-04 and web-06 run a **catch-all 404 site** (blank host binding, SNI off) so an unmatched
+  Host returns a clean 404 instead of a connection reset surfacing as a CloudFront 502.
+- `/planning` dynamic paths are cache-bypassed; WAF is the only lever there.
+- WebDeploy (8172) runs over VPN, never through CloudFront.
+
+## Open items
+
+- **web-06 depublicize, Phase D #3 and #4** -- create a web-06-only security group and release EIP
+  `52.8.7.0` (`eipalloc-b5c725d0`). Soak-cleared 2026-08-05; the EIP is still attached and web-06 is
+  still on the shared default SG `sg-06348763`. Past #4 the "flip DNS back to s6" rollback is gone.
+  Pre-flight: re-check `.pubxml` WebDeploy targets still pinned to `s6.eightfoldway.com`.
+- **Apex bounce is still 302.** The distribution comment says "302 soak, promote to 301 after
+  verify"; the soak is long over and `https://db101.org/` still answers 302. Promote or record the
+  decision to stay.
+- **preview2 still defines an unused public origin.** Phase D #2 collapsed `edge.yaml` to VPC-only,
+  but the preview2 stack was never redeployed, so `iis-origin` lingers in its config. All eight
+  behaviors plus default already target `iis-vpc-origin` on both tiers, so this is cosmetic drift.
+- **`AWS-AdminProtection`** still Count pending the false-positive review.
+- **`cloudformation/README.md`** still documents the `TargetOrigin` public/vpc flip that Phase D #2
+  removed. Needs a pass.
+
+## Document map
+
+**Current:**
 
 | File | Purpose |
-|------|---------|
-| **This README** | Project overview |
-| [`waf-cloudfront-migration.md`](waf-cloudfront-migration.md) | **Master plan** — implementation phases, current status, decisions |
-| [`waf-proposal-v2-with-cache-config.md`](waf-proposal-v2-with-cache-config.md) | Detailed proposal with cache behavior config table |
-| [`waf-proposal.md`](waf-proposal.md) | Original proposal (superseded in phase order by v2) |
-| [`dns-migration-plan.md`](dns-migration-plan.md) | DNS changes required for CloudFront cutover |
-| [`waf-reviews/`](waf-reviews/) | Phase R review reports (infrastructure accuracy, dynamic paths, Route53) |
+|---|---|
+| `cloudformation/README.md` | Stack-by-stack structure, VPC origins, DNS model. Current except the `TargetOrigin` flip section (see Open items). |
+| `cloudformation/www-redirect/README.md` | The reflexive-www stack, the ACM SAN limit, adding a state. |
+| `cloudwatch-agent/README.md` | Agent config that ships the telemetry files. |
+| `tools/soak-report/` | Turnstile funnel report and its daily mail job. |
+| `tools/dns-cutover/`, `tools/estimator-logs/` | Cutover scripting and estimator log pulls. |
+| `src/Cdn/README.md` | Shared CloudFront invalidation library used by PubBot and the export path. |
+| `waf-reviews/` | Design and review documents, including `web06-depublicize-plan-2026-07-28.md`, `dist-thumbprint-plan-2026-07-03.md`, `cloudfront-invalidation-design-2026-06-24.md`. Individual files vary in currency; each is dated. |
 
-### CSP Hardening (Related Security Work)
+**Historical** -- written during the migration, kept for the decision record. Read these for *why*,
+not for current state:
 
-These are separate but related projects — fixing Content Security Policy to remove `unsafe-inline`/`unsafe-eval`, which directly supports the WAF goal of improving SecurityScorecard posture.
+| File | |
+|---|---|
+| `waf-cloudfront-migration.md` | Master plan and phase checkboxes as of the migration. |
+| `waf-proposal.md`, `waf-proposal-v2-with-cache-config.md` | Original and revised proposals. |
+| `dns-migration-plan.md` | The DNS cutover plan. |
+| `planning-challenge-findings.md` | Log analysis behind the Challenge decision. |
+| `waf-reviews/01-disruption.md` .. `04-route53.md` | Phase R review reports. |
 
-| File | Purpose |
-|------|---------|
-| [`csp-hardening.md`](csp-hardening.md) | Phase plan — nonce-based CSP for script-src/style-src |
-| [`csp-hardening-research.md`](csp-hardening-research.md) | Research on nonce implementation approaches |
-| [`csp-dopostback-refactor.md`](csp-dopostback-refactor.md) | ASP.NET `__doPostBack` nonce compatibility |
-| [`csp-window-open-print-refactor.md`](csp-window-open-print-refactor.md) | `window.open()` + `print()` nonce compatibility |
-| [`securityscorecard-csp-unsafe.csv`](securityscorecard-csp-unsafe.csv) | Raw SecurityScorecard findings: CSP unsafe-inline/eval |
-| [`securityscorecard-sri-missing.csv`](securityscorecard-sri-missing.csv) | Raw SecurityScorecard findings: missing SRI on external resources |
-| [`sri-external-resources.md`](sri-external-resources.md) | SRI implementation plan for external JS |
+**Related security work** (separate projects, same posture goal): `csp-hardening.md`,
+`csp-hardening-research.md`, `csp-dopostback-refactor.md`, `csp-window-open-print-refactor.md`,
+`sri-external-resources.md`, and the raw SecurityScorecard CSVs.
 
----
+## History
 
-## Status
+The project began 2026-04-20, when IIS logs showed 28 unique malicious IPs scanning for `.env`,
+`.git`, AI config files, WordPress paths, and credential targets, mostly from Azure (57%) and
+Google Cloud (18%). The existing defense was Layer 3 NACL IP blocking -- a blunt tool that could
+not see paths, could not challenge a browser, and had to be updated by hand per attacker.
 
-**Phase R (Reviews) — ✅ Done**  
-**Phase 0 (Edit-site Canary) — ⏳ Blocked on ACM cert**  
-**Phase 1+ (Edit-site Full / Public-site) — Pending**
-
-> **Phase 0 is blocked.** No wildcard ACM cert exists in `us-east-1`. Must request `*.eightfoldway.com` before CloudFront distribution can be created. Allow 30-60 min for cert issuance.
-
-See [`waf-cloudfront-migration.md`](waf-cloudfront-migration.md) for the full phased plan with checkboxes.
-
----
-
-## Cost
-
-| Configuration | Monthly |
-|--------------|---------|
-| Baseline (WAF + CloudFront, Count mode) | $25-35 |
-| + AWS Managed Rules Bot Control | +$10 |
-| + AWS Managed Rules IP Reputation | +$5 |
-| **Full stack** | **$40-50** |
-| + Phase 5 NAT Gateway (origin isolation) | +$45 |
-
----
-
-## Key Findings (April 2026 Investigation)
-
-- **28 unique scanner IPs** across Azure, GCP, DigitalOcean, Oracle, Linode, Contabo
-- **No `/planning/` targeting** — scanners only hit `/planning/` incidentally (1 IP, 6 requests out of 288)
-- **Estimators not the target** — all scanners looking for credential/config file paths
-- **NACLs are redundant** once WAF is active (WAF is a Layer 7 superset of NACL)
-- **Cache hit rate concern unfounded** — `/planning/` and all dynamic paths are explicitly bypassed
-- **Real zone scope = 5 live zones** (WHOIS-verified 2026-06-08): `db101.org`, `hb101.org`, `eightfoldway.com`, `vets101.org`, `housingbenefits101.org`. Review 04's larger count was inflated by orphan Route53 zones — 7 of the "extra" domains are unregistered, 1 (`njdb101.org`) is parked at NameFind. One ACM cert (10 SANs) covers all 5; only 3 apex ALIAS conversions needed. **Renew `hb101.org` before cutover (expires 2026-06-23).**
-
----
-
-## FAQ
-
-**Will CloudFront caching break the estimators?**  
-No — all dynamic paths are cache-bypassed. Session state uses URL params, not cookies.
-
-**What about WebDeploy?**  
-Unaffected. Port 8172 (Web Management Service) is not HTTP/HTTPS and not proxied through CloudFront. Deploys continue via VPN direct to `10.3.x.x`.
-
-**What if legitimate traffic gets blocked?**  
-All rules start in Count mode. 72h monitoring window before Block. False positives can be addressed via allowlist rules before switching.
-
-**Can we remove NACLs after deployment?**  
-Yes — WAF is a superset. Defer NACL removal until after one clean week of Block mode.
+CloudFront plus WAF was chosen over ALB plus WAF for edge blocking reach (200+ PoPs versus
+in-region only), static caching, and cost. Rollout ran preview2 first as canary, every rule in
+Count for a soak window before Block, then public. preview2 reached Block 2026-06-17, public
+cut over to CloudFront 2026-07-30, and public WAF reached Block 2026-08-01. The origin-isolation
+phase, originally sketched as a NAT gateway, was ultimately solved with CloudFront VPC origins at
+no extra cost.

@@ -7,6 +7,8 @@ tags: [infrastructure, security, waf, cloudfront]
 reorder: 2026-06-04
 ---
 
+> **HISTORICAL.** Written during the WAF/CloudFront migration and kept for the decision record. It describes plans and state as of its own date, not the system as built. For current state see [README.md](README.md).
+
 # WAF + CloudFront for DB101/HB101
 
 ## Summary
