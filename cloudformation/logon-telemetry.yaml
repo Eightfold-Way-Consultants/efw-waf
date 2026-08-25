@@ -416,6 +416,10 @@ Resources:
             - { Name: count, Type: int }
             - { Name: max, Type: int }
             - { Name: windowseconds, Type: int }
+            # widget-beacon payload: ms from api.js injection to its failure (api-blocked / api-timeout).
+            # Present only on those fails; a refusal on the machine lands in single-digit ms, a filter or
+            # DNS failure takes seconds, so the histogram separates the two without bucketing up front.
+            - { Name: ms, Type: int }
             - { Name: system, Type: string }
             - { Name: config, Type: string }
             - { Name: targetstate, Type: string }
