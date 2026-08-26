@@ -36,7 +36,9 @@ $ErrorActionPreference = 'Stop'
 
 # ---- config ----------------------------------------------------------------------------------
 # Any edit host can queue any group -- the group name is in the URL, so host and site need not match.
-$ApiHost   = 'https://db101-ak.eightfoldway.com'
+# db101-master is the house convention for API calls that are not about one particular site, so a
+# fleet-wide run does not look like it belongs to whichever state happened to be typed first.
+$ApiHost   = 'https://db101-master.eightfoldway.com'
 $SecretId  = 'f8/document-api/key'
 $MailTo    = 'jeastman@eightfoldway.com'
 # Marker present only in the r9118 turnstile code. Minifiers rename variables but keep string
@@ -125,12 +127,11 @@ function Test-Bundle($base) {
 $key = $null
 $headers = $null
 
-# Queue one template for one group and poll it to real completion. Returns a result hashtable.
-# Failures are returned, never thrown: one site's error must not cancel the other thirteen, which is
-# exactly what happened on the 2026-08-25 18:30 run when the first bad POST aborted the whole fleet.
-function Invoke-PubBotJob($group, $template) {
-  $r = @{ Template = $template; Status = 'NOT QUEUED'; Minutes = 0; Errors = '' }
-  $started = Get-Date
+# Queue one template for one group. Returns immediately -- polling happens later, across all sites.
+# Failures are returned, never thrown: one site's error must not cancel the others, which is exactly
+# what happened on the 2026-08-25 18:30 run when the first bad POST aborted the whole fleet.
+function Start-PubBotJob($group, $template) {
+  $r = @{ Template = $template; Status = 'NOT QUEUED'; Minutes = 0; Errors = ''; Queued = Get-Date }
   try {
     # Template goes in the BODY (r9119). The path form cannot carry "Upload Preview + Final" at all;
     # see the header note.
@@ -139,22 +140,12 @@ function Invoke-PubBotJob($group, $template) {
               -Headers $headers -ContentType 'application/json' -Body $payload -TimeoutSec 120
     $r.JobId = $resp.jobId
     Log "  queued $group [$template] job $($r.JobId)"
-    while ($true) {
-      Start-Sleep -Seconds $PollSec
-      $job = (Invoke-RestMethod -Uri "$ApiHost/api/pubbot/jobs/$($r.JobId)" -Headers $headers -TimeoutSec 120).job
-      if ((Count-Running $job) -eq 0) {
-        $r.Status = $job.Status
-        $r.Errors = Get-TreeErrors $job
-        break
-      }
-    }
   }
   catch {
     $r.Status = 'FAILED'
     $r.Errors = "$_"
+    Log "  FAILED to queue $group [$template]: $_"
   }
-  $r.Minutes = [math]::Round(((Get-Date) - $started).TotalMinutes, 1)
-  Log "  done $group [$template] $($r.Status) $($r.Minutes) min$(if ($r.Errors) { " ERRORS: $($r.Errors)" })"
   return $r
 }
 
@@ -164,27 +155,45 @@ try {
   if (-not $key) { throw "could not read api_key from secret $SecretId" }
   $headers = @{ 'X-API-Key' = $key }
 
-  # ---- 1. publish, one group at a time, templates in order ------------------------------------
+  # ---- 1. queue every group up front -----------------------------------------------------------
+  # PubBot runs group jobs CONCURRENTLY, so the fleet's wall clock is the slowest single site, not
+  # the sum. The 2026-08-25T01:05Z run queued all 14 at one instant and finished in 30.1 min, which
+  # is DB101-MN's own 25 min and HB101-MN's own 30.1 overlapping -- not a queue draining one at a
+  # time. Publishing serially would turn that 30 minutes into roughly four hours.
   foreach ($s in $SITES) {
-    Log "$($s.Group): $($s.Templates -join ' then ')"
-    $s.Jobs = @()
-    foreach ($t in $s.Templates) {
-      $res = Invoke-PubBotJob $s.Group $t
-      $s.Jobs += $res
-      # Running Upload Final after a failed Upload Preview would publish from a tier that was not
-      # refreshed, so stop this group here and let the rest of the fleet carry on.
-      if ($res.Status -ne 'eCompleteOK') { Log "  skipping remaining templates for $($s.Group)"; break }
+    $s.Job = Start-PubBotJob $s.Group $s.Templates[0]
+  }
+
+  # ---- 2. poll them all to real completion -----------------------------------------------------
+  $pending = [System.Collections.ArrayList]@($SITES | Where-Object { $_.Job.JobId })
+  while ($pending.Count -gt 0) {
+    Start-Sleep -Seconds $PollSec
+    foreach ($s in @($pending)) {
+      try {
+        $job = (Invoke-RestMethod -Uri "$ApiHost/api/pubbot/jobs/$($s.Job.JobId)" -Headers $headers -TimeoutSec 120).job
+        if ((Count-Running $job) -eq 0) {
+          $s.Job.Status = $job.Status
+          $s.Job.Errors = Get-TreeErrors $job
+          $s.Job.Minutes = [math]::Round(((Get-Date) - $s.Job.Queued).TotalMinutes, 1)
+          Log "done  $($s.Group)  $($s.Job.Status)  $($s.Job.Minutes) min$(if ($s.Job.Errors) { " ERRORS: $($s.Job.Errors)" })"
+          $pending.Remove($s)
+        }
+      }
+      catch {
+        # A poll that fails is a poll, not a publish: log and try again next tick rather than
+        # declaring the site failed.
+        Log "  poll error on $($s.Group): $_"
+      }
     }
-    $bad = @($s.Jobs | Where-Object { $_.Status -ne 'eCompleteOK' -or $_.Errors })
-    $s.Status = if ($s.Jobs.Count -eq $s.Templates.Count -and $bad.Count -eq 0) { 'eCompleteOK' } else { 'FAILED' }
-    # Summed by hand: Measure-Object -Property reads object properties, not hashtable keys, and
-    # throws "the property Minutes cannot be found" on these job records.
-    $mins = 0.0
-    foreach ($j in $s.Jobs) { $mins += $j.Minutes }
-    $s.Minutes = [math]::Round($mins, 1)
-    $s.Errors = (($s.Jobs | Where-Object { $_.Errors } | ForEach-Object { "$($_.Template): $($_.Errors)" }) -join '; ')
+    if ($pending.Count -gt 0) { Log "waiting on: $(($pending | ForEach-Object { $_.Group }) -join ', ')" }
   }
   Log "all jobs finished"
+
+  foreach ($s in $SITES) {
+    $s.Status = $s.Job.Status
+    $s.Minutes = $s.Job.Minutes
+    $s.Errors = $s.Job.Errors
+  }
 
   # ---- 2. verify the bundle actually landed on each public site --------------------------------
   # One re-check after a pause: the upload invalidates CloudFront, and an edge that has not settled
