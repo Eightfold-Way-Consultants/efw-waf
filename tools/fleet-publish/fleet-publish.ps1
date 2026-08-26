@@ -9,12 +9,29 @@
 # the file you wanted is live. So after the uploads, each public host is fetched and its bundle is
 # searched for a marker string that only exists in the new code.
 #
+# TEMPLATE IN THE BODY, NOT THE PATH: "Upload Preview + Final" contains a literal '+', and IIS will
+# not route a path segment containing one -- raw '+' 404s, and %2B 404s too because double-escaped
+# paths are refused by default. Proven against a deliberately bogus group, where "Upload Final"
+# reached the handler (400, bad group) while both '+' forms died at 404 before it.
+# So this script uses POST /api/pubbot/groups/{name}/jobs with {"template": "..."} (svn r9119), which
+# puts the name somewhere IIS does not inspect. That matters because the combined template exports
+# each site ONCE and then copies the result to both tiers; the plus-free workaround of running
+# "Upload Preview" then "Upload Final" pays a second full export, and on a large state the export is
+# the dominant cost of publishing.
+# REQUIRES r9119 deployed to $ApiHost. Against an older build this route 404s and every site fails.
+#
 # Groups carry their Spanish sites, so az-es / ca-es / il-es / nj-es ride along with their parent.
 # DB101-IA is Upload Final ONLY: its youth landing page and School and Work Estimator are held out of
 # the public menus by page export flags, and it is published without touching its preview tier.
 # DB101-NV and DB101-CO are deliberately absent (not published / not maintained).
 #
-# Manual run: powershell -ExecutionPolicy Bypass -NoProfile -File C:\git\efw-waf\tools\fleet-publish\fleet-publish.ps1
+# Manual run:  powershell -ExecutionPolicy Bypass -NoProfile -File .\fleet-publish.ps1
+# Single site: powershell -ExecutionPolicy Bypass -NoProfile -File .\fleet-publish.ps1 -Only DB101-AK
+[CmdletBinding()]
+param(
+  # Restrict the run to one group, for proving a change before turning it loose on the fleet.
+  [string] $Only
+)
 $ErrorActionPreference = 'Stop'
 
 # ---- config ----------------------------------------------------------------------------------
@@ -27,23 +44,28 @@ $MailTo    = 'jeastman@eightfoldway.com'
 $Marker    = '"api-"+'
 $PollSec   = 15
 
-# Each entry: PubBot group, job template, and the PUBLIC host that must end up serving the marker.
+# Each entry: PubBot group, the job templates to run IN ORDER, and the PUBLIC host that must end up
+# serving the marker.
 $SITES = @(
-  @{ Group = 'DB101-AK'; Template = 'Upload Preview + Final'; Public = 'https://ak.db101.org' }
-  @{ Group = 'DB101-AZ'; Template = 'Upload Preview + Final'; Public = 'https://az.db101.org' }
-  @{ Group = 'DB101-CA'; Template = 'Upload Preview + Final'; Public = 'https://ca.db101.org' }
-  @{ Group = 'DB101-GA'; Template = 'Upload Preview + Final'; Public = 'https://ga.db101.org' }
-  @{ Group = 'DB101-IA'; Template = 'Upload Final';           Public = 'https://ia.db101.org' }
-  @{ Group = 'DB101-IL'; Template = 'Upload Preview + Final'; Public = 'https://il.db101.org' }
-  @{ Group = 'DB101-KY'; Template = 'Upload Preview + Final'; Public = 'https://ky.db101.org' }
-  @{ Group = 'DB101-MI'; Template = 'Upload Preview + Final'; Public = 'https://mi.db101.org' }
-  @{ Group = 'DB101-MN'; Template = 'Upload Preview + Final'; Public = 'https://mn.db101.org' }
-  @{ Group = 'DB101-MO'; Template = 'Upload Preview + Final'; Public = 'https://mo.db101.org' }
-  @{ Group = 'DB101-NC'; Template = 'Upload Preview + Final'; Public = 'https://nc.db101.org' }
-  @{ Group = 'DB101-NJ'; Template = 'Upload Preview + Final'; Public = 'https://nj.db101.org' }
-  @{ Group = 'DB101-OH'; Template = 'Upload Preview + Final'; Public = 'https://oh.db101.org' }
-  @{ Group = 'HB101-MN'; Template = 'Upload Preview + Final'; Public = 'https://mn.hb101.org' }
+  @{ Group = 'DB101-AK'; Templates = @('Upload Preview + Final'); Public = 'https://ak.db101.org' }
+  @{ Group = 'DB101-AZ'; Templates = @('Upload Preview + Final'); Public = 'https://az.db101.org' }
+  @{ Group = 'DB101-CA'; Templates = @('Upload Preview + Final'); Public = 'https://ca.db101.org' }
+  @{ Group = 'DB101-GA'; Templates = @('Upload Preview + Final'); Public = 'https://ga.db101.org' }
+  @{ Group = 'DB101-IA'; Templates = @('Upload Final');           Public = 'https://ia.db101.org' }
+  @{ Group = 'DB101-IL'; Templates = @('Upload Preview + Final'); Public = 'https://il.db101.org' }
+  @{ Group = 'DB101-KY'; Templates = @('Upload Preview + Final'); Public = 'https://ky.db101.org' }
+  @{ Group = 'DB101-MI'; Templates = @('Upload Preview + Final'); Public = 'https://mi.db101.org' }
+  @{ Group = 'DB101-MN'; Templates = @('Upload Preview + Final'); Public = 'https://mn.db101.org' }
+  @{ Group = 'DB101-MO'; Templates = @('Upload Preview + Final'); Public = 'https://mo.db101.org' }
+  @{ Group = 'DB101-NC'; Templates = @('Upload Preview + Final'); Public = 'https://nc.db101.org' }
+  @{ Group = 'DB101-NJ'; Templates = @('Upload Preview + Final'); Public = 'https://nj.db101.org' }
+  @{ Group = 'DB101-OH'; Templates = @('Upload Preview + Final'); Public = 'https://oh.db101.org' }
+  @{ Group = 'HB101-MN'; Templates = @('Upload Preview + Final'); Public = 'https://mn.hb101.org' }
 )
+if ($Only) {
+  $SITES = @($SITES | Where-Object { $_.Group -eq $Only })
+  if ($SITES.Count -eq 0) { throw "no such group: $Only" }
+}
 
 # ---- setup -----------------------------------------------------------------------------------
 # A scheduled task does not inherit an interactive PATH, and aws.exe is how the API key is read.
@@ -57,8 +79,14 @@ $env:AWS_DEFAULT_REGION = 'us-west-1'
 $logDir = 'C:\temp\fleet-publish'
 if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
 $stamp = (Get-Date).ToString('yyyy-MM-dd_HHmm')
-$log   = Join-Path $logDir "fleet-publish-$stamp.log"
-function Log($m) { "$([DateTime]::Now.ToString('HH:mm:ss'))  $m" | Tee-Object -FilePath $log -Append | Write-Host }
+$log   = Join-Path $logDir "fleet-publish-$stamp$(if ($Only) { "-$Only" }).log"
+# Explicit ASCII: Tee-Object/Out-File default to UTF-16 here, which made the first run's log
+# unreadable as spaced-out garbage in every ordinary text tool.
+function Log($m) {
+  $line = "$([DateTime]::Now.ToString('HH:mm:ss'))  $m"
+  Write-Host $line
+  $line | Out-File -FilePath $log -Append -Encoding ascii
+}
 
 # Count job-tree nodes that have not finished. The top-level Status flips to eCompleteOK the moment
 # the job is dispatched (StartedAt equals CompletedAt, ItemsTotal 0), so it says nothing about the
@@ -70,125 +98,152 @@ function Count-Running($node) {
   return $n
 }
 
+# Collect every ErrorMessage in the tree, not just the root's.
+function Get-TreeErrors($node) {
+  $errs = @()
+  $stack = New-Object System.Collections.Stack
+  $stack.Push($node)
+  while ($stack.Count -gt 0) {
+    $n = $stack.Pop()
+    if ($n.ErrorMessage) { $errs += $n.ErrorMessage }
+    foreach ($c in @($n.Children)) { if ($c) { $stack.Push($c) } }
+  }
+  return ($errs | Select-Object -Unique) -join '; '
+}
+
 # Does this public host serve a bundle containing the marker? Returns the thumbprint plus a verdict.
 function Test-Bundle($base) {
   # NOT $home: PowerShell's $HOME is read-only and assigning it throws.
   $page = Invoke-WebRequest -Uri $base -UseBasicParsing -TimeoutSec 60
   $m = [regex]::Match($page.Content, '/dist/[a-f0-9]+/js/master\.bundle\.min\.js')
-  if (-not $m.Success) { return @{ Ok = $false; Thumb = '(no bundle url)'; } }
-  $path = $m.Value
-  $thumb = ([regex]::Match($path, '/dist/([a-f0-9]+)/')).Groups[1].Value
-  $js = Invoke-WebRequest -Uri ($base + $path) -UseBasicParsing -TimeoutSec 120
+  if (-not $m.Success) { return @{ Ok = $false; Thumb = '(no bundle url)' } }
+  $thumb = ([regex]::Match($m.Value, '/dist/([a-f0-9]+)/')).Groups[1].Value
+  $js = Invoke-WebRequest -Uri ($base + $m.Value) -UseBasicParsing -TimeoutSec 120
   return @{ Ok = $js.Content.Contains($Marker); Thumb = $thumb }
 }
 
-$results = @()
-try {
-  Log "fleet publish starting -- $($SITES.Count) groups"
+$key = $null
+$headers = $null
 
+# Queue one template for one group and poll it to real completion. Returns a result hashtable.
+# Failures are returned, never thrown: one site's error must not cancel the other thirteen, which is
+# exactly what happened on the 2026-08-25 18:30 run when the first bad POST aborted the whole fleet.
+function Invoke-PubBotJob($group, $template) {
+  $r = @{ Template = $template; Status = 'NOT QUEUED'; Minutes = 0; Errors = '' }
+  $started = Get-Date
+  try {
+    # Template goes in the BODY (r9119). The path form cannot carry "Upload Preview + Final" at all;
+    # see the header note.
+    $payload = @{ template = $template } | ConvertTo-Json -Compress
+    $resp = Invoke-RestMethod -Uri "$ApiHost/api/pubbot/groups/$group/jobs" -Method Post `
+              -Headers $headers -ContentType 'application/json' -Body $payload -TimeoutSec 120
+    $r.JobId = $resp.jobId
+    Log "  queued $group [$template] job $($r.JobId)"
+    while ($true) {
+      Start-Sleep -Seconds $PollSec
+      $job = (Invoke-RestMethod -Uri "$ApiHost/api/pubbot/jobs/$($r.JobId)" -Headers $headers -TimeoutSec 120).job
+      if ((Count-Running $job) -eq 0) {
+        $r.Status = $job.Status
+        $r.Errors = Get-TreeErrors $job
+        break
+      }
+    }
+  }
+  catch {
+    $r.Status = 'FAILED'
+    $r.Errors = "$_"
+  }
+  $r.Minutes = [math]::Round(((Get-Date) - $started).TotalMinutes, 1)
+  Log "  done $group [$template] $($r.Status) $($r.Minutes) min$(if ($r.Errors) { " ERRORS: $($r.Errors)" })"
+  return $r
+}
+
+try {
+  Log "fleet publish starting -- $($SITES.Count) group(s)$(if ($Only) { " (single group: $Only)" })"
   $key = (aws secretsmanager get-secret-value --secret-id $SecretId --region us-west-1 --query SecretString --output text | ConvertFrom-Json).api_key
   if (-not $key) { throw "could not read api_key from secret $SecretId" }
   $headers = @{ 'X-API-Key' = $key }
 
-  # ---- 1. queue every group up front ----------------------------------------------------------
-  # PubBot drains its own queue; the 2026-08-25T01:05Z run queued all 14 at one instant and finished
-  # in 30 minutes wall clock. Queueing up front keeps that shape instead of serializing by hand.
+  # ---- 1. publish, one group at a time, templates in order ------------------------------------
   foreach ($s in $SITES) {
-    # Spaces are escaped; the literal '+' in "Upload Preview + Final" is legal in a path segment.
-    $tmpl = $s.Template -replace ' ', '%20'
-    $url = "$ApiHost/api/pubbot/groups/$($s.Group)/jobs/$tmpl"
-    # IIS answers a bodyless POST with 411 Length Required, so send an explicit empty JSON body.
-    $resp = Invoke-RestMethod -Uri $url -Method Post -Headers $headers -ContentType 'application/json' -Body '{}' -TimeoutSec 120
-    $s.JobId = $resp.jobId
-    $s.Queued = Get-Date
-    Log "queued $($s.Group) [$($s.Template)] job $($s.JobId)"
-  }
-
-  # ---- 2. poll each job to real completion -----------------------------------------------------
-  $pending = [System.Collections.ArrayList]@($SITES)
-  while ($pending.Count -gt 0) {
-    Start-Sleep -Seconds $PollSec
-    foreach ($s in @($pending)) {
-      $job = (Invoke-RestMethod -Uri "$ApiHost/api/pubbot/jobs/$($s.JobId)" -Headers $headers -TimeoutSec 120).job
-      $running = Count-Running $job
-      if ($running -eq 0) {
-        $s.Finished = Get-Date
-        $s.Minutes = [math]::Round(($s.Finished - $s.Queued).TotalMinutes, 1)
-        $s.Status = $job.Status
-        # Surface any error text carried anywhere in the tree, not just at the root.
-        $errs = @()
-        $stack = New-Object System.Collections.Stack
-        $stack.Push($job)
-        while ($stack.Count -gt 0) {
-          $n = $stack.Pop()
-          if ($n.ErrorMessage) { $errs += $n.ErrorMessage }
-          foreach ($c in @($n.Children)) { if ($c) { $stack.Push($c) } }
-        }
-        $s.Errors = ($errs | Select-Object -Unique) -join '; '
-        Log "done  $($s.Group)  $($s.Status)  $($s.Minutes) min$(if($s.Errors){" ERRORS: $($s.Errors)"})"
-        $pending.Remove($s)
-      }
+    Log "$($s.Group): $($s.Templates -join ' then ')"
+    $s.Jobs = @()
+    foreach ($t in $s.Templates) {
+      $res = Invoke-PubBotJob $s.Group $t
+      $s.Jobs += $res
+      # Running Upload Final after a failed Upload Preview would publish from a tier that was not
+      # refreshed, so stop this group here and let the rest of the fleet carry on.
+      if ($res.Status -ne 'eCompleteOK') { Log "  skipping remaining templates for $($s.Group)"; break }
     }
-    if ($pending.Count -gt 0) { Log "waiting on: $(($pending | ForEach-Object { $_.Group }) -join ', ')" }
+    $bad = @($s.Jobs | Where-Object { $_.Status -ne 'eCompleteOK' -or $_.Errors })
+    $s.Status = if ($s.Jobs.Count -eq $s.Templates.Count -and $bad.Count -eq 0) { 'eCompleteOK' } else { 'FAILED' }
+    # Summed by hand: Measure-Object -Property reads object properties, not hashtable keys, and
+    # throws "the property Minutes cannot be found" on these job records.
+    $mins = 0.0
+    foreach ($j in $s.Jobs) { $mins += $j.Minutes }
+    $s.Minutes = [math]::Round($mins, 1)
+    $s.Errors = (($s.Jobs | Where-Object { $_.Errors } | ForEach-Object { "$($_.Template): $($_.Errors)" }) -join '; ')
   }
   Log "all jobs finished"
 
-  # ---- 3. verify the bundle actually landed on each public site --------------------------------
+  # ---- 2. verify the bundle actually landed on each public site --------------------------------
   # One re-check after a pause: the upload invalidates CloudFront, and an edge that has not settled
   # can still hand back the previous HTML for a few seconds. This is cache settling, not a retry loop.
   foreach ($s in $SITES) {
-    $v = Test-Bundle $s.Public
-    if (-not $v.Ok) {
-      Start-Sleep -Seconds 60
+    try {
       $v = Test-Bundle $s.Public
+      if (-not $v.Ok) { Start-Sleep -Seconds 60; $v = Test-Bundle $s.Public }
+      $s.BundleOk = $v.Ok
+      $s.Thumb = $v.Thumb
     }
-    $s.BundleOk = $v.Ok
-    $s.Thumb = $v.Thumb
-    Log "verify $($s.Group)  $($s.Public)  dist/$($v.Thumb)  marker=$(if($v.Ok){'PRESENT'}else{'ABSENT'})"
+    catch {
+      $s.BundleOk = $false
+      $s.Thumb = "(check failed: $_)"
+    }
+    Log "verify $($s.Group)  $($s.Public)  dist/$($s.Thumb)  marker=$(if ($s.BundleOk) { 'PRESENT' } else { 'ABSENT' })"
   }
-
-  $results = $SITES
 }
 catch {
   Log "ERROR: $_"
-  $results = $SITES
 }
 
-# ---- 4. email the summary ----------------------------------------------------------------------
+# ---- 3. email the summary ----------------------------------------------------------------------
 # ASCII only in everything that reaches the mail body. A non-ASCII character in a .ps1 read as CP1252
 # is what silently broke the daily soak mail for a month in 2026.
 try {
   $env:GOG_KEYRING_PASSWORD = (Get-Content C:\cowork\env\gog-keyring.pass -Raw).Trim()
   $H = 'C:\cowork\env\.gog'
   $date = (Get-Date).ToString('yyyy-MM-dd')
+  $scope = if ($Only) { " ($Only only)" } else { '' }
 
-  $bad = @($results | Where-Object { $_.Status -ne 'eCompleteOK' -or -not $_.BundleOk -or $_.Errors })
-  $verdict = if ($bad.Count -eq 0) { "GREEN -- $($results.Count) sites published, new bundle live on all" }
-             else { "RED -- $($bad.Count) of $($results.Count) sites need a look" }
+  $bad = @($SITES | Where-Object { $_.Status -ne 'eCompleteOK' -or -not $_.BundleOk })
+  $verdict = if ($bad.Count -eq 0) { "GREEN -- $($SITES.Count) site(s) published, new bundle live on all" }
+             else { "RED -- $($bad.Count) of $($SITES.Count) site(s) need a look" }
   $vc = if ($bad.Count -eq 0) { '#0ca30c' } else { '#d03b3b' }
 
-  $rows = ($results | ForEach-Object {
-    $jobCell = if ($_.Status) { $_.Status } else { 'NOT FINISHED' }
+  $rows = ($SITES | ForEach-Object {
+    $jobCell = if ($_.Status) { $_.Status } else { 'NOT RUN' }
     $bundleCell = if ($_.BundleOk) { 'new bundle' } else { 'OLD BUNDLE' }
-    $rowColor = if ($_.Status -eq 'eCompleteOK' -and $_.BundleOk -and -not $_.Errors) { '#52514e' } else { '#d03b3b' }
-    "<tr style='color:$rowColor'><td>$($_.Group)</td><td>$($_.Template)</td><td>$jobCell</td><td align='right'>$($_.Minutes)</td><td>$bundleCell</td><td>dist/$($_.Thumb)</td><td>$($_.Errors)</td></tr>"
+    $rowColor = if ($_.Status -eq 'eCompleteOK' -and $_.BundleOk) { '#52514e' } else { '#d03b3b' }
+    $tmplCell = ($_.Templates -join ' + ')
+    "<tr style='color:$rowColor'><td>$($_.Group)</td><td>$tmplCell</td><td>$jobCell</td><td align='right'>$($_.Minutes)</td><td>$bundleCell</td><td>dist/$($_.Thumb)</td><td>$($_.Errors)</td></tr>"
   }) -join "`n"
 
   $body = @"
 <div style='font:14px system-ui,Segoe UI,sans-serif'>
-<b style='color:$vc'>Fleet publish $date -- $verdict.</b>
+<b style='color:$vc'>Fleet publish $date$scope -- $verdict.</b>
 <p style='color:#52514e'>Bundle + Estimator publish (svn r9118: Turnstile beacon api-blocked / api-timeout reasons and ms timing).
 The "bundle" column is a fetch of each public site's master.bundle.min.js checking for code that exists only in r9118.
 A site can report eCompleteOK and still serve the old file, so that column, not the job status, is the one that says the publish did its job.</p>
 <table cellpadding='5' cellspacing='0' style='font:13px system-ui,Segoe UI,sans-serif;border-collapse:collapse'>
-<tr style='text-align:left;color:#898781'><th>group</th><th>template</th><th>job</th><th>min</th><th>bundle</th><th>thumbprint</th><th>errors</th></tr>
+<tr style='text-align:left;color:#898781'><th>group</th><th>templates</th><th>jobs</th><th>min</th><th>bundle</th><th>thumbprint</th><th>errors</th></tr>
 $rows
 </table>
 <p style='color:#898781'>Log: $log</p>
 </div>
 "@
 
-  $subj = "Fleet publish $date -- $(if ($bad.Count -eq 0) { 'all green' } else { "$($bad.Count) need a look" })"
+  $subj = "Fleet publish $date$scope -- $(if ($bad.Count -eq 0) { 'all green' } else { "$($bad.Count) need a look" })"
   Log "emailing '$subj' to $MailTo via gog"
   & gog --home $H --client eightfold -a $MailTo gmail send --to $MailTo --subject $subj --body-html $body 2>&1 |
     ForEach-Object { Log "  gog: $_" }
