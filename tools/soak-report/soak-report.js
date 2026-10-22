@@ -91,6 +91,11 @@ const layerOf = (_system) => 'app';   // edge=WAF, app=Turnstile; edge added whe
 
 const now = Date.now(), startMs = now - HOURS * 3600 * 1000;
 const twStartMs = now - TW_HOURS * 3600 * 1000;
+// CF GraphQL rejects a range wider than 1w1h, and `date_geq` is INCLUSIVE whole calendar days --
+// so a --hours 168 start date spans 8 days and the whole issuance leg errors out to 0. Clamp the CF
+// leg to 6 days back (<=7 inclusive days) independently of HOURS; the lifecycle caveat prints the
+// date actually queried.
+const cfStartMs = Math.max(startMs, now - 6 * 24 * 3600 * 1000);
 const aws = (a) => JSON.parse(execFileSync('aws', a.concat(['--region', REGION, '--output', 'json']), { encoding: 'utf8', maxBuffer: 64 << 20 }));
 const iso = (ms) => new Date(ms).toISOString();
 const sleep = (ms) => execFileSync(process.execPath, ['-e', `setTimeout(()=>{},${ms})`]);
@@ -167,7 +172,7 @@ const alarms = tryd('alarms', () => (aws(['cloudwatch', 'describe-alarms', '--al
 const cfRowsRaw = tryd('CF issuance', () => {
   const { account_id, api_token } = JSON.parse(aws(['secretsmanager', 'get-secret-value', '--secret-id', 'cloudflare/api', '--query', 'SecretString']));
   const body = execFileSync('curl', ['-s', '-H', `Authorization: Bearer ${api_token}`, '-H', 'Content-Type: application/json',
-    '--data', JSON.stringify({ query: `{ viewer { accounts(filter:{accountTag:"${account_id}"}) { turnstileAdaptiveGroups(limit:200, filter:{date_geq:"${iso(startMs).slice(0, 10)}"}) { count dimensions { action } } } } }` }),
+    '--data', JSON.stringify({ query: `{ viewer { accounts(filter:{accountTag:"${account_id}"}) { turnstileAdaptiveGroups(limit:200, filter:{date_geq:"${iso(cfStartMs).slice(0, 10)}"}) { count dimensions { action } } } } }` }),
     'https://api.cloudflare.com/client/v4/graphql'], { encoding: 'utf8', maxBuffer: 32 << 20 });
   const j = JSON.parse(body); if (j.errors) throw new Error(JSON.stringify(j.errors).slice(0, 120));
   return ((((j.data || {}).viewer || {}).accounts || [])[0] || { turnstileAdaptiveGroups: [] }).turnstileAdaptiveGroups;
@@ -707,7 +712,7 @@ ${tokenlessSection()}
 
 <h2>Full form lifecycle <span class="muted">(per form · exact numbers)</span></h2>
 <p class="sub">Cloudflare issuance → client gate (widget) → server gate (siteverify), per discovered form. A silent server cell reads <b>awaiting</b> only when that producer log group does not exist yet; when the group is live and merely had no traffic it reads <b>zero</b> with the group's last-event time -- a trustworthy zero, not a blind spot.<br>
-<b>Window caveat:</b> the Cloudflare column comes from <code>turnstileAdaptiveGroups</code>, which is <b>day-granular and fleet-wide</b> (whole calendar days from ${esc(iso(startMs).slice(0, 10))}, every host, both tiers) -- the beacon and server columns are the exact ${esc(HOURS)}h window. Issued ≫ beacon is expected and the ratio is <i>not</i> a drop-off rate.</p>
+<b>Window caveat:</b> the Cloudflare column comes from <code>turnstileAdaptiveGroups</code>, which is <b>day-granular and fleet-wide</b> (whole calendar days from ${esc(iso(cfStartMs).slice(0, 10))}, every host, both tiers) -- the beacon and server columns are the exact ${esc(HOURS)}h window.${cfStartMs > startMs ? ` The Cloudflare start is clamped to 6 days back (its API caps a query at 1w1h), so on a ${esc(HOURS)}h run this column covers <b>less</b> time than the rest of the report.` : ''} Issued ≫ beacon is expected and the ratio is <i>not</i> a drop-off rate.</p>
 <div class="key" style="display:flex;gap:16px;flex-wrap:wrap;font-size:.76em;color:var(--ink2);margin:4px 0 10px">
   <span class="o ok"><b>●</b>allowed</span>
   <span class="o enf"><b>◑</b>${enforceActive ? 'allowed this event' : 'allow now → 403 Enforce'}</span>
