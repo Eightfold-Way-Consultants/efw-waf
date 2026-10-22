@@ -2,5 +2,4 @@ logs/
 *.output
 
 # soak-report runtime artifacts
-tools/soak-report/soak-mail.log
 cloudformation/www-redirect/__pycache__/

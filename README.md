@@ -104,9 +104,10 @@ twin. Production groups have subscription filters to Firehose into the S3 lake a
 table; preview groups have none, which is what keeps preview data out of production analytics.
 
 `tools/soak-report/` renders the whole funnel (Cloudflare issuance -> client widget beacon ->
-server verify) as a self-contained HTML report, emailed daily at 07:37 by the `EFW-SoakReport`
-scheduled task. See `tools/soak-report/` and the alarms `logon-widget-failed-spike` /
-`logon-verify-absent-spike`.
+server verify) as a self-contained HTML report. `soak-mail.py` mails a 168-hour summary to
+jeastman@eightfoldway.com Mondays at 07:37, run by launchd on figaro (job `soak-report` in
+`~/machine/gen-backup-agents.sh`; log `~/Library/Logs/claude-rc/soak-report.log`). See
+`tools/soak-report/` and the alarms `logon-widget-failed-spike` / `logon-verify-absent-spike`.
 
 WAF and CloudFront logs land in S3 and are queryable through Athena (`efw_waf_logs`, workgroup
 `efw-diagnostics`) -- see `cloudformation/diagnostics.yaml`.

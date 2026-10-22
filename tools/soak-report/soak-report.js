@@ -30,8 +30,11 @@
  * forward-compat cross-lake path (WAF edge layer).
  *
  * "Organic" = ua~/curl/ excluded. Deps: none (shells out to `aws` CLI + `curl`). Output: one rich
- * self-contained HTML (inline CSS + SVG) that renders identically in a browser and in the PDF that
- * soak-mail.ps1 produces via headless Chromium. (The old email-safe --email render is retired.)
+ * self-contained HTML (inline CSS + SVG) for the browser, plus with --email-out an email-safe
+ * variant (inline styles + tables, literal hex; Gmail strips <style>, var(), grid, flex and SVG).
+ * The email cannot carry the SVG, so it holds placeholders that soak-mail.py fills: {{FLOW_IMG}}
+ * (a hosted PNG of the combined flow card; the <!--FLOW-->...<!--/FLOW--> block is dropped if
+ * that fails), {{FULL_URL}} (link to the rich report) and <!--SIGNATURE-->.
  */
 'use strict';
 const { execFileSync } = require('child_process');
@@ -47,6 +50,7 @@ const ENV = (opt('env', 'prod') === 'preview') ? 'preview' : 'prod';
 const ACCOUNTS = args.includes('--accounts');   // opt-in: query logon2.AspNetUsers via SSM/DB (breaks all-API purity)
 const HOURS = parseInt(opt('hours', '72'), 10);
 const OUT = opt('out', `soak-report-${ENV}.html`);
+const EMAIL_OUT = opt('email-out', null);         // also write the email-safe render here
 const REGION = 'us-west-1';
 const CFG = { prod: { label: 'production' }, preview: { label: 'preview' } }[ENV];
 
@@ -745,5 +749,102 @@ Regenerate: <code>node soak-report.js --env ${ENV} --hours ${HOURS}</code> &midd
 </div>
 </div></body></html>`;
 
+// ---- email-safe render: inline styles + tables only, literal hex (Gmail strips everything else) ----
+function emailHtml() {
+  const C = { s1: '#2a78d6', s2: '#1baf7a', s3: '#c07d00', s5: '#4a3aa7', s6: '#d63a39', good: '#0ca30c', warn: '#c47000', crit: '#c8322f', ink: '#111111', ink2: '#4a4a47', mut: '#7a7873', line: '#dedcd4', card: '#ffffff', plane: '#f3f3f1' };
+  const vC = verdict === 'good' ? C.good : verdict === 'warning' ? C.warn : C.crit;
+  const td = 'padding:5px 8px;border-bottom:1px solid ' + C.line;
+  const et = (val, lbl, sub, col) => `<td width="50%" style="padding:5px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${C.line};border-radius:8px;background:${C.card}"><tr><td style="padding:9px 12px">
+    <div style="font-size:21px;font-weight:700;color:${col || C.ink};line-height:1.15">${val}</div>
+    <div style="font-size:12px;color:${C.ink2};margin-top:2px">${esc(lbl)}</div>
+    ${sub ? `<div style="font-size:11px;color:${C.mut};margin-top:3px">${esc(sub)}</div>` : ''}</td></tr></table></td>`;
+  const rows2 = (cells) => { let o = ''; for (let i = 0; i < cells.length; i += 2) o += `<tr>${cells[i]}${cells[i + 1] || '<td width="50%"></td>'}</tr>`; return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${o}</table>`; };
+  const bar = (segs) => { const t = segs.reduce((a, s) => a + s.n, 0) || 1; const on = segs.filter(s => s.n); return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="table-layout:fixed;border-collapse:separate;border-spacing:2px 0"><tr>${on.length ? on.map(s => `<td style="background:${s.color};height:15px;border-radius:3px;width:${Math.max(2, Math.round(s.n / t * 100))}%;font-size:0;line-height:0">&nbsp;</td>`).join('') : `<td style="background:${C.line};height:15px">&nbsp;</td>`}</tr></table>`; };
+  const legend = (segs) => `<div style="font-size:11px;color:${C.ink2};margin-top:6px">${segs.map(s => `<span style="white-space:nowrap"><span style="color:${s.color};font-size:13px">&#9632;</span> ${esc(s.label)} <b>${fmt(s.n)}</b></span>`).join('&nbsp;&nbsp;&nbsp;')}</div>`;
+  const h2 = (t, sub) => `<div style="font-size:15px;font-weight:700;color:${C.ink};margin:22px 0 8px">${t}${sub ? ` <span style="font-weight:400;color:${C.mut}">${sub}</span>` : ''}</div>`;
+  const note = (t) => `<div style="font-size:11px;color:${C.mut};margin-top:6px">${t}</div>`;
+
+  const kpis = rows2([
+    et(fmt(vPass), 'server pass', 'register+forgot, organic', C.good),
+    et(fmt(vFail), 'server fail', 'invalid token', vFail > TH.failRed ? C.crit : vFail ? C.warn : C.good),
+    et(fmt(absentTotal), 'tokenless (absent)', 'all surfaces', absentTotal > TH.absentYellow ? C.warn : C.ink),
+    et(fmt(vBlocked), 'server 403s served', vBlocked ? 'actual blocks (allowed=false)' : (enforceActive ? 'none in window' : 'Observe: recorded, not blocked'), vBlocked ? C.warn : C.good),
+    et(fmt(vRl429), '429 rate-limit', 'Logon per-IP throttle', vRl429 ? C.warn : C.good),
+    et(fmt(vRl), 'ratelimited softpass', 'allowed through', vRl >= TH.ratelimitedRed ? C.crit : C.good),
+    et(combined.beaconTot ? Math.round(combined.solved * 100 / combined.beaconTot) + '%' : '--', 'beacon solve-rate', `${fmt(combined.solved)}/${fmt(combined.beaconTot)} all forms`),
+    et(alarmFiring ? 'FIRING' : 'OK', 'alarms', alarms.map(a => a.name.replace('logon-', '')).join(', ') || 'n/a', alarmFiring ? C.crit : C.good),
+  ]);
+  const prevSegs = [{ n: allowedHuman, color: C.s2, label: 'human verified' }, { n: preventClient, color: C.s6, label: 'client-gate blocked' }, { n: preventServer, color: C.s3, label: 'server-gate (tokenless/invalid)' }];
+
+  // lifecycle: one row per discovered form, same data as lifecycleRow() in the rich report
+  const lc = allEps.map(ep => {
+    const b = beaconByAction[ep] || {}, bTot = (b.solved || 0) + (b.failed || 0), sys = serverOf[ep];
+    let sv;
+    if (sys) {
+      const s = serverByKey[sys + '|' + ep] || {}, t = oc => (s[oc] ? s[oc].a + s[oc].b : 0);
+      const blk = Object.keys(s).reduce((a, oc) => a + s[oc].b, 0);
+      sv = ['pass', 'pass-ratelimited', 'bypassed-auth', 'fail', 'absent'].filter(k => t(k) || k === 'pass').map(k => `${esc(k)} <b>${fmt(t(k))}</b>`).join(' &middot; ')
+        + (blk ? ` &middot; <b style="color:${C.crit}">${fmt(blk)} 403'd</b>` : '') + (sys !== 'logon' ? ` <span style="color:${C.mut}">(${esc(sys)})</span>` : '');
+    } else sv = `<span style="color:${C.mut}">${silentServerVal}: ${silentServerNote()}</span>`;
+    return `<tr><td style="${td};font-weight:600">${esc(ep)}</td><td style="${td};text-align:right">${fmt(cfByEp[ep] || 0)}</td><td style="${td};text-align:right">${bTot ? `${fmt(b.solved || 0)}/${fmt(bTot)} <span style="color:${C.mut}">(${Math.round((b.solved || 0) * 100 / bTot)}%)</span>` : '--'}</td><td style="${td}">${sv}</td></tr>`;
+  }).join('');
+
+  const failRows = beaconFailRows.map(r => `<tr><td style="${td}">${esc(r.action)}</td><td style="${td}">${esc(r.reason || '(none)')}</td><td style="${td};text-align:right">${fmt(r.n)}</td></tr>`).join('');
+
+  const twSegs = [{ n: twReached, color: C.s2, label: 'reached siteverify' }, { n: twRobot, color: C.s6, label: 'Turnstile-blocked' }, { n: Math.max(0, twHostile - twRobot), color: C.s3, label: 'rejected pre-gate' }];
+  const twTiles = rows2([
+    et(fmt(twTotal), 'total requests', `retained ${TW_HOURS / 24}d, not ${HOURS}h`, twHostilePct >= 80 ? C.crit : C.ink),
+    et(twHostilePct != null ? twHostilePct + '%' : '--', 'hostile / non-legit', `${fmt(twHostile)} never reached siteverify`, twHostilePct >= 80 ? C.crit : C.warn),
+    et(fmt(twRobot), 'Turnstile robot-blocks', twRobot ? 'gate denied (Require)' : 'none in window', twRobot ? C.good : C.ink),
+    et(fmt(twSqliTotal), 'SQLi probes', 'in validationType field', twSqliTotal ? C.crit : C.good),
+    et(esc(twModeLive), 'live mode (inferred)', 'newest signal', twModeLive === 'Require' ? C.good : twModeLive === 'Observe' ? C.warn : C.ink),
+    et(fmt(twReached), 'reached siteverify', `${fmt(twPass)} passed`, C.good),
+  ]);
+  const exitRows = twExits.slice(0, 8).map(e => `<tr><td style="${td}">${esc(e.ex)}</td><td style="${td};text-align:right">${fmt(e.n)}</td></tr>`).join('');
+  const cfClamp = cfStartMs > startMs ? ` Cloudflare column covers from ${esc(iso(cfStartMs).slice(0, 10))} only (its API caps a query at 1w1h).` : '';
+
+  return `<!doctype html><html><body style="margin:0;padding:0;background:${C.plane};font-family:-apple-system,'Segoe UI',Arial,sans-serif;color:${C.ink}">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${C.plane}"><tr><td align="center" style="padding:16px">
+<table role="presentation" width="680" cellpadding="0" cellspacing="0" style="width:680px;max-width:100%;background:${C.card};border:1px solid ${C.line};border-radius:10px"><tr><td style="padding:22px 22px 26px">
+  <div style="font-size:20px;font-weight:700">Turnstile soak report</div>
+  <div style="font-size:12px;color:${C.mut};margin:3px 0 14px">${esc(CFG.label)} &middot; ${esc(modeWord)} mode &middot; last ${HOURS}h &middot; ${esc(iso(startMs).slice(0, 16))}Z to ${esc(iso(now).slice(0, 16))}Z</div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${vC};border-radius:8px"><tr><td style="padding:12px 16px;color:#ffffff;font-weight:700;font-size:15px">${esc(verdictText.replace(/\u2014/g, '--'))}</td></tr></table>
+  <div style="height:12px"></div>
+  ${kpis}
+  ${flags.length ? `<div style="margin-top:10px">${flags.map(f => `<div style="padding:8px 12px;border-left:3px solid ${f.sev === 'critical' ? C.crit : C.warn};background:${C.plane};border-radius:4px;font-size:12px;margin-bottom:5px"><b>${f.sev.toUpperCase()}</b> -- ${esc(f.msg)}</div>`).join('')}</div>` : note('No threshold flags -- all watch signals nominal.')}
+
+  <!--FLOW-->${h2('Stage flow', '(combined, all surfaces)')}
+  <img src="{{FLOW_IMG}}" width="636" alt="Turnstile stage flow diagram" style="display:block;width:100%;max-width:636px;height:auto;border:1px solid ${C.line};border-radius:8px"><!--/FLOW-->
+
+  ${h2('Bot / non-human prevention', '(two gates, auth forms)')}
+  ${bar(prevSegs)}${legend(prevSegs)}
+  ${note(`Client gate blocks page-loading bots that fail the widget (mode-independent). Server gate blocks direct-to-server tokenless/invalid POSTs ${enforceActive ? '(403, live)' : '(403 only under Enforce)'}. "Client-gate blocked" includes real users whose widget failed.`)}
+
+  ${h2('Full form lifecycle', '(per form)')}
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:12px"><tr style="color:${C.mut}"><td style="padding:4px 8px">form</td><td style="padding:4px 8px;text-align:right">CF issued</td><td style="padding:4px 8px;text-align:right">widget solved</td><td style="padding:4px 8px">server gate</td></tr>${lc || `<tr><td style="${td};color:${C.mut}" colspan="4">No Turnstile events in the window.</td></tr>`}</table>
+  ${note(`Cloudflare issuance is day-granular and fleet-wide, so issued is much larger than beacons by design; the ratio is not a drop-off rate.${cfClamp}`)}
+
+  ${h2('Beacon failure reasons', '(by form)')}
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:12px">${failRows || `<tr><td style="${td};color:${C.mut}">no organic beacon failures</td></tr>`}</table>
+
+  ${h2('Feedback proxy pre-gate', `(twproxy &middot; ${ENV === 'prod' ? 'web-06 public' : 'web-04 preview2'} &middot; retained ${TW_HOURS / 24}d)`)}
+  ${twTiles}
+  <div style="height:8px"></div>
+  ${bar(twSegs)}${legend(twSegs)}
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:12px;margin-top:10px">${exitRows || `<tr><td style="${td};color:${C.mut}">no exits</td></tr>`}</table>
+  ${note(`Covers the twproxy group's full ${TW_HOURS / 24}-day retention, not the ${HOURS}h window above.`)}
+
+  ${warn.length ? h2('Data warnings') + `<div style="font-size:11px;color:${C.mut}">${warn.map(w => esc(w)).join('<br>')}</div>` : ''}
+
+  <div style="font-size:11px;color:${C.mut};margin-top:22px;border-top:1px solid ${C.line};padding-top:12px">
+  Per-site breakdown, daily trend and per-surface flow diagrams are in the <a href="{{FULL_URL}}" style="color:${C.s1}">full interactive report</a> (tailnet). Verdict is computed on the Logon auth surface (register+forgot). Regenerate: <code>node soak-report.js --env ${ENV} --hours ${HOURS}</code>. Generated ${esc(iso(now).slice(0, 16))}Z.
+  </div>
+  <!--SIGNATURE-->
+</td></tr></table>
+</td></tr></table>
+</body></html>`;
+}
+
 fs.writeFileSync(OUT, html);
+if (EMAIL_OUT) fs.writeFileSync(EMAIL_OUT, emailHtml());
 console.log(`wrote ${OUT}  verdict=${verdict}  mode=${modeWord}  auth pass=${vPass} fail=${vFail} absent=${vAbsent} rl=${vRl} 429=${vRl429} 403s=${vBlocked}  prevented=${preventedTotal} (client ${preventClient}/server ${preventServer})  forms=${allEps.length} [${allEps.join(',')}]  systems=[${systemsWithServer.join(',')||'none'}]  sites=${sites.length}  twproxy=${twTotal}req/${twHostilePct}%hostile  warnings=${warn.length}`);
