@@ -120,7 +120,7 @@ def main():
         full = url_of(run(["figaro-share", rich], 300))
         body = body.replace("{{FULL_URL}}", full).replace("<!--SIGNATURE-->", fm.signature())
 
-        subject = f"Turnstile soak {verdict}, week ending {date}"
+        subject = f"Turnstile weekly: {verdict}, week ending {date}"
         if "--no-send" in args:
             with open(email, "w", encoding="utf-8") as f:
                 f.write(body)
