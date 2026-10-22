@@ -1,5 +1,8 @@
 # soak-mail.ps1 -- generate the prod Turnstile soak report, render it to a PDF, and email the PDF to
-# Jack's work inbox via gog. Runs daily via Windows Task Scheduler (task "EFW-SoakReport").
+# Jack's work inbox via gog. Runs weekly (Mon) via Windows Task Scheduler (task "EFW-SoakReport").
+#
+# Window is 168h (7d) to match the weekly cadence. Do NOT raise it: the Cloudflare GraphQL leg
+# rejects ranges wider than 1w1h and silently returns issuance=0 for every form.
 #
 # Delivery is now a PDF ATTACHMENT (not an HTML email body): the rich self-contained report renders
 # identically in the browser and in the PDF via headless Chromium, so there is no more Gmail-CSS
@@ -25,9 +28,9 @@ try {
   $pdf  = Join-Path $dir "soak-report-prod-$date.pdf"
 
   # 1. generate the single rich, self-contained HTML (no --email -- that render is retired).
-  Log "generating report (node soak-report.js --env prod --hours 24)..."
+  Log "generating report (node soak-report.js --env prod --hours 168)..."
   Push-Location $dir
-  $nodeOut = & node soak-report.js --env prod --hours 24 --out $html 2>&1
+  $nodeOut = & node soak-report.js --env prod --hours 168 --out $html 2>&1
   Pop-Location
   $nodeOut | ForEach-Object { Log "  node: $_" }
   if (-not (Test-Path $html)) { throw "report HTML not generated: $html" }
@@ -40,7 +43,7 @@ try {
   $vColor = @{ good = '#0ca30c'; warning = '#e08600'; critical = '#d03b3b'; unknown = '#52514e' }
   $verdictText = $vMap[$verdict]; if (-not $verdictText) { $verdictText = 'report generated' }
   $vc = $vColor[$verdict]; if (-not $vc) { $vc = '#52514e' }
-  $body = "<div style='font:14px system-ui,Segoe UI,sans-serif'><b style='color:$vc'>Turnstile soak $date -- $verdictText.</b><br>$counts<br><span style='color:#898781'>Full report attached (PDF). Regenerate: node soak-report.js --env prod --hours 24</span></div>"
+  $body = "<div style='font:14px system-ui,Segoe UI,sans-serif'><b style='color:$vc'>Turnstile soak, week ending $date -- $verdictText.</b><br>$counts<br><span style='color:#898781'>Full report attached (PDF). Regenerate: node soak-report.js --env prod --hours 168</span></div>"
 
   # 2. render the HTML to a PDF via headless Chromium (Playwright chromium is cached on the box).
   # A3-portrait is ~1123px wide, fitting the 1040px report at full width; print CSS in the report
@@ -56,7 +59,7 @@ try {
   Log "PDF ready: $pdf ($((Get-Item $pdf).Length) bytes)"
 
   # 3. email the PDF as an attachment via gog (eightfold client). Body is the one-line verdict.
-  $subj = "Turnstile soak report $date"
+  $subj = "Turnstile soak report (week ending $date)"
   Log "sending '$subj' to jeastman@eightfoldway.com via gog (eightfold), attaching PDF..."
   & gog --home $H --client eightfold -a jeastman@eightfoldway.com gmail send `
       --to jeastman@eightfoldway.com --subject $subj --attach $pdf --body-html $body 2>&1 |
