@@ -71,6 +71,7 @@ Both tiers run the same 12-rule pipeline, in Block. Live as-built:
 | 9 | `Challenge-Estimator` | Challenge | `/planning/*`. The centerpiece. |
 | 10 | `RateLimit-Estimator` | Block | 1000 per 300s per IP. |
 | 11 | `RateLimit` | Block | 1000 per 300s per IP. General backstop, not a bot tool. |
+| 13 | `RateLimit-SearchApi` | Block | 100 per 300s per IP on `/search-api/*` (CR-2026-06 site search, origin `search-api.hb101.org`). figaro (`45.28.138.65`) exempt via `efw-<env>-search-api-exempt`; no exemption by API-key header (anyone can send it). Live on both tiers 2026-11-06. |
 
 **Deliberate Count pins inside CommonRuleSet** (they look like oversights otherwise):
 
