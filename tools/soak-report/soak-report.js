@@ -2,6 +2,7 @@
 /*
  * Turnstile soak report — reproducible, all-API (no SSM in core), self-contained HTML.
  *   node soak-report.js [--env prod|preview] [--hours 72] [--out file.html] [--accounts]
+ *     [--email-out email.html] [--history history.jsonl]
  *
  * ONE unified server-gate telemetry view across every surface that enforces Turnstile:
  *   Logon (register/forgot/resend) · estimator (share) · twproxy (feedback) · pdfreport (pdfshare).
@@ -26,10 +27,9 @@
  * plain text) + CloudWatch alarms. The new groups do not exist until their apps deploy; queries
  * against a missing group are swallowed and the surface renders "awaiting data" (never n/a, never
  * an error). The combined Athena `events` table (logon-telemetry.yaml) is the durable cross-surface
- * sink; this report uses per-group Insights for the live view. See athenaQueryStub() for the
- * forward-compat cross-lake path (WAF edge layer).
+ * sink: this report reads it through athena() for the 4-week baselines, beside the WAF edge logs.
  *
- * "Organic" = ua~/curl/ excluded. Deps: none (shells out to `aws` CLI + `curl`). Output: one rich
+ * "Organic" = curl user-agents and the house/figaro IP excluded. Deps: none (shells out to `aws` CLI + `curl`). Output: one rich
  * self-contained HTML (inline CSS + SVG) for the browser, plus with --email-out an email-safe
  * variant (inline styles + tables, literal hex; Gmail strips <style>, var(), grid, flex and SVG).
  * The email cannot carry the SVG, so it holds placeholders that soak-mail.py fills: {{FLOW_IMG}}
@@ -51,6 +51,7 @@ const ACCOUNTS = args.includes('--accounts');   // opt-in: query logon2.AspNetUs
 const HOURS = parseInt(opt('hours', '72'), 10);
 const OUT = opt('out', `soak-report-${ENV}.html`);
 const EMAIL_OUT = opt('email-out', null);         // also write the email-safe render here
+const HISTORY = opt('history', null);             // append this run's numbers as one JSON line
 const REGION = 'us-west-1';
 const CFG = { prod: { label: 'production' }, preview: { label: 'preview' } }[ENV];
 
@@ -86,8 +87,14 @@ const sysSort = (a, b) => (SYS_ORDER.indexOf(a) + 1 || 99) - (SYS_ORDER.indexOf(
 const epSort = (a, b) => (EP_ORDER.indexOf(a) + 1 || 99) - (EP_ORDER.indexOf(b) + 1 || 99) || a.localeCompare(b);
 const MOUNTFAIL = new Set(['not-loaded', 'not-mounted', 'notloaded', 'notmounted']);  // beacon reasons that mean the widget never rendered
 
-const TH = { failRed: 10, absentYellow: 40, ratelimitedRed: 1 };
-const BLOT = args.includes('--allua') ? 'ispresent(type)' : 'not (ua like /curl/)';
+const TH = { failRed: 10, absentYellow: 40, ratelimitedRed: 1,
+  minCount: 3,            // fewer than this is never worth a line in Needs attention
+  silenceRatio: 0.25,     // a form's passes below this share of its usual week = possible breakage
+  silenceMinMedian: 10,   // ...only for forms busy enough that a quiet week means something
+};
+// test traffic: curl, and anything from the house/figaro IP (beacons carry no ip, so keep rows without one)
+const HOUSE_IP = '45.28.138.65';
+const BLOT = args.includes('--allua') ? 'ispresent(type)' : `not (ua like /curl/) and (not ispresent(ip) or ip != '${HOUSE_IP}')`;
 
 // derived `layer` axis (forward-compat for WAF unification): a pure function of `system`, NOT a
 // stored field. Every current surface is the app layer; the WAF edge layer prepends later (§5, Future).
@@ -100,8 +107,10 @@ const twStartMs = now - TW_HOURS * 3600 * 1000;
 // leg to 6 days back (<=7 inclusive days) independently of HOURS; the lifecycle caveat prints the
 // date actually queried.
 const cfStartMs = Math.max(startMs, now - 6 * 24 * 3600 * 1000);
-const aws = (a) => JSON.parse(execFileSync('aws', a.concat(['--region', REGION, '--output', 'json']), { encoding: 'utf8', maxBuffer: 64 << 20 }));
+const aws = (a, region = REGION) => JSON.parse(execFileSync('aws', a.concat(['--region', region, '--output', 'json']), { encoding: 'utf8', maxBuffer: 64 << 20 }));
 const iso = (ms) => new Date(ms).toISOString();
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const fmt = (n) => n == null ? '—' : (+n).toLocaleString('en-US');
 const sleep = (ms) => execFileSync(process.execPath, ['-e', `setTimeout(()=>{},${ms})`]);
 const warn = [];
 const tryd = (label, fn, d) => { try { return fn(); } catch (e) { warn.push(label + ': ' + e.message); return d; } };
@@ -137,23 +146,23 @@ const agoWords = (ms) => {
   return h < 1 ? Math.max(1, Math.round(h * 60)) + 'm ago' : h < 48 ? h.toFixed(1) + 'h ago' : Math.round(h / 24) + 'd ago';
 };
 
-// Forward-compat stub: the WAF edge lake is Athena-only, so Athena is the common denominator for
-// cross-LAYER (edge+app) reporting. Unification = adding a source here, not a rewrite. Unused today
-// (the live view reads per-group Insights); wired when the public WAF ACL logs flow (§5, Future phase).
-function athenaQueryStub(sql, { database = 'logon_telemetry', workgroup = 'primary', output = 's3://efw-athena-results/soak/' } = {}) {
-  const start = aws(['athena', 'start-query-execution', '--query-string', sql,
-    '--query-execution-context', `Database=${database}`, '--work-group', workgroup,
-    '--result-configuration', `OutputLocation=${output}`]);
-  const id = start.QueryExecutionId;
-  for (let i = 0; i < 60; i++) {
-    const st = aws(['athena', 'get-query-execution', '--query-execution-id', id]).QueryExecution.Status.State;
-    if (st === 'SUCCEEDED') return aws(['athena', 'get-query-results', '--query-execution-id', id]).ResultSet;
-    if (st === 'FAILED' || st === 'CANCELLED') throw new Error('Athena ' + st);
+// Athena reads the durable sinks: the prod event lake (logon_telemetry, us-west-1, every event since
+// 2026-07-10) for the 4-week baselines, and the WAF logs (efw_waf_logs, us-east-1) for the edge layer.
+// Rows come back as objects keyed by column name.
+function athena(sql, { region = REGION, workgroup = 'logon-telemetry' } = {}) {
+  const id = aws(['athena', 'start-query-execution', '--query-string', sql, '--work-group', workgroup], region).QueryExecutionId;
+  for (let i = 0; i < 120; i++) {
+    const st = aws(['athena', 'get-query-execution', '--query-execution-id', id], region).QueryExecution.Status;
+    if (st.State === 'SUCCEEDED') {
+      // the CLI follows NextToken itself, so this is every row; row 0 is the header
+      const [head, ...rows] = aws(['athena', 'get-query-results', '--query-execution-id', id], region).ResultSet.Rows.map(r => r.Data.map(c => c.VarCharValue));
+      return rows.map(r => Object.fromEntries(head.map((h, i) => [h, r[i]])));
+    }
+    if (st.State === 'FAILED' || st.State === 'CANCELLED') throw new Error(`Athena ${st.State}: ${(st.StateChangeReason || '').slice(0, 160)}`);
     sleep(2000);
   }
   throw new Error('Athena timeout');
 }
-void athenaQueryStub;  // reserved for the edge-layer (WAF) join; see §5 forward-compat / Future phase
 
 // ---- gather: unified per-system event sources ----
 const serverRows = [], beaconRows = [], beaconFailRows = [], rlRows = [], siteRows = [];
@@ -208,6 +217,54 @@ const tRobot = (twRobotLatest[0] && +twRobotLatest[0].t) || 0;
 const tRequireSig = Math.max(tObsFalse, tRobot);
 const twModeLive = (!tObsTrue && !tRequireSig) ? 'unknown' : (tRequireSig >= tObsTrue ? 'Require' : 'Observe');
 
+// ---- baselines: the same per-form counts for each of the 4 weeks before this window (prod lake) ----
+const DAY = 86400000, WEEK = 7 * DAY, baseStartMs = startMs - 4 * WEEK;
+const athDate = (ms) => iso(ms - DAY).slice(0, 10).replace(/-/g, '/');   // partition filter, one day early to be safe
+const median = (a) => { const s = [...a].sort((x, y) => x - y), m = s.length >> 1; return s.length ? (s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2) : 0; };
+const tsMs = 'to_unixtime(from_iso8601_timestamp(ts)) * 1000';
+const baseRows = ENV !== 'prod' ? [] : tryd('lake baseline', () => athena(`SELECT lower(regexp_replace(coalesce(endpoint, action), '([a-z])([A-Z])', '$1-$2')) AS ep,
+  CAST(floor((${startMs} - ${tsMs}) / ${WEEK}) AS integer) AS k,
+  sum(CASE WHEN type = 'turnstile' AND outcome = 'pass' THEN 1 ELSE 0 END) AS pass,
+  sum(CASE WHEN type = 'turnstile' AND outcome = 'absent' AND allowed THEN 1 ELSE 0 END) AS absent_ok,
+  sum(CASE WHEN type = 'widget' AND event = 'failed' AND reason = 'unsolved' THEN 1 ELSE 0 END) AS unsolved,
+  sum(CASE WHEN type = 'widget' AND event = 'failed' AND reason <> 'unsolved' THEN 1 ELSE 0 END) AS werr,
+  sum(CASE WHEN type = 'ratelimit' THEN 1 ELSE 0 END) AS rl429
+  FROM logon_telemetry.events
+  WHERE dt >= '${athDate(baseStartMs)}' AND ${tsMs} >= ${baseStartMs} AND ${tsMs} < ${startMs} AND NOT regexp_like(coalesce(ua, ''), 'curl') AND coalesce(ip, '') <> '${HOUSE_IP}'
+  GROUP BY 1, 2`), []);
+const haveBase = baseRows.length > 0;
+const base = {};   // ep -> metric -> [week0..week3]
+for (const r of baseRows) {
+  const b = base[r.ep] = base[r.ep] || {};
+  for (const f of ['pass', 'absent_ok', 'unsolved', 'werr', 'rl429']) { (b[f] = b[f] || [0, 0, 0, 0])[+r.k] = +r[f]; }
+}
+const baseMed = (ep, f) => (base[ep] && base[ep][f]) ? median(base[ep][f]) : 0;
+const baseMedAll = (f) => median([0, 1, 2, 3].map(k => Object.values(base).reduce((a, b) => a + (b[f] ? b[f][k] : 0), 0)));
+
+// ---- WAF edge layer (Athena, us-east-1): this window, plus the 4 weeks before for "a usual week" ----
+const WAF = { region: 'us-east-1', workgroup: 'efw-diagnostics' };
+const WAF_TABLE = `efw_waf_logs.waf_${ENV === 'prod' ? 'public' : 'preview2'}`;
+const wafRows = tryd('WAF actions', () => athena(`SELECT CASE WHEN timestamp >= ${startMs} THEN -1 ELSE CAST(floor((${startMs} - timestamp) / ${WEEK}) AS integer) END AS k,
+  action, count(*) AS n FROM ${WAF_TABLE}
+  WHERE date >= '${athDate(baseStartMs)}' AND timestamp >= ${baseStartMs} AND timestamp < ${now} GROUP BY 1, 2`, WAF), []);
+const wafRuleRows = tryd('WAF rules', () => athena(`SELECT terminatingruleid AS rule, count(*) AS n FROM ${WAF_TABLE}
+  WHERE date >= '${athDate(startMs)}' AND timestamp >= ${startMs} AND timestamp < ${now} AND action = 'BLOCK' GROUP BY 1 ORDER BY 2 DESC`, WAF), []);
+const wafNow = {}; for (const r of wafRows) if (r.k === '-1') wafNow[r.action] = +r.n;
+const wafBlockMed = median([0, 1, 2, 3].map(k => +((wafRows.find(r => +r.k === k && r.action === 'BLOCK') || {}).n || 0)));
+// rule -> plain words a client understands; Count-mode rules never BLOCK, so they cannot appear here
+const WAF_GROUPS = [
+  [/^SensitivePaths$/, 'probing for admin pages and sensitive files'],
+  [/IpReputation|Blocklist/, 'from known-malicious or blocklisted IP addresses'],
+  [/CommonRuleSet|KnownBadInputs|SQLi|Windows|AdminProtection/, 'exploit attempts (injection, malformed or malicious requests)'],
+  [/RateLimit/, 'request floods (rate limits)'],
+];
+const wafByGroup = {};
+for (const r of wafRuleRows) { const g = (WAF_GROUPS.find(([re]) => re.test(r.rule || '')) || [, 'other rules'])[1]; wafByGroup[g] = (wafByGroup[g] || 0) + (+r.n); }
+
+// ---- accounts (opt-in --accounts): ground truth from logon2.AspNetUsers via SSM ----
+const PRE_TURNSTILE = ['2026-04-01', '2026-06-30'];   // the widget published 2026-06-30: the before-Turnstile account baseline
+const acct = ACCOUNTS ? tryd('accounts', gatherAccounts, null) : null;
+
 // ---- shape: unified, data-driven ----
 const cfByEp = {}; for (const r of cfRowsRaw) { const ep = (r.dimensions.action || '').toLowerCase(); cfByEp[ep] = (cfByEp[ep] || 0) + r.count; }
 const beaconByAction = {};   // ep -> {solved,failed}
@@ -218,7 +275,8 @@ const serverByKey = {};      // "system|ep" -> {outcome:{a,b}}
 const serverOf = {};         // ep -> system (discovered from whichever group's server events name it)
 for (const r of serverRows) { const ep = r.endpoint || 'other'; const key = r.system + '|' + ep; const s = serverByKey[key] = serverByKey[key] || {}; const oc = s[r.outcome] = s[r.outcome] || { a: 0, b: 0 }; if (r.allowed === '0' || r.allowed === 'false') oc.b += +r.n; else oc.a += +r.n; if (!serverOf[ep]) serverOf[ep] = r.system; }
 const rlByEp = {};           // ep -> 429 count (Logon only today)
-for (const r of rlRows) { const ep = (r.action || 'other').toLowerCase(); rlByEp[ep] = (rlByEp[ep] || 0) + (+r.n); }
+// rate-limit events name the action in CamelCase (RegisterProvisional -> register-provisional)
+for (const r of rlRows) { const ep = (r.action || 'other').replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase(); rlByEp[ep] = (rlByEp[ep] || 0) + (+r.n); }
 
 const systemsWithServer = [...new Set(serverRows.map(r => r.system))].sort(sysSort);
 
@@ -279,13 +337,11 @@ const logonEps = epsOf('logon');
 const v = collect(logonEps);
 const vPass = v.pass, vFail = v.fail, vAbsent = v.absent, vRl = v.rl, vByp = v.byp, vBlocked = v.block, vRl429 = v.rl429;
 const alarmFiring = alarms.some(a => a.state === 'ALARM');
-const flags = [];
-if (alarmFiring) flags.push({ sev: 'critical', msg: 'A CloudWatch alarm is in ALARM state.' });
-if (vRl >= TH.ratelimitedRed) flags.push({ sev: 'critical', msg: `ratelimited:global softpass fired (${vRl}) — weaponization signal; consider flipping Turnstile.AllowRateLimited off.` });
-if (vFail > TH.failRed) flags.push({ sev: 'critical', msg: `organic server fail = ${vFail} (> ${TH.failRed}) on auth forms.` });
-if (vAbsent > TH.absentYellow) flags.push({ sev: 'warning', msg: `direct-to-server tokenless (absent) = ${vAbsent} (> ${TH.absentYellow}) — ${enforceActive ? 'the server gate 403s these' : 'the server gate would 403 these under Enforce'}.` });
-const verdict = flags.some(f => f.sev === 'critical') ? 'critical' : flags.some(f => f.sev === 'warning') ? 'warning' : 'good';
-const verdictText = { good: 'GREEN -- all clear', warning: 'YELLOW -- watch items', critical: 'RED -- action needed' }[verdict];
+const flags = [];   // threshold flags; folded into the Needs attention list below
+if (alarmFiring) flags.push({ sev: 'critical', kind: 'report', msg: `A CloudWatch alarm is in ALARM state: ${alarms.filter(a => a.state === 'ALARM').map(a => a.name).join(', ')}.` });
+if (vRl >= TH.ratelimitedRed) flags.push({ sev: 'critical', kind: 'attack', msg: `Cloudflare's global rate-limit let ${vRl} submissions through without a full check. That can be weaponized; consider turning Turnstile.AllowRateLimited off.` });
+if (vFail > TH.failRed) flags.push({ sev: 'critical', kind: 'users', msg: `${vFail} Logon submissions failed the server check (invalid or expired token), above ${TH.failRed}.` });
+if (vAbsent > TH.absentYellow) flags.push({ sev: 'warning', kind: 'attack', msg: `${vAbsent} tokenless submissions on Logon forms (above ${TH.absentYellow}); ${enforceActive ? 'the server gate 403s these' : 'the server gate would 403 these under Enforce'}.` });
 
 const preventClient = logonEps.reduce((a, ep) => a + (beaconByAction[ep] ? beaconByAction[ep].failed || 0 : 0), 0);
 const preventClientAll = combined.failed;
@@ -308,6 +364,56 @@ const ocLabel = (k) => OC_LABEL[k] || k;
 const logonFormsWord = `Logon forms${logonEps.length ? ' (' + logonEps.join(', ') + ')' : ''}`;
 const twDays = TW_HOURS / 24, winWords = HOURS % 24 ? `${HOURS}h` : `${HOURS / 24} days`;
 
+// ===== what the report is for (Jack, 2026-10-22): (1) what needs action -- real users in trouble, attacks
+// getting through; (2) bottom lines safe to tell clients. Every other section is supporting detail.
+const ATTACK_FORMS = new Set(['register', 'forgot', 'resend', 'register-provisional']);   // bot targets: a failure elsewhere is a person
+const scale = HOURS / 168;   // baselines are whole weeks
+const usual = (med) => Math.round(med * scale);
+const over = (cur, med) => cur >= TH.minCount && cur > 2 * med * scale;   // well above its usual week
+const winUnit = HOURS === 168 ? 'week' : winWords;
+const usualNote = (med) => haveBase ? ` A usual ${winUnit} has ${fmt(usual(med))}.` : '';
+const attention = flags.slice();   // { sev, kind: users|attack|report, msg }
+const flag = (kind, msg, sev = 'warning') => attention.push({ sev, kind, msg });
+let realTrouble = 0;
+for (const ep of allEps) {
+  const m = reasonByAction[ep] || {};
+  const errs = Object.entries(m).filter(([k]) => k !== 'unsolved');
+  const errN = errs.reduce((a, [, n]) => a + n, 0);
+  const s = serverByKey[serverOf[ep] + '|' + ep] || {}, g = oc => s[oc] || { a: 0, b: 0 };
+  const passN = g('pass').a + g('pass').b, absentOk = g('absent').a, failN = g('fail').a + g('fail').b;
+  const people = !ATTACK_FORMS.has(ep);
+  realTrouble += errN + (people ? (m.unsolved || 0) + absentOk : 0);
+  if (over(errN, baseMed(ep, 'werr'))) flag('users', `${ep}: ${errN} widget errors (${errs.map(([k, n]) => `${k} ${n}`).join(', ')}). These are visitors whose browser could not get a token.${usualNote(baseMed(ep, 'werr'))}`);
+  if (people && over(m.unsolved || 0, baseMed(ep, 'unsolved'))) flag('users', `${ep}: ${m.unsolved} visitors stuck on an unsolved widget. Bots do not use this form, so these are people.${usualNote(baseMed(ep, 'unsolved'))}`);
+  if (people && over(absentOk, baseMed(ep, 'absent_ok'))) flag('users', `${ep}: ${absentOk} submissions arrived with no token and were let through: the widget failed for real users.${usualNote(baseMed(ep, 'absent_ok'))}`);
+  if (!people && absentOk) flag('attack', `${ep}: ${absentOk} tokenless submissions were let through on a form bots target. The server gate should refuse these.`, 'critical');
+  if (failN && failN <= TH.failRed) flag('users', `${ep}: ${failN} submissions failed the server check (invalid or expired token). Usually a slow visitor's token expiring; a bot replaying tokens looks the same.`);
+  const med = baseMed(ep, 'pass');
+  if (haveBase && med >= TH.silenceMinMedian && passN < TH.silenceRatio * med * scale) flag('users', `${ep}: only ${passN} successful submissions against a usual ${fmt(usual(med))}. A broken widget or form looks like this: people stop arriving rather than erroring.`, 'critical');
+}
+const rl429N = Object.values(rlByEp).reduce((a, n) => a + n, 0);
+if (over(rl429N, baseMedAll('rl429'))) flag('users', `${rl429N} Logon requests were rate-limited (429). People behind a shared office or agency IP can hit this.${usualNote(baseMedAll('rl429'))}`);
+if (acct && acct.win.dottrick + acct.win.susptld) flag('attack', `${acct.win.dottrick + acct.win.susptld} new accounts look bot-made (dot-trick gmail ${acct.win.dottrick}, suspicious domain ${acct.win.susptld}). Something got past both gates; check logon2.AspNetUsers.`, 'critical');
+if (twModeLive === 'Observe') flag('attack', 'twproxy logs show Turnstile in Observe mode: bots that fail the feedback-form check are being let through.', 'critical');
+if (ENV === 'prod' && !haveBase) flag('report', 'No 4-week baseline from the event lake, so the "usual week" comparisons and the silence check are off this run.');
+if (warn.length) flag('report', `Report incomplete: ${warn.length} data source(s) failed (see Data warnings at the end of the full report).`);
+
+const unsolvedAttack = [...ATTACK_FORMS].reduce((a, ep) => a + ((reasonByAction[ep] || {}).unsolved || 0), 0);
+const acctGarbage = acct ? acct.win.dottrick + acct.win.susptld : null;
+const acctBaseWeekly = acct ? (acct.base.dottrick + acct.base.susptld) * WEEK / (Date.parse(PRE_TURNSTILE[1]) - Date.parse(PRE_TURNSTILE[0])) : null;
+const bottom = [];   // HTML strings: numbers via fmt, all other text static
+if (wafNow.BLOCK != null) bottom.push(`AWS WAF blocked <b>${fmt(wafNow.BLOCK)}</b> requests at the edge before they reached any site${wafBlockMed ? ` (a usual ${winUnit}: ${fmt(usual(wafBlockMed))})` : ''}:<br>${Object.entries(wafByGroup).sort((a, b) => b[1] - a[1]).map(([g, n]) => `&nbsp;&nbsp;${fmt(n)} ${esc(g)}`).join('<br>')}`);
+bottom.push(`Turnstile refused <b>${fmt(combined.block)}</b> automated form submissions outright (no valid token, answered 403).`);
+// not "bots stopped": each Submit press on a stuck widget beacons again, and on 2026-09-14 most unsolved
+// beacons came from ordinary phones (memory: turnstile-unsolved-client-gate). Quote it as presses, not attackers.
+bottom.push(`<b>${fmt(unsolvedAttack)}</b> sign-up and password-reset submissions were held back because the browser did not pass the bot check (counts button presses, not people; includes some real visitors).`);
+if (twTotal) bottom.push(`Feedback form: <b>${fmt(twHostile)}</b> junk or attack requests rejected${twSqliTotal ? `, including ${fmt(twSqliTotal)} SQL-injection probes` : ''} (last ${twDays} days).`);
+if (acct) bottom.push(`<b>${fmt(acctGarbage)}</b> bot-pattern accounts created in the last ${winWords}, against about <b>${fmt(Math.round(acctBaseWeekly * scale))}</b> a ${winUnit} before Turnstile (${fmt(acct.win.total)} accounts created in all).`);
+bottom.push(`Real people who hit a problem: about <b>${fmt(realTrouble)}</b> (widget errors, or stuck on a form bots do not use).`);
+
+const verdict = attention.some(f => f.sev === 'critical') ? 'critical' : attention.length ? 'warning' : 'good';
+const verdictText = { good: 'GREEN -- nothing needs action', warning: `YELLOW -- ${attention.length} item(s) to look at`, critical: 'RED -- action needed' }[verdict];
+
 // per-target-site attribution (§5d): group turnstile events by hostname (+ config / targetState)
 const siteAgg = {};
 for (const r of siteRows) {
@@ -321,8 +427,6 @@ for (const r of siteRows) {
 const sites = Object.values(siteAgg).sort((a, b) => (b.absent + b.fail) - (a.absent + a.fail) || b.total - a.total).slice(0, 16);
 
 // ---- render helpers ----
-const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const fmt = (n) => n == null ? '—' : (+n).toLocaleString('en-US');
 const pct = (a, b) => b ? Math.round(a * 100 / b) + '%' : '—';
 const days = [...new Set(serverDayRows.map(r => (r.day || '').slice(0, 10)))].sort();
 const OUTCOMES = ['pass', 'absent', 'fail', 'pass-ratelimited', 'bypassed-auth'];
@@ -540,9 +644,12 @@ function siteSection() {
 }
 
 // --accounts (opt-in): ground-truth account creation from logon2.AspNetUsers via SSM/DB
-function accountsSection() {
-  if (!ACCOUNTS) return '';
+// ground truth: actual accounts created. Returns { daily, sum (30d), win (this window), base (before
+// Turnstile) }; sum/win/base = { total, conf, dottrick, susptld }. Throws if SSM or the DB fails.
+function gatherAccounts() {
   const INST = 'i-0997a73b08f6e5862';
+  const sqlTs = (ms) => iso(ms).slice(0, 19).replace('T', ' ');
+  const garbage = (where) => `Q "SELECT COUNT(*),SUM(CAST(EmailConfirmed AS int)),SUM(CASE WHEN Email LIKE '%@gmail.com' AND $dot THEN 1 ELSE 0 END),SUM(CASE WHEN $susp THEN 1 ELSE 0 END) FROM AspNetUsers WHERE ${where}"`;
   const ps = [
     "$j=(Get-SECSecretValue -SecretId 'efw/logon/db-production' -Region us-west-1).SecretString|ConvertFrom-Json",
     '$cs="Server=$($j.host),$($j.port);Database=$($j.database);User Id=$($j.username);Password=$($j.password);TrustServerCertificate=true;Connect Timeout=20"',
@@ -552,32 +659,41 @@ function accountsSection() {
     "$susp=\"(Email LIKE '%.ru' OR Email LIKE '%.xyz' OR Email LIKE '%.top' OR Email LIKE '%.click' OR Email LIKE '%.icu' OR Email LIKE '%.buzz')\"",
     '"DAILY"',
     'Q "SELECT CONVERT(varchar(10),Created,120),COUNT(*),SUM(CAST(EmailConfirmed AS int)) FROM AspNetUsers WHERE Created>=DATEADD(day,-30,GETUTCDATE()) GROUP BY CONVERT(varchar(10),Created,120) ORDER BY 1"',
-    '"SUMMARY"',
-    "Q \"SELECT COUNT(*),SUM(CAST(EmailConfirmed AS int)),SUM(CASE WHEN Email LIKE '%@gmail.com' AND $dot THEN 1 ELSE 0 END),SUM(CASE WHEN $susp THEN 1 ELSE 0 END) FROM AspNetUsers WHERE Created>=DATEADD(day,-30,GETUTCDATE())\"",
+    '"SUMMARY"', garbage('Created>=DATEADD(day,-30,GETUTCDATE())'),
+    '"WINDOW"', garbage(`Created>='${sqlTs(startMs)}'`),
+    '"BASE"', garbage(`Created>='${PRE_TURNSTILE[0]}' AND Created<'${PRE_TURNSTILE[1]}'`),
     '$cn.Close()',
   ].join("\n");
-  let out = '';
+  const tmp = require('os').tmpdir() + '/soak-acct-' + process.pid + '.json';
+  fs.writeFileSync(tmp, JSON.stringify({ commands: [ps] }));
+  let out = null;
   try {
-    const tmp = require('os').tmpdir() + '/soak-acct-' + process.pid + '.json';
-    fs.writeFileSync(tmp, JSON.stringify({ commands: [ps] }));
     const cid = execFileSync('aws', ['ssm', 'send-command', '--region', REGION, '--instance-ids', INST, '--document-name', 'AWS-RunPowerShellScript', '--parameters', 'file://' + tmp, '--query', 'Command.CommandId', '--output', 'text'], { encoding: 'utf8' }).trim();
-    for (let i = 0; i < 30; i++) {
-      const inv = aws(['ssm', 'get-command-invocation', '--command-id', cid, '--instance-id', INST]);
-      if (inv.Status === 'Success') { out = inv.StandardOutputContent || ''; break; }
-      if (inv.Status === 'Failed' || inv.Status === 'Cancelled') throw new Error('SSM ' + inv.Status + ': ' + (inv.StandardErrorContent || '').slice(0, 100));
+    for (let i = 0; i < 40 && out == null; i++) {
       sleep(3000);
+      const inv = tryd('ssm poll', () => aws(['ssm', 'get-command-invocation', '--command-id', cid, '--instance-id', INST]), { Status: 'Pending' });
+      if (inv.Status === 'Success') out = inv.StandardOutputContent || '';
+      else if (inv.Status === 'Failed' || inv.Status === 'Cancelled' || inv.Status === 'TimedOut') throw new Error('SSM ' + inv.Status + ': ' + (inv.StandardErrorContent || '').slice(0, 100));
     }
-    fs.unlinkSync(tmp);
-  } catch (e) { warn.push('accounts: ' + e.message); return `<h2>Account creation</h2><div class="card"><p class="muted">unavailable: ${esc(e.message)}</p></div>`; }
-
-  let mode = '', daily = [], sum = null;
+  } finally { fs.unlinkSync(tmp); }
+  if (out == null) throw new Error('SSM command did not finish in 2 minutes');
+  const r = { daily: [], sum: null, win: null, base: null };
+  const four = (p) => ({ total: +p[0], conf: +p[1] || 0, dottrick: +p[2] || 0, susptld: +p[3] || 0 });
+  let mode = '';
   for (const ln of out.split(/\r?\n/)) {
-    const t = ln.trim();
-    if (t === 'DAILY') { mode = 'd'; continue; } if (t === 'SUMMARY') { mode = 's'; continue; }
-    const p = ln.split('\t');
-    if (mode === 'd' && /^\d{4}-\d\d-\d\d/.test(p[0])) daily.push({ day: p[0], n: +p[1], conf: +p[2] });
-    if (mode === 's' && /^\d/.test(p[0] || '')) sum = { total: +p[0], conf: +p[1], dottrick: +p[2], susptld: +p[3] };
+    const t = ln.trim(), p = ln.split('\t');
+    if (['DAILY', 'SUMMARY', 'WINDOW', 'BASE'].includes(t)) { mode = t; continue; }
+    if (mode === 'DAILY' && /^\d{4}-\d\d-\d\d/.test(p[0])) r.daily.push({ day: p[0], n: +p[1], conf: +p[2] });
+    else if (/^\d/.test(p[0] || '')) r[{ SUMMARY: 'sum', WINDOW: 'win', BASE: 'base' }[mode]] = four(p);
   }
+  if (!r.win || !r.base) throw new Error('accounts output missing WINDOW/BASE rows');
+  return r;
+}
+
+function accountsSection() {
+  if (!ACCOUNTS) return '';
+  if (!acct) return `<h2>Account creation</h2><div class="card"><p class="muted">unavailable (see Data warnings)</p></div>`;
+  const { daily, sum } = acct;
   const mean = daily.length ? Math.round(daily.reduce((a, d) => a + d.n, 0) / daily.length) : 0;
   const max = Math.max(1, ...daily.map(d => d.n));
   const bars = daily.map(d => `<div class="day-col" title="${d.day}: ${d.n} created, ${d.conf} confirmed"><div class="day-stack" style="height:${Math.round(d.n / max * 78) + 4}px"><div style="flex:1;background:var(--s1)"></div></div><div class="day-lbl">${d.day.slice(5)}</div></div>`).join('');
@@ -626,6 +742,18 @@ function twproxySection() {
     </div>
     <p class="muted" style="margin-top:12px">${twModeLive === 'Observe' ? '<b style="color:var(--warning)">twproxy logs show Observe</b> -- Turnstile-only bot failures are NOT blocked here today.' : twModeLive === 'Require' ? '<b style="color:var(--good)">twproxy logs show Require</b> -- the gate is denying bots.' : 'twproxy logs do not show the mode in this window.'}</p>
   </div>`;
+}
+
+// the two sections the report exists for, as inline-styled HTML so the browser and the email share them
+function topSectionsHtml(c) {
+  const kindWord = { users: 'Real users', attack: 'Attack', report: 'Report' };
+  const rows = attention.length
+    ? attention.map(a => `<tr><td style="padding:5px 12px 5px 0;vertical-align:top;white-space:nowrap;font-weight:700;color:${a.sev === 'critical' ? c.crit : c.warn}">${kindWord[a.kind] || esc(a.kind)}</td><td style="padding:5px 0;vertical-align:top">${esc(a.msg)}</td></tr>`).join('')
+    : `<tr><td style="padding:5px 0;font-weight:700;color:${c.good}">Nothing needs action.</td></tr>`;
+  return `<div style="font-size:16px;font-weight:700;margin:4px 0 6px">Needs attention</div>
+  <table role="presentation" cellpadding="0" cellspacing="0" style="font-size:13px;border-collapse:collapse">${rows}</table>
+  <div style="font-size:16px;font-weight:700;margin:18px 0 6px">Bottom line <span style="font-weight:400;font-size:13px;color:${c.mut}">(last ${esc(winWords)}; safe to quote to clients)</span></div>
+  <ul style="margin:0;padding-left:20px;font-size:13px;line-height:1.55">${bottom.map(b => `<li style="margin-bottom:6px">${b}</li>`).join('')}</ul>`;
 }
 
 // ---- assemble ----
@@ -690,8 +818,9 @@ body,.banner,.tile,.card{-webkit-print-color-adjust:exact;print-color-adjust:exa
 </style></head><body><div class="wrap">
 <h1>Turnstile report</h1>
 <div class="meta"><span class="pill">${esc(CFG.label)}</span> &middot; <span class="pill">${esc(modeWord)} mode</span> &middot; last ${HOURS}h &middot; ${esc(iso(startMs))} → ${esc(iso(now))}<br>
-Unified per-system Insights (${SOURCES.map(s => `<code>${esc(s.group)}</code>${s.exists ? '' : ' <span class="muted">(pending)</span>'}`).join(' · ')}) + CF GraphQL issuance + <code>twproxy-logs</code> pre-gate + CloudWatch alarms &middot; organic (ua~curl excluded)</div>
+Unified per-system Insights (${SOURCES.map(s => `<code>${esc(s.group)}</code>${s.exists ? '' : ' <span class="muted">(pending)</span>'}`).join(' · ')}) + CF GraphQL issuance + <code>twproxy-logs</code> pre-gate + CloudWatch alarms &middot; organic (curl and the house IP excluded)</div>
 <div class="banner ${verdict}"><span class="dot">${verdict === 'good' ? '●' : verdict === 'warning' ? '▲' : '■'}</span><span>${esc(verdictText)}</span></div>
+<div class="card" style="margin-top:14px">${topSectionsHtml({ crit: 'var(--critical)', warn: 'var(--warning)', good: 'var(--good)', mut: 'var(--muted)' })}</div>
 
 <div class="tiles">
 ${tile('server pass', fmt(vPass), logonFormsWord + ', excl. test traffic', 'good')}
@@ -704,7 +833,6 @@ ${tile('rate-limit pass', fmt(vRl), 'Cloudflare rate-limited the check; let thro
 ${tile('widget solve rate', combined.beaconTot ? Math.round(combined.solved * 100 / combined.beaconTot) + '%' : '—', `${fmt(combined.solved)}/${fmt(combined.beaconTot)} all forms`)}
 ${tile('alarms', alarmFiring ? 'FIRING' : 'OK', alarms.map(a => a.name.replace('logon-', '')).join(', ') || 'n/a', alarmFiring ? 'critical' : 'good')}
 </div>
-${flags.length ? `<ul class="flags">${flags.map(f => `<li class="${f.sev}"><b>${f.sev.toUpperCase()}</b> — ${esc(f.msg)}</li>`).join('')}</ul>` : '<p class="muted">No threshold flags — all watch signals nominal.</p>'}
 
 <h2>Stage flow <span class="muted">(the funnel — issuance → widget → challenge → server, quantified end-to-end)</span></h2>
 <p class="sub">Each node is the volume reaching that stage; each arrow is quantified flow-through. Drop-offs exit as labeled arrows: <b>not-loaded</b> (mount fail) at the widget, one arrow <b>per challenge fail reason</b>, and <b>403 / 429</b> at the server. The <b style="color:var(--critical)">tokenless/absent</b> bypass enters directly at the server — bots that skip [1]–[3].</p>
@@ -755,7 +883,7 @@ ${warn.length ? `<h2>Data warnings</h2><div class="card"><ul>${warn.map(w => `<l
 <div class="foot">
 <b>One unified schema across every surface.</b> Each system emits <code>{system, endpoint, outcome, allowed, hostname, …}</code> to its own CloudWatch group; the report derives <code>system</code> from the event (or its source group) and discovers <code>endpoint</code>s from the data, so a new form/surface appears automatically with no report edit. Live mode is <b>${esc(modeWord)}</b>.<br>
 Two gates: the <b>client gate</b> (widget) blocks page-loading bots that fail the challenge (mode-independent); the <b>server gate</b> (turnstile siteverify) blocks direct-to-server bots that skip the page and POST tokenless/invalid. pass / pass-ratelimited (softpass) / bypassed-auth are allowed; fail / absent are 403'd under Enforce; <b>429</b> is the Logon per-IP rate-limit (a distinct exit). The <b>layer</b> axis (edge=WAF, app=Turnstile; all surfaces here = <code>app</code>) is derived from <code>system</code>, reserved for the future WAF-edge join.<br>
-Thresholds (tunable): fail&gt;${TH.failRed}=RED, absent&gt;${TH.absentYellow}=YELLOW, ratelimited-softpass&ge;${TH.ratelimitedRed}=RED. Verdict on ${esc(logonFormsWord)} only. CF issuance is fleet-wide (issued ≫ beacon ≫ verified is expected). "Organic" excludes ua~curl only — it does not separate bots from humans (beacon has no IP).<br>
+Thresholds (tunable): fail&gt;${TH.failRed}=RED, absent&gt;${TH.absentYellow}=YELLOW, ratelimited-softpass&ge;${TH.ratelimitedRed}=RED. The verdict is the Needs attention list: RED if any item is critical, YELLOW if any item at all. CF issuance is fleet-wide (issued ≫ beacon ≫ verified is expected). "Organic" excludes curl and the house IP only -- it does not separate bots from humans (beacon has no IP).<br>
 Regenerate: <code>node soak-report.js --env ${ENV} --hours ${HOURS}</code> &middot; generated ${esc(iso(now))}
 </div>
 </div></body></html>`;
@@ -822,8 +950,9 @@ function emailHtml() {
   <div style="font-size:12px;color:${C.mut};margin:3px 0 14px">${esc(CFG.label)} &middot; ${esc(modeWord)} mode &middot; last ${HOURS}h &middot; ${esc(iso(startMs).slice(0, 16))}Z to ${esc(iso(now).slice(0, 16))}Z</div>
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${vC};border-radius:8px"><tr><td style="padding:12px 16px;color:#ffffff;font-weight:700;font-size:15px">${esc(verdictText)}</td></tr></table>
   <div style="height:12px"></div>
+  ${topSectionsHtml({ crit: C.crit, warn: C.warn, good: C.good, mut: C.mut })}
+  <div style="height:14px"></div>
   ${kpis}
-  ${flags.length ? `<div style="margin-top:10px">${flags.map(f => `<div style="padding:8px 12px;border-left:3px solid ${f.sev === 'critical' ? C.crit : C.warn};background:${C.plane};border-radius:4px;font-size:12px;margin-bottom:5px"><b>${f.sev.toUpperCase()}</b> -- ${esc(f.msg)}</div>`).join('')}</div>` : note('No threshold flags -- all watch signals nominal.')}
 
   <!--FLOW-->${h2('Stage flow', '(combined, all surfaces)')}
   <img src="{{FLOW_IMG}}" width="996" alt="Turnstile stage flow diagram" style="display:block;width:100%;max-width:996px;height:auto;border:1px solid ${C.line};border-radius:8px"><!--/FLOW-->
@@ -849,7 +978,7 @@ function emailHtml() {
   ${warn.length ? h2('Data warnings') + `<div style="font-size:11px;color:${C.mut}">${warn.map(w => esc(w)).join('<br>')}</div>` : ''}
 
   <div style="font-size:11px;color:${C.mut};margin-top:22px;border-top:1px solid ${C.line};padding-top:12px">
-  Per-site breakdown, daily trend and per-surface flow diagrams are in the <a href="{{FULL_URL}}" style="color:${C.s1}">full interactive report</a> (tailnet). Verdict is computed on ${esc(logonFormsWord)} only. Regenerate: <code>node soak-report.js --env ${ENV} --hours ${HOURS}</code>. Generated ${esc(iso(now).slice(0, 16))}Z.
+  Per-site breakdown, daily trend and per-surface flow diagrams are in the <a href="{{FULL_URL}}" style="color:${C.s1}">full interactive report</a> (tailnet). The verdict is the Needs attention list. Regenerate: <code>node soak-report.js --env ${ENV} --hours ${HOURS}</code>. Generated ${esc(iso(now).slice(0, 16))}Z.
   </div>
   <!--SIGNATURE-->
 </td></tr></table>
@@ -859,4 +988,13 @@ function emailHtml() {
 
 fs.writeFileSync(OUT, html);
 if (EMAIL_OUT) fs.writeFileSync(EMAIL_OUT, emailHtml());
+// one JSON line per run: the durable weekly record (and the feed efw-analytics will read later)
+if (HISTORY) fs.appendFileSync(HISTORY, JSON.stringify({
+  generated: iso(now), env: ENV, hours: HOURS, verdict, attention: attention.map(a => ({ sev: a.sev, kind: a.kind, msg: a.msg })),
+  waf: { ...wafNow, blockUsualWeek: wafBlockMed, byGroup: wafByGroup },
+  turnstile: { refused: combined.block, absentBlocked, absentAllowed, unsolvedAttack, realTrouble, rl429: rl429N,
+    passByForm: Object.fromEntries(allEps.map(ep => { const s = serverByKey[serverOf[ep] + '|' + ep] || {}; return [ep, s.pass ? s.pass.a + s.pass.b : 0]; })) },
+  twproxy: { total: twTotal, hostile: twHostile, sqli: twSqliTotal, mode: twModeLive, days: twDays },
+  accounts: acct && { window: acct.win, preTurnstileWeekly: acctBaseWeekly },
+}) + '\n');
 console.log(`wrote ${OUT}  verdict=${verdict}  mode=${modeWord}  auth pass=${vPass} fail=${vFail} absent=${vAbsent} rl=${vRl} 429=${vRl429} 403s=${vBlocked}  prevented=${preventedTotal} (client ${preventClient}/server ${preventServer})  forms=${allEps.length} [${allEps.join(',')}]  systems=[${systemsWithServer.join(',')||'none'}]  sites=${sites.length}  twproxy=${twTotal}req/${twHostilePct}%hostile  warnings=${warn.length}`);

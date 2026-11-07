@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Weekly Turnstile soak report mail, run on figaro (replaces the Windows soak-mail.ps1).
 
-  1. node soak-report.js --env prod --hours 168, writing the rich report and the email-safe render
+  1. node soak-report.js --env prod --hours 168 --accounts, writing the rich report, the email-safe
+     render and a line in history-prod.jsonl
   2. screenshot the combined stage-flow card to PNG (Playwright venv); Gmail cannot show the SVG
   3. publish the PNG with figaro-public (public, random-suffix name) so the mail can inline it by
      URL, and the rich report with figaro-share (tailnet only) for the "full report" link
@@ -33,6 +34,7 @@ PW_PYTHON = os.path.expanduser("~/.local/venv/playwright/bin/python")
 PUBLIC_DIR = os.path.expanduser("~/public-site")
 KEEP_DAYS = 90  # old flow PNGs are removed from the public site after this
 LOG = os.path.expanduser("~/Library/Logs/claude-rc/soak-report.log")
+HISTORY = os.path.join(HERE, "history-prod.jsonl")  # one JSON line per sent report; gitignored
 TOOLS = ["node", "aws", "curl", "figaro-public", "figaro-share", PW_PYTHON]
 
 # Element screenshot of the first (combined) flow card, light theme, 2x for a crisp phone render.
@@ -100,8 +102,8 @@ def main():
     step = "generate report"
     try:
         log(f"start: node soak-report.js --env prod --hours {HOURS}")
-        out = run(["node", os.path.join(HERE, "soak-report.js"), "--env", "prod", "--hours", HOURS,
-                   "--out", rich, "--email-out", email], 1800)
+        out = run(["node", os.path.join(HERE, "soak-report.js"), "--env", "prod", "--hours", HOURS, "--accounts",
+                   "--out", rich, "--email-out", email] + ([] if "--no-send" in args else ["--history", HISTORY]), 1800)
         m = re.search(r"verdict=(\w+)", out)
         verdict = {"good": "GREEN", "warning": "YELLOW", "critical": "RED"}.get(m.group(1) if m else "", "UNKNOWN")
         body = open(email, encoding="utf-8").read()
