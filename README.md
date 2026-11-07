@@ -49,6 +49,10 @@ Every hostname terminates at one named handle: `s4`/`s6` (direct origin, edit ti
 `cf-preview2`/`cf-public`/`cf-redirect.<zone>` (CNAME to the dist). The `cf-*` handles are
 stack-managed A+AAAA ALIASes, so a distribution replacement self-heals every leaf pointing at them.
 
+`preview2-mn.hb101.org` was the one preview2 alias still bypassing the distribution (CNAME
+`preview2-site.hb101.org` -> `s4`) until 2026-11-06, when it was repointed to `cf-preview2.eightfoldway.com`.
+`preview2-site.hb101.org` still points at `s4` and nothing references it now; left in place (no DNS deletion).
+
 ## WAF
 
 Both tiers run the same 12-rule pipeline, in Block. Live as-built:
