@@ -101,8 +101,25 @@ Parameters:
       preview2 = web-04 (i-0272763b46610ac1b), public = web-06 (i-0c82adf476c7c5e32).
       Both boxes are us-west-1b/usw1-az3 (VPC origins supported; usw1-az2 excluded, not present here).
 
+  # CR-2026-06 site search: same-origin /search-api/{log,intent} routed to API Gateway behind its
+  # custom domain. Empty = no search behaviours, origin or WAF rule on this distribution.
+  SearchApiOriginDomain:
+    Type: String
+    Default: ''
+    Description: Custom domain of the site-search APIs (search-api.hb101.org). Empty disables /search-api routing.
+  SearchApiRateLimit:
+    Type: Number
+    Default: 100
+    MinValue: 10
+    Description: Per-IP requests per 5 minutes on /search-api/* (a search box needs far fewer).
+  SearchApiExemptCidr:
+    Type: String
+    Default: 45.28.138.65/32
+    Description: figaro's egress, where the search test harness and eval runner run; exempt from the search rate rule.
+
 Conditions:
   IsBlock: !Equals [!Ref WafRuleAction, Block]
+  HasSearchApi: !Not [!Equals [!Ref SearchApiOriginDomain, '']]
   UseBotControl: !Equals [!Ref EnableBotControl, 'true']
 
 # Managed policy IDs (AWS-owned, stable):
@@ -385,6 +402,43 @@ Resources:
                 VendorName: AWS
                 Name: AWSManagedRulesBotControlRuleSet
           - !Ref AWS::NoValue
+        # 13 -- site-search APIs: per-IP rate cap on /search-api/*, figaro's harness exempt. Exempting on
+        # an X-Search-Api-Key header was rejected: anyone can send the header, so it would lift the cap for
+        # attackers too. Case-sensitive match with no transformation (~5 WCU; the ACL sits near 1500):
+        # CloudFront routes only the exact lowercase path to the API anyway.
+        - !If
+          - HasSearchApi
+          - Name: RateLimit-SearchApi
+            Priority: 13
+            Action: !If [IsBlock, { Block: {} }, { Count: {} }]
+            VisibilityConfig: { SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: RateLimit-SearchApi }
+            Statement:
+              RateBasedStatement:
+                Limit: !Ref SearchApiRateLimit
+                AggregateKeyType: IP
+                ScopeDownStatement:
+                  AndStatement:
+                    Statements:
+                      - ByteMatchStatement:
+                          FieldToMatch: { UriPath: {} }
+                          PositionalConstraint: STARTS_WITH
+                          SearchString: /search-api/
+                          TextTransformations: [{ Priority: 0, Type: NONE }]
+                      - NotStatement:
+                          Statement:
+                            IPSetReferenceStatement:
+                              Arn: !GetAtt SearchApiExemptIpSet.Arn
+          - !Ref AWS::NoValue
+
+  SearchApiExemptIpSet:
+    Type: AWS::WAFv2::IPSet
+    Condition: HasSearchApi
+    Properties:
+      Name: !Sub 'efw-${EnvName}-search-api-exempt'
+      Description: figaro egress - search test harness exempt from the search-api rate rule
+      Scope: CLOUDFRONT
+      IPAddressVersion: IPV4
+      Addresses: [!Ref SearchApiExemptCidr]
 
   WebAclLogging:
     Type: AWS::WAFv2::LoggingConfiguration
@@ -533,6 +587,16 @@ Resources:
                   - '{{resolve:secretsmanager:${SecretArn}}}'
                   - SecretArn: !ImportValue
                       'Fn::Sub': '${BaseStackName}-OriginVerifySecretArn'
+          # Site-search APIs (API Gateway custom domain). Path passes through unchanged.
+          - !If
+            - HasSearchApi
+            - Id: search-api
+              DomainName: !Ref SearchApiOriginDomain
+              CustomOriginConfig:
+                HTTPSPort: 443
+                OriginProtocolPolicy: https-only
+                OriginSSLProtocols: [TLSv1.2]
+            - !Ref AWS::NoValue
         # Default = no caching: every path not matched below passes to origin.
         DefaultCacheBehavior:
           TargetOriginId: iis-vpc-origin
@@ -547,6 +611,36 @@ Resources:
               FunctionARN: !GetAtt DefaultDomainGuardFunction.FunctionARN
         # Static assets — the ONLY cached paths. Everything else falls through to default (no cache).
         CacheBehaviors:
+          # Site-search APIs first, so no broader pattern can claim them. NOT OriginRequestPolicyDynamic:
+          # that forwards Host, and the API custom domain answers only to its own name.
+          - !If
+            - HasSearchApi
+            - PathPattern: '/search-api/log*'
+              TargetOriginId: search-api
+              ViewerProtocolPolicy: https-only   # a redirect would turn the POST into a GET
+              AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
+              CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad          # Managed-CachingDisabled
+              OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac  # Managed-AllViewerExceptHostHeader
+              ResponseHeadersPolicyId: !Ref ResponseHeadersPolicy
+              Compress: true
+              FunctionAssociations:
+                - EventType: viewer-request
+                  FunctionARN: !GetAtt DefaultDomainGuardFunction.FunctionARN
+            - !Ref AWS::NoValue
+          - !If
+            - HasSearchApi
+            - PathPattern: '/search-api/intent*'
+              TargetOriginId: search-api
+              ViewerProtocolPolicy: https-only   # a redirect would turn the POST into a GET
+              AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
+              CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad          # Managed-CachingDisabled
+              OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac  # Managed-AllViewerExceptHostHeader
+              ResponseHeadersPolicyId: !Ref ResponseHeadersPolicy
+              Compress: true
+              FunctionAssociations:
+                - EventType: viewer-request
+                  FunctionARN: !GetAtt DefaultDomainGuardFunction.FunctionARN
+            - !Ref AWS::NoValue
           - PathPattern: '*.css'
             TargetOriginId: iis-vpc-origin
             ViewerProtocolPolicy: redirect-to-https

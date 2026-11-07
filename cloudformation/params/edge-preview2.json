@@ -40,6 +40,10 @@
     "ParameterValue": "1000"
   },
   {
+    "ParameterKey": "SearchApiOriginDomain",
+    "ParameterValue": "search-api.hb101.org"
+  },
+  {
     "ParameterKey": "WafRuleAction",
     "ParameterValue": "Block"
   }
